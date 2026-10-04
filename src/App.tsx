@@ -4,10 +4,10 @@ import Logo from './Logo'
 import './App.css'
 
 const navLinks = [
+  { href: '#industries', label: 'Industries' },
   { href: '#demo', label: 'Demo' },
   { href: '#how-it-works', label: 'How It Works' },
   { href: '#features', label: 'Features' },
-  { href: '#examples', label: 'Campaign' },
   { href: '#pricing', label: 'Early Access' },
 ]
 
@@ -37,6 +37,15 @@ const deliverables = [
     image: '/images/ad-creative.jpg',
     className: 'card-ads',
   },
+]
+
+const industries = [
+  { name: 'Beauty', image: '/images/skincare.jpg' },
+  { name: 'Skincare', image: '/images/product-lifestyle.jpg' },
+  { name: 'Perfume', image: '/images/luce-product-photo.jpg' },
+  { name: 'Jewelry', image: '/images/hero-product.jpg' },
+  { name: 'Fashion', image: '/images/ugc-creator.jpg' },
+  { name: 'Home', image: '/images/product-studio.jpg' },
 ]
 
 const trustPoints = [
@@ -76,7 +85,13 @@ const processSteps = [
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
         <circle cx="9" cy="11" r="1.8" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M3 16l4.2-3.2L11.5 15l3-2.4L21 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M3 16l4.2-3.2L11.5 15l3-2.4L21 16"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
@@ -86,7 +101,12 @@ const processSteps = [
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <rect x="3" y="6" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M16 10.2l4.5-2.2v8L16 13.8v-3.6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+        <path
+          d="M16 10.2l4.5-2.2v8L16 13.8v-3.6z"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
@@ -105,7 +125,12 @@ const processSteps = [
     text: 'Ready-to-run creatives and copy.',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M5 19V8.8c0-.7.4-1.3 1.1-1.6L12 5l5.9 2.2c.7.3 1.1.9 1.1 1.6V19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        <path
+          d="M5 19V8.8c0-.7.4-1.3 1.1-1.6L12 5l5.9 2.2c.7.3 1.1.9 1.1 1.6V19"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
         <path d="M9 19v-5h6v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     ),
@@ -192,8 +217,8 @@ export default function App() {
             <a className="login" href="#login">
               Log in
             </a>
-            <a className="btn btn-dark" href="#cta">
-              Create Your Campaign
+            <a className="btn btn-accent btn-pill" href="#cta">
+              Create Campaign
               <span aria-hidden="true">→</span>
             </a>
             <button
@@ -217,8 +242,8 @@ export default function App() {
           <a href="#login" onClick={() => setMenuOpen(false)}>
             Log in
           </a>
-          <a className="btn btn-dark" href="#cta" onClick={() => setMenuOpen(false)}>
-            Create Your Campaign
+          <a className="btn btn-accent" href="#cta" onClick={() => setMenuOpen(false)}>
+            Create Campaign
           </a>
         </div>
       </header>
@@ -226,22 +251,20 @@ export default function App() {
       <main id="top">
         <section className="hero">
           <div className="hero-copy">
-            <p className="eyebrow">
-              <span className="eyebrow-dot" aria-hidden="true" />
-              AI Campaign Creation Platform
-            </p>
+            <p className="eyebrow">AI Campaign Creation Platform</p>
             <h1>
               Your Product.
               <br />
-              <span className="headline-accent">Our Creativity.</span>
+              <em>Our Creativity.</em>
             </h1>
             <p className="lede">
               LUCE brings your product into the light — then builds a full marketing campaign
-              around it: studio visuals, videos, social content, and ads that stay true to what you sell.
+              around it: studio visuals, videos, social content, and ads that stay true to what
+              you sell.
             </p>
             <div className="hero-cta">
-              <a className="btn btn-dark btn-pill" href="#cta">
-                Create Your Campaign
+              <a className="btn btn-accent btn-pill" href="#cta">
+                Create Campaign
                 <span aria-hidden="true">→</span>
               </a>
               <a className="btn-watch" href="#demo">
@@ -259,12 +282,8 @@ export default function App() {
           </div>
 
           <div className="hero-visual">
-            <div className="orb orb-pink" aria-hidden="true" />
-            <div className="orb orb-lavender" aria-hidden="true" />
-            <div className="orb orb-sky" aria-hidden="true" />
-            <div className="spark spark-1" aria-hidden="true" />
-            <div className="spark spark-2" aria-hidden="true" />
-            <div className="spark spark-3" aria-hidden="true" />
+            <div className="glow glow-warm" aria-hidden="true" />
+            <div className="glow glow-amber" aria-hidden="true" />
 
             {deliverables.map((card) => (
               <article key={card.title} className={`float-card ${card.className}`}>
@@ -281,13 +300,44 @@ export default function App() {
           </div>
         </section>
 
+        <section className="industries" id="industries" aria-labelledby="industries-title">
+          <div className="section-head">
+            <p className="eyebrow">Industries</p>
+            <h2 id="industries-title">Perfect for every product, every industry.</h2>
+          </div>
+          <div className="industry-grid">
+            {industries.map((item) => (
+              <article key={item.name} className="industry-card">
+                <img src={item.image} alt="" loading="lazy" />
+                <span>{item.name}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="campaign-ready" id="cta" aria-labelledby="cta-title">
+          <div className="campaign-ready-bg" aria-hidden="true">
+            <img src="/images/studio-lights.jpg" alt="" />
+          </div>
+          <div className="campaign-ready-veil" aria-hidden="true" />
+          <div className="campaign-ready-content">
+            <p className="campaign-kicker">Your product</p>
+            <h2 id="cta-title">Is ready for its campaign.</h2>
+            <p>Give LUCE one product. We&apos;ll build the campaign around it.</p>
+            <a className="btn btn-accent btn-pill" href="#top">
+              Create Campaign
+              <span aria-hidden="true">→</span>
+            </a>
+          </div>
+        </section>
+
         <section className="demo" id="demo" aria-labelledby="demo-title">
           <div className="section-head">
             <p className="eyebrow">Campaign demo</p>
             <h2 id="demo-title">How to create a full campaign with LUCE</h2>
             <p>
-              A guided walkthrough of the whole flow — from product input to ZIP export —
-              so you can see exactly how LUCE builds your campaign.
+              A guided walkthrough of the whole flow — from product input to ZIP export — so you
+              can see exactly how LUCE builds your campaign.
             </p>
           </div>
           <CampaignDemoPlayer />
@@ -313,8 +363,8 @@ export default function App() {
             <p className="eyebrow">Campaign visuals</p>
             <h2 id="gallery-title">Lit like a studio. True to the product.</h2>
             <p>
-              From perfume and skincare to lifestyle goods — LUCE lights your product and
-              builds campaign assets around what you already sell.
+              From perfume and skincare to lifestyle goods — LUCE lights your product and builds
+              campaign assets around what you already sell.
             </p>
           </div>
           <div className="gallery-grid">
@@ -328,21 +378,6 @@ export default function App() {
               </article>
             ))}
           </div>
-          <div className="dashboard-band">
-            <img
-              src="/images/luce-dashboard-mock.jpg"
-              alt="LUCE campaign dashboard preview"
-              loading="lazy"
-            />
-            <div>
-              <p className="eyebrow">Workspace</p>
-              <h3>Review, regenerate, and export from one dashboard</h3>
-              <p>
-                Every asset stays tied to the same product and campaign context — so your
-                visuals, videos, and copy feel like one brand story.
-              </p>
-            </div>
-          </div>
         </section>
 
         <section className="workflow" id="how-it-works" aria-labelledby="workflow-title">
@@ -350,8 +385,8 @@ export default function App() {
             <p className="eyebrow">How it works</p>
             <h2 id="workflow-title">From product URL to campaign ZIP</h2>
             <p>
-              Built for Shopify, e-commerce, and DTC brands that need professional content
-              without a full creative team.
+              Built for Shopify, e-commerce, and DTC brands that need professional content without
+              a full creative team.
             </p>
           </div>
           <ol className="workflow-list">
@@ -372,8 +407,8 @@ export default function App() {
             <p className="eyebrow">Why LUCE</p>
             <h2 id="features-title">Built around light, product, and campaign</h2>
             <p>
-              LUCE does not create isolated assets. It lights your product and builds one
-              campaign around it — with fidelity and consistency at the center.
+              LUCE does not create isolated assets. It lights your product and builds one campaign
+              around it — with fidelity and consistency at the center.
             </p>
           </div>
           <div className="feature-grid">
@@ -411,22 +446,11 @@ export default function App() {
             <p className="eyebrow">Early access</p>
             <h2 id="pricing-title">Built for Shopify and DTC brands</h2>
             <p>
-              LUCE MVP focuses on physical products — beauty, skincare, perfume, jewelry,
-              fashion accessories, home and lifestyle, and packaged goods.
+              LUCE MVP focuses on physical products — beauty, skincare, perfume, jewelry, fashion
+              accessories, home and lifestyle, and packaged goods.
             </p>
-            <a className="btn btn-dark" href="#cta">
+            <a className="btn btn-accent btn-pill" href="#cta">
               Request early access
-            </a>
-          </div>
-        </section>
-
-        <section className="final-cta" id="cta" aria-labelledby="cta-title">
-          <div className="cta-banner">
-            <h2 id="cta-title">Create. Promote. Grow.</h2>
-            <p>Start your campaign with LUCE today.</p>
-            <a className="btn btn-light btn-pill" href="#top">
-              Create Your Campaign
-              <span aria-hidden="true">→</span>
             </a>
           </div>
         </section>
