@@ -53,7 +53,7 @@ const gallery = [
   },
   {
     title: 'Lighting & softbox mood',
-    text: 'Campaign lighting inspired by real studio setups â soft, premium, on-brand.',
+    text: 'Campaign lighting inspired by real studio setups — soft, premium, on-brand.',
     image: '/images/studio-lights.jpg',
   },
   {
@@ -126,7 +126,7 @@ const workflow = [
   {
     step: '03',
     title: 'Generate the campaign',
-    text: 'One action creates visuals, videos, social content, and ads â aligned.',
+    text: 'One action creates visuals, videos, social content, and ads — aligned.',
   },
   {
     step: '04',
@@ -142,7 +142,7 @@ const features = [
   },
   {
     title: 'Studio lighting mindset',
-    text: 'Think camera lights and softboxes â LUCE changes the scene and lighting, never the product itself.',
+    text: 'Think camera lights and softboxes — LUCE changes the scene and lighting, never the product itself.',
   },
   {
     title: 'Campaign consistency',
@@ -150,7 +150,7 @@ const features = [
   },
   {
     title: 'One simple workflow',
-    text: 'Stop juggling multiple AI tools. Give LUCE the product â get everything to market it.',
+    text: 'Stop juggling multiple AI tools. Give LUCE the product — get everything to market it.',
   },
 ]
 
@@ -194,7 +194,7 @@ export default function App() {
             </a>
             <a className="btn btn-dark" href="#cta">
               Create Your Campaign
-              <span aria-hidden="true">â</span>
+              <span aria-hidden="true">→</span>
             </a>
             <button
               className={`menu-toggle ${menuOpen ? 'open' : ''}`}
@@ -236,17 +236,17 @@ export default function App() {
               <span className="headline-accent">Our Creativity.</span>
             </h1>
             <p className="lede">
-              LUCE brings your product into the light â then builds a full marketing campaign
+              LUCE brings your product into the light — then builds a full marketing campaign
               around it: studio visuals, videos, social content, and ads that stay true to what you sell.
             </p>
             <div className="hero-cta">
               <a className="btn btn-dark btn-pill" href="#cta">
                 Create Your Campaign
-                <span aria-hidden="true">â</span>
+                <span aria-hidden="true">→</span>
               </a>
               <a className="btn-watch" href="#demo">
                 <span className="play-circle" aria-hidden="true">
-                  â¶
+                  ▶
                 </span>
                 Watch how it works
               </a>
@@ -270,7 +270,7 @@ export default function App() {
               <article key={card.title} className={`float-card ${card.className}`}>
                 <div className="float-media">
                   <img src={card.image} alt={card.title} />
-                  {card.play && <span className="play-badge">â¶</span>}
+                  {card.play && <span className="play-badge">▶</span>}
                 </div>
                 <div className="float-meta">
                   <strong>{card.title}</strong>
@@ -286,7 +286,7 @@ export default function App() {
             <p className="eyebrow">Campaign demo</p>
             <h2 id="demo-title">How to create a full campaign with LUCE</h2>
             <p>
-              A guided walkthrough of the whole flow â from product input to ZIP export â
+              A guided walkthrough of the whole flow — from product input to ZIP export —
               so you can see exactly how LUCE builds your campaign.
             </p>
           </div>
@@ -295,7 +295,7 @@ export default function App() {
 
         <section className="process" id="examples" aria-labelledby="process-title">
           <div className="process-shell">
-            <h2 id="process-title">One product â a complete marketing campaign</h2>
+            <h2 id="process-title">One product → a complete marketing campaign</h2>
             <div className="process-grid">
               {processSteps.map((step) => (
                 <div className="process-item" key={step.title}>
@@ -313,7 +313,7 @@ export default function App() {
             <p className="eyebrow">Campaign visuals</p>
             <h2 id="gallery-title">Lit like a studio. True to the product.</h2>
             <p>
-              From perfume and skincare to lifestyle goods â LUCE lights your product and
+              From perfume and skincare to lifestyle goods — LUCE lights your product and
               builds campaign assets around what you already sell.
             </p>
           </div>
@@ -338,7 +338,7 @@ export default function App() {
               <p className="eyebrow">Workspace</p>
               <h3>Review, regenerate, and export from one dashboard</h3>
               <p>
-                Every asset stays tied to the same product and campaign context â so your
+                Every asset stays tied to the same product and campaign context — so your
                 visuals, videos, and copy feel like one brand story.
               </p>
             </div>
@@ -373,7 +373,7 @@ export default function App() {
             <h2 id="features-title">Built around light, product, and campaign</h2>
             <p>
               LUCE does not create isolated assets. It lights your product and builds one
-              campaign around it â with fidelity and consistency at the center.
+              campaign around it — with fidelity and consistency at the center.
             </p>
           </div>
           <div className="feature-grid">
@@ -393,7 +393,7 @@ export default function App() {
               <h2 id="fidelity-title">Change the scene, not the product</h2>
               <p>
                 Beautiful AI images are useless if they distort your bottle, logo, or packaging.
-                LUCE treats your product as the source of truth â preserving shape, proportions,
+                LUCE treats your product as the source of truth — preserving shape, proportions,
                 colors, and distinctive details while transforming lighting and setting around it.
               </p>
             </div>
@@ -411,7 +411,7 @@ export default function App() {
             <p className="eyebrow">Early access</p>
             <h2 id="pricing-title">Built for Shopify and DTC brands</h2>
             <p>
-              LUCE MVP focuses on physical products â beauty, skincare, perfume, jewelry,
+              LUCE MVP focuses on physical products — beauty, skincare, perfume, jewelry,
               fashion accessories, home and lifestyle, and packaged goods.
             </p>
             <a className="btn btn-dark" href="#cta">
@@ -446,7 +446,7 @@ export default function App() {
             <a href="#pricing">Early Access</a>
             <a href="#login">Log in</a>
           </div>
-          <p className="copyright">Â© {new Date().getFullYear()} LUCE. All rights reserved.</p>
+          <p className="copyright">© {new Date().getFullYear()} LUCE. All rights reserved.</p>
         </div>
       </footer>
     </div>
