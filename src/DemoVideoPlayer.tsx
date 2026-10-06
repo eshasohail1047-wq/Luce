@@ -3,73 +3,39 @@ import { useEffect, useState } from 'react'
 const STEPS = [
   {
     id: 'upload',
-    label: '01 · Start',
-    title: 'Open LUCE and add your product',
-    detail: 'Paste a product URL or drop photos. The site reads packaging, category, and brand tone.',
-    screen: {
-      url: 'app.luce.ai / new',
-      title: 'Create campaign',
-      subtitle: 'Add your product to begin',
-      fields: [
-        { label: 'Product URL', value: 'brand.com/products/daily-moisturizer' },
-        { label: 'Or upload', value: '3 images selected · Ready' },
-      ],
-      cta: 'Continue',
-    },
+    num: '01',
+    label: 'Add product',
+    title: 'Start with one product',
+    detail: 'Paste a URL or upload photos. LUCE learns packaging, category, and brand tone.',
+    url: 'app.luce.ai/campaigns/new',
   },
   {
     id: 'brief',
-    label: '02 · Brief',
-    title: 'Confirm the product brief',
-    detail: 'LUCE builds name, audience, and fidelity checks so every asset stays on-brand.',
-    screen: {
-      url: 'app.luce.ai / brief',
-      title: 'Product brief',
-      subtitle: 'Daily Moisturizer',
-      fields: [
-        { label: 'Category', value: 'Skincare · Hydration' },
-        { label: 'Fidelity', value: 'Packaging match · Ready' },
-        { label: 'Audience', value: 'Clean beauty · 18–34' },
-      ],
-      cta: 'Generate campaign',
-    },
+    num: '02',
+    label: 'Confirm brief',
+    title: 'Lock the product brief',
+    detail: 'Review name, audience, and fidelity so every asset stays true to the bottle.',
+    url: 'app.luce.ai/campaigns/brief',
   },
   {
     id: 'generate',
-    label: '03 · Generate',
-    title: 'Watch the campaign pack build',
-    detail: 'The website creates studio photos, UGC clips, social posts, and ads from that one product.',
-    screen: {
-      url: 'app.luce.ai / generate',
-      title: 'Generating assets',
-      subtitle: 'Building your full pack…',
-      fields: [
-        { label: 'Product photos', value: 'Done' },
-        { label: 'UGC videos', value: 'Done' },
-        { label: 'Social + ads', value: 'In progress' },
-      ],
-      cta: 'Open dashboard',
-    },
+    num: '03',
+    label: 'Generate pack',
+    title: 'Build the full campaign',
+    detail: 'Studio photos, UGC, social posts, and ads generate from that single product.',
+    url: 'app.luce.ai/campaigns/generate',
   },
   {
     id: 'export',
-    label: '04 · Export',
-    title: 'Review in the dashboard and download',
-    detail: 'Pick winners, regenerate anything, then export one ZIP ready to publish.',
-    screen: {
-      url: 'app.luce.ai / dashboard',
-      title: 'Campaign dashboard',
-      subtitle: 'Moisturizer campaign · 12 assets',
-      fields: [
-        { label: 'Selected', value: '8 assets ready' },
-        { label: 'Export', value: 'Moisturizer-Campaign.zip' },
-      ],
-      cta: 'Download ZIP',
-    },
+    num: '04',
+    label: 'Export',
+    title: 'Review and download',
+    detail: 'Pick winners in the dashboard, regenerate anything, then export one ZIP.',
+    url: 'app.luce.ai/campaigns/dashboard',
   },
 ]
 
-const STEP_MS = 3400
+const STEP_MS = 4200
 
 export default function DemoVideoPlayer() {
   const [index, setIndex] = useState(0)
@@ -98,90 +64,217 @@ export default function DemoVideoPlayer() {
   }, [playing, index])
 
   return (
-    <div className="demo-walk">
-      <div className="demo-walk-stage">
-        <div className="demo-walk-chrome" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-          <p>{step.screen.url}</p>
+    <div className="site-demo">
+      <div className="site-demo-frame">
+        <div className="site-demo-chrome" aria-hidden="true">
+          <div className="site-demo-dots">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="site-demo-url">
+            <em />
+            <p>{step.url}</p>
+          </div>
         </div>
 
-        <div className="demo-walk-body">
-          <div className="demo-walk-visual demo-walk-app">
-            <div key={step.id} className="demo-app-screen">
-              <div className="demo-app-top">
-                <div className="demo-app-brand">
-                  <strong>LUCE</strong>
-                  <span>Campaign studio</span>
-                </div>
-                <div className="demo-app-nav" aria-hidden="true">
-                  <i />
-                  <i />
-                  <i className="is-on" />
-                </div>
-              </div>
+        <div className="site-demo-workspace" data-step={step.id}>
+          <aside className="site-demo-rail" aria-hidden="true">
+            <strong>LUCE</strong>
+            <nav>
+              <span className={index === 0 ? 'on' : ''}>New</span>
+              <span className={index === 1 ? 'on' : ''}>Brief</span>
+              <span className={index >= 2 ? 'on' : ''}>Assets</span>
+              <span className={index === 3 ? 'on' : ''}>Export</span>
+            </nav>
+          </aside>
 
-              <div className="demo-app-card">
-                <p className="demo-app-eyebrow">{step.screen.title}</p>
-                <h4>{step.screen.subtitle}</h4>
-                <ul>
-                  {step.screen.fields.map((field) => (
-                    <li key={field.label}>
-                      <span>{field.label}</span>
-                      <strong>{field.value}</strong>
+          <div key={step.id} className="site-demo-main">
+            {step.id === 'upload' && (
+              <>
+                <header className="site-demo-header">
+                  <div>
+                    <p>Create campaign</p>
+                    <h3>Add your product</h3>
+                  </div>
+                  <button type="button" tabIndex={-1}>
+                    Continue
+                  </button>
+                </header>
+                <div className="site-demo-upload">
+                  <div className="site-demo-drop">
+                    <img src="/images/moisturizer-studio.jpg" alt="" />
+                    <div>
+                      <strong>Daily Moisturizer</strong>
+                      <span>brand.com/products/daily-moisturizer</span>
+                    </div>
+                  </div>
+                  <div className="site-demo-files">
+                    <figure>
+                      <img src="/images/moisturizer-studio.jpg" alt="" />
+                      <figcaption>Front</figcaption>
+                    </figure>
+                    <figure>
+                      <img src="/images/campaign-beauty-flatlay.jpg" alt="" />
+                      <figcaption>Angle</figcaption>
+                    </figure>
+                    <figure>
+                      <img src="/images/moisturizer-ugc-poster.jpg" alt="" />
+                      <figcaption>Label</figcaption>
+                    </figure>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {step.id === 'brief' && (
+              <>
+                <header className="site-demo-header">
+                  <div>
+                    <p>Product brief</p>
+                    <h3>Daily Moisturizer</h3>
+                  </div>
+                  <button type="button" tabIndex={-1}>
+                    Generate
+                  </button>
+                </header>
+                <div className="site-demo-brief">
+                  <div className="site-demo-brief-hero">
+                    <img src="/images/moisturizer-studio.jpg" alt="" />
+                  </div>
+                  <div className="site-demo-brief-meta">
+                    <div>
+                      <span>Category</span>
+                      <strong>Skincare · Hydration</strong>
+                    </div>
+                    <div>
+                      <span>Audience</span>
+                      <strong>Clean beauty · 18–34</strong>
+                    </div>
+                    <div>
+                      <span>Fidelity</span>
+                      <strong className="ok">Packaging match ready</strong>
+                    </div>
+                    <div>
+                      <span>Tone</span>
+                      <strong>Soft · Premium · Clear</strong>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {step.id === 'generate' && (
+              <>
+                <header className="site-demo-header">
+                  <div>
+                    <p>Generating</p>
+                    <h3>Campaign pack in progress</h3>
+                  </div>
+                  <span className="site-demo-badge">68%</span>
+                </header>
+                <div className="site-demo-generate">
+                  <div className="site-demo-progress">
+                    <span style={{ width: '68%' }} />
+                  </div>
+                  <ul>
+                    <li className="done">
+                      <strong>Product photos</strong>
+                      <span>4 ready</span>
                     </li>
-                  ))}
-                </ul>
-                <div className="demo-app-cta">{step.screen.cta}</div>
-              </div>
+                    <li className="done">
+                      <strong>UGC videos</strong>
+                      <span>3 ready</span>
+                    </li>
+                    <li className="active">
+                      <strong>Social + ads</strong>
+                      <span>Writing…</span>
+                    </li>
+                  </ul>
+                  <div className="site-demo-previews">
+                    <img src="/images/moisturizer-studio.jpg" alt="" />
+                    <img src="/images/campaign-ugc-serum.jpg" alt="" />
+                    <img src="/images/campaign-perfume-studio.jpg" alt="" />
+                  </div>
+                </div>
+              </>
+            )}
 
-              <div className="demo-app-side" aria-hidden="true">
-                <div className="demo-app-thumb is-wide" />
-                <div className="demo-app-thumb" />
-                <div className="demo-app-thumb" />
-              </div>
-            </div>
-          </div>
-
-          <div className="demo-walk-copy">
-            <p className="demo-walk-kicker">{step.label}</p>
-            <h3>{step.title}</h3>
-            <p>{step.detail}</p>
-            <div className="demo-walk-steps" role="tablist" aria-label="How the website works">
-              {STEPS.map((s, i) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={i === index}
-                  className={i === index ? 'active' : ''}
-                  onClick={() => {
-                    setIndex(i)
-                    setPlaying(true)
-                  }}
-                >
-                  {String(i + 1).padStart(2, '0')}
-                </button>
-              ))}
-            </div>
+            {step.id === 'export' && (
+              <>
+                <header className="site-demo-header">
+                  <div>
+                    <p>Dashboard</p>
+                    <h3>Moisturizer campaign</h3>
+                  </div>
+                  <button type="button" tabIndex={-1}>
+                    Download ZIP
+                  </button>
+                </header>
+                <div className="site-demo-dashboard">
+                  <article>
+                    <img src="/images/moisturizer-studio.jpg" alt="" />
+                    <p>Studio still</p>
+                  </article>
+                  <article>
+                    <img src="/images/moisturizer-ugc-poster.jpg" alt="" />
+                    <p>UGC clip</p>
+                  </article>
+                  <article>
+                    <img src="/images/campaign-ugc-serum.jpg" alt="" />
+                    <p>Social frame</p>
+                  </article>
+                  <article>
+                    <img src="/images/luce-dashboard-mock.jpg" alt="" />
+                    <p>Ad creative</p>
+                  </article>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="demo-walk-controls">
+      <div className="site-demo-footer">
+        <div className="site-demo-copy">
+          <p className="site-demo-kicker">
+            Step {step.num}
+            <span aria-hidden="true"> / 04</span>
+          </p>
+          <h3>{step.title}</h3>
+          <p>{step.detail}</p>
+        </div>
+
+        <div className="site-demo-steps" role="tablist" aria-label="How LUCE works">
+          {STEPS.map((s, i) => (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={i === index}
+              className={i === index ? 'active' : ''}
+              onClick={() => {
+                setIndex(i)
+                setPlaying(true)
+              }}
+            >
+              <span className="site-demo-step-num">{s.num}</span>
+              <span className="site-demo-step-label">{s.label}</span>
+              {i === index && (
+                <i className="site-demo-step-bar" style={{ transform: `scaleX(${progress})` }} />
+              )}
+            </button>
+          ))}
+        </div>
+
         <button
           type="button"
-          className="control-play"
+          className="site-demo-toggle"
           onClick={() => setPlaying((p) => !p)}
           aria-label={playing ? 'Pause walkthrough' : 'Play walkthrough'}
         >
-          {playing ? '❚❚' : '▶'}
+          {playing ? 'Pause' : 'Play'}
         </button>
-        <div className="control-track" aria-hidden="true">
-          <span style={{ width: `${((index + progress) / STEPS.length) * 100}%` }} />
-        </div>
-        <span className="demo-walk-caption">Website walkthrough</span>
       </div>
     </div>
   )

@@ -577,11 +577,11 @@ export default function App() {
 
         <section className="demo" id="demo" aria-labelledby="demo-title">
           <Reveal className="section-head">
-            <p className="eyebrow">How the website works</p>
-            <h2 id="demo-title">See LUCE in action</h2>
+            <p className="eyebrow">Product walkthrough</p>
+            <h2 id="demo-title">How LUCE works</h2>
             <p>
-              A quick walkthrough of the site — upload a product, confirm the brief, generate the
-              pack, and export from the dashboard.
+              Follow the real workflow inside the product — from one upload to a finished campaign
+              pack ready to export.
             </p>
           </Reveal>
           <Reveal delay={100}>
