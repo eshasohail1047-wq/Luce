@@ -15,7 +15,7 @@ const FRAMES = [
     title: 'UGC-ready moment',
     caption: 'Creator-style short-form',
     image: '/images/campaign-ugc-serum.jpg',
-    video: '/videos/creator-1.mp4',
+    video: '/videos/creator-5.mp4',
   },
   {
     title: 'Social + ad creative',

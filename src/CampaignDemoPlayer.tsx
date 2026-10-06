@@ -21,7 +21,7 @@ const PACK = [
     label: 'Marketing',
     title: 'Campaign film',
     image: '/images/moisturizer-ugc-poster.jpg',
-    video: '/videos/ugc-cream-apply.mp4',
+    video: '/videos/creator-5.mp4',
   },
 ]
 
@@ -49,7 +49,7 @@ export default function CampaignDemoPlayer() {
                     loop
                     playsInline
                     autoPlay
-                    preload="metadata"
+                    preload="auto"
                   />
                 ) : (
                   <img src={item.image} alt={item.title} />

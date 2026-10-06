@@ -334,11 +334,15 @@
   font-family: var(--font-display);
   font-weight: 600;
   font-size: clamp(2.6rem, 5.4vw, 4.1rem);
-  line-height: 1.05;
+  line-height: 1.08;
   letter-spacing: -0.035em;
   color: #0b0b10;
-  max-width: 11ch;
+  max-width: 16ch;
   animation: rise 0.7s ease both;
+}
+
+.hero h1 .headline-accent {
+  white-space: nowrap;
 }
 
 .hero-title {
@@ -1038,6 +1042,63 @@
   display: grid;
   gap: 14px;
 }
+
+.demo-player {
+  display: grid;
+  gap: 14px;
+}
+
+.demo-player-stage {
+  position: relative;
+  border-radius: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow);
+  background: #14121c;
+  aspect-ratio: 16 / 9;
+}
+
+.demo-player-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  cursor: pointer;
+}
+
+.demo-player-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  border: 0;
+  background: rgba(12, 10, 20, 0.38);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.demo-player-play {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: #0b0b10;
+  font-size: 1.15rem;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+  transition: transform 0.2s ease;
+}
+
+.demo-player-overlay:hover .demo-player-play {
+  transform: scale(1.06);
+}
+
 
 .demo-walk-stage {
   border-radius: 28px;

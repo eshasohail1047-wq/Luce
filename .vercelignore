@@ -1,0 +1,12 @@
+public/images/_frames
+public/videos/creator-2.mp4
+public/videos/creator-3.mp4
+public/videos/creator-4.mp4
+public/videos/perfume-5.mp4
+public/videos/ugc-cream-apply.mp4
+public/videos/ugc-moisturizer-demo.mp4
+public/videos/ugc-skincare-ringlight.mp4
+public/videos/perfume-4.mp4
+node_modules
+dist
+.git

@@ -28,7 +28,7 @@ const CLIPS: Clip[] = [
     id: 'mila',
     creator: '@mila.glow',
     product: 'Face Cream',
-    src: '/videos/ugc-cream-apply.mp4',
+    src: '/videos/creator-5.mp4',
     poster: '/images/campaign-beauty-flatlay.jpg',
   },
   {
@@ -42,8 +42,8 @@ const CLIPS: Clip[] = [
     id: 'ria',
     creator: '@ria.reviews',
     product: 'Soft Perfume',
-    src: '/videos/perfume-4.mp4',
-    poster: '/images/luce-product-photo.jpg',
+    src: '/videos/perfume-1.mp4',
+    poster: '/images/campaign-perfume-studio.jpg',
   },
 ]
 
@@ -54,8 +54,13 @@ function MarqueeCard({ clip }: { clip: Clip }) {
     const video = videoRef.current
     if (!video) return
     video.muted = true
-    void video.play().catch(() => {})
-  }, [])
+    const tryPlay = () => {
+      void video.play().catch(() => {})
+    }
+    tryPlay()
+    video.addEventListener('loadeddata', tryPlay)
+    return () => video.removeEventListener('loadeddata', tryPlay)
+  }, [clip.src])
 
   return (
     <article className="ugc-marquee-card">
@@ -68,7 +73,7 @@ function MarqueeCard({ clip }: { clip: Clip }) {
           playsInline
           loop
           autoPlay
-          preload="metadata"
+          preload="auto"
         />
         <span className="ugc-marquee-creator">{clip.creator}</span>
         <span className="ugc-marquee-product">{clip.product}</span>
