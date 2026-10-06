@@ -1,43 +1,60 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import CampaignDemoPlayer from './CampaignDemoPlayer'
+import DemoVideoPlayer from './DemoVideoPlayer'
 import Logo from './Logo'
+import UgcReel from './UgcReel'
 import './App.css'
 
 const navLinks = [
   { href: '#demo', label: 'Demo' },
+  { href: '#campaign', label: 'Campaign' },
+  { href: '#ugc', label: 'UGC' },
   { href: '#how-it-works', label: 'How It Works' },
   { href: '#features', label: 'Features' },
-  { href: '#examples', label: 'Campaign' },
-  { href: '#pricing', label: 'Early Access' },
+  { href: '#pricing', label: 'Pricing' },
 ]
 
 const deliverables = [
   {
+    kind: 'photos' as const,
     title: 'Product Photos',
-    caption: 'Studio Â· Lifestyle Â· Promo',
-    image: '/images/luce-product-photo.jpg',
+    caption: 'Studio · Lifestyle · Promo',
+    images: ['/images/campaign-perfume-studio.jpg', '/images/luce-product-photo.jpg'],
     className: 'card-photos',
   },
   {
+    kind: 'media' as const,
     title: 'UGC Video',
     caption: 'Authentic short-form',
-    image: '/images/ugc-creator.jpg',
+    image: '/images/campaign-ugc-serum.jpg',
     className: 'card-ugc',
     play: true,
   },
   {
+    kind: 'social' as const,
     title: 'Social Content',
-    caption: 'Captions Â· Hooks Â· CTAs',
-    image: '/images/social-phone.jpg',
+    caption: 'Captions · Hooks · CTAs',
+    quote: 'Good vibes. Great products.',
+    handle: '@luce.campaigns',
+    image: '/images/campaign-perfume-studio.jpg',
     className: 'card-social',
   },
   {
+    kind: 'ad' as const,
     title: 'Ad Creatives',
     caption: 'Visuals + ad copy',
-    image: '/images/ad-creative.jpg',
+    image: '/images/luce-product-photo.jpg',
+    kicker: 'New drop',
+    headline: 'Make it unforgettable.',
+    cta: 'Shop now',
     className: 'card-ads',
   },
 ]
+
+const HERO_PRODUCT = {
+  image: '/images/luce-product-photo.jpg',
+  name: 'Rose Oud Perfume',
+}
 
 const trustPoints = [
   'Studio-quality product light',
@@ -45,70 +62,22 @@ const trustPoints = [
   'Full campaign in one flow',
 ]
 
-const gallery = [
+/** Same Rose Oud bottle — real location / lighting shoots only (no bottle recolor) */
+const PRODUCT_LIGHTS = [
   {
-    title: 'Studio product shot',
-    text: 'Clean product photography that keeps packaging and details true.',
-    image: '/images/product-studio.jpg',
+    src: '/images/luce-product-photo.jpg',
+    label: 'Daylight location',
+    tone: 'daylight',
   },
   {
-    title: 'Lighting & softbox mood',
-    text: 'Campaign lighting inspired by real studio setups — soft, premium, on-brand.',
-    image: '/images/studio-lights.jpg',
+    src: '/images/campaign-perfume-studio.jpg',
+    label: 'Studio softbox',
+    tone: 'studio',
   },
   {
-    title: 'Beauty & skincare',
-    text: 'Campaign-ready frames for DTC physical product brands.',
-    image: '/images/skincare.jpg',
-  },
-  {
-    title: 'Hero product still',
-    text: 'Premium product presentation for ads and storefronts.',
-    image: '/images/hero-product.jpg',
-  },
-]
-
-const processSteps = [
-  {
-    title: 'Product Images',
-    text: 'Professional, lifestyle and promotional visuals.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <circle cx="9" cy="11" r="1.8" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M3 16l4.2-3.2L11.5 15l3-2.4L21 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Videos',
-    text: 'UGC-style and product marketing clips.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="3" y="6" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M16 10.2l4.5-2.2v8L16 13.8v-3.6z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Social Content',
-    text: 'Captions, hooks, hashtags and CTAs.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M7 8h10M7 12h7M7 16h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        <rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Ad Creatives',
-    text: 'Ready-to-run creatives and copy.',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M5 19V8.8c0-.7.4-1.3 1.1-1.6L12 5l5.9 2.2c.7.3 1.1.9 1.1 1.6V19" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M9 19v-5h6v5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    ),
+    src: '/images/campaign-perfume-studio.jpg',
+    label: 'Evening set',
+    tone: 'evening',
   },
 ]
 
@@ -116,50 +85,336 @@ const workflow = [
   {
     step: '01',
     title: 'Add your product',
-    text: 'Paste a product URL or upload images with basic details.',
+    text: 'Paste a product URL or upload images. LUCE instantly learns your packaging, audience, and brand tone.',
+    image: '/images/luce-product-photo.jpg',
+    panel: {
+      label: 'Create campaign',
+      title: 'Add product',
+      lines: ['brand.com/products/rose-oud', 'or upload product images'],
+    },
   },
   {
     step: '02',
-    title: 'Confirm product details',
-    text: 'Review name, features, category, and brand tone before generating.',
+    title: 'Confirm the brief',
+    text: 'Review name, features, category, and voice — so every asset starts from one source of truth.',
+    image: '/images/campaign-perfume-studio.jpg',
+    panel: {
+      label: 'Product brief',
+      title: 'Rose Oud Perfume',
+      lines: ['Fragrance · Luxury', 'Fidelity check: Ready'],
+    },
   },
   {
     step: '03',
     title: 'Generate the campaign',
-    text: 'One action creates visuals, videos, social content, and ads — aligned.',
+    text: 'One click creates studio photos, UGC videos, social posts, and ad creatives — all aligned.',
+    image: '/images/campaign-ugc-serum.jpg',
+    panel: {
+      label: 'Generating',
+      title: 'Full campaign pack',
+      lines: ['Studio photos ✓', 'UGC · Reel · Marketing'],
+    },
   },
   {
     step: '04',
-    title: 'Refine and download',
-    text: 'Preview, regenerate any asset, then export one complete ZIP package.',
+    title: 'Refine and export',
+    text: 'Preview, regenerate anything you want, then download one complete campaign ZIP ready to ship.',
+    image: '/images/luce-dashboard-mock.jpg',
+    panel: {
+      label: 'Export ready',
+      title: 'Campaign dashboard',
+      lines: ['Photos · Video · Copy', 'ZIP ready to publish'],
+    },
   },
 ]
 
 const features = [
   {
-    title: 'Product understanding',
-    text: 'LUCE extracts and organizes product identity so every asset starts from the same source of truth.',
+    title: 'Instant product profile',
+    text: 'LUCE reads your product and builds a campaign profile — identity, audience, and tone — in seconds.',
   },
   {
-    title: 'Studio lighting mindset',
-    text: 'Think camera lights and softboxes — LUCE changes the scene and lighting, never the product itself.',
+    title: 'Studio lighting engine',
+    text: 'Change the scene and light, never the product. Softbox moods without distorting packaging.',
+  },
+  {
+    title: 'Hyper-realistic UGC',
+    text: 'Creator-style short clips your brand can post — apply, routine, and ring-light review formats.',
   },
   {
     title: 'Campaign consistency',
-    text: 'Photos, UGC, copy, and ads share one product identity and one campaign context.',
+    text: 'Photos, videos, copy, and ads share one product identity so everything feels like one brand story.',
   },
   {
-    title: 'One simple workflow',
-    text: 'Stop juggling multiple AI tools. Give LUCE the product — get everything to market it.',
+    title: 'One-click campaign pack',
+    text: 'Stop juggling AI tools. Generate visuals, social content, and ads in a single workflow.',
+  },
+  {
+    title: 'Review & regenerate',
+    text: 'Pick winners, regenerate weak assets, and export a polished ZIP from one dashboard.',
   },
 ]
+
+const pricingPlans = [
+  {
+    name: 'Free',
+    tagline: 'Explore the workflow',
+    monthly: 0,
+    yearly: 0,
+    cta: 'Start free',
+    featured: false,
+    perks: [
+      '1 product campaign',
+      '3 studio product photos',
+      '1 UGC-style clip',
+      'Basic social captions',
+      'Watermarked exports',
+    ],
+  },
+  {
+    name: 'Starter',
+    tagline: 'Launch your first campaigns',
+    monthly: 29,
+    yearly: 23,
+    cta: 'Choose Starter',
+    featured: false,
+    perks: [
+      '5 campaigns / month',
+      'Studio + lifestyle photos',
+      '3 UGC videos / campaign',
+      'Social captions & hooks',
+      'ZIP export, no watermark',
+      '1 workspace',
+    ],
+  },
+  {
+    name: 'Growth',
+    tagline: 'Ship campaigns every week',
+    monthly: 79,
+    yearly: 63,
+    cta: 'Choose Growth',
+    featured: true,
+    perks: [
+      '20 campaigns / month',
+      'Full photo + UGC suite',
+      'Ad creatives included',
+      'Priority generation',
+      '3 workspaces',
+      'Brand tone presets',
+    ],
+  },
+  {
+    name: 'Pro',
+    tagline: 'Scale creative production',
+    monthly: 149,
+    yearly: 119,
+    cta: 'Choose Pro',
+    featured: false,
+    perks: [
+      'Unlimited campaigns',
+      'Unlimited regenerations',
+      'Multi-product packs',
+      'Team seats (5)',
+      'Early feature access',
+      'Priority support',
+    ],
+  },
+]
+
+function Reveal({
+  children,
+  className = '',
+  as = 'div',
+  delay = 0,
+}: {
+  children: React.ReactNode
+  className?: string
+  as?: 'div' | 'article' | 'li' | 'section'
+  delay?: number
+}) {
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true)
+          obs.disconnect()
+        }
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -10% 0px' },
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
+  const props = {
+    ref: ref as never,
+    className: `reveal ${visible ? 'reveal-in' : ''} ${className}`.trim(),
+    style: { transitionDelay: `${delay}ms` },
+  }
+
+  if (as === 'article') return <article {...props}>{children}</article>
+  if (as === 'li') return <li {...props}>{children}</li>
+  if (as === 'section') return <section {...props}>{children}</section>
+  return <div {...props}>{children}</div>
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n))
+}
+
+function ScrollPhrase() {
+  const ref = useRef<HTMLElement | null>(null)
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    const onScroll = () => {
+      const el = ref.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const travel = Math.max(1, el.offsetHeight - window.innerHeight)
+      setProgress(clamp(-rect.top / travel, 0, 1))
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [])
+
+  const line1Opacity = clamp(1 - (progress - 0.22) / 0.28, 0, 1)
+  const line2Opacity = clamp((progress - 0.38) / 0.28, 0, 1)
+
+  return (
+    <section className="phrase" ref={ref as never} aria-label="Campaign promise">
+      <div className="phrase-pin">
+        <h2 className="phrase-line phrase-line-1" style={{ opacity: line1Opacity }}>
+          Stop buying photos, videos, and ads separately
+        </h2>
+        <h2 className="phrase-line phrase-line-2" style={{ opacity: line2Opacity }}>
+          One product. One campaign. Ready to ship.
+        </h2>
+      </div>
+    </section>
+  )
+}
+
+function HowItWorks() {
+  const sectionRef = useRef<HTMLElement | null>(null)
+  const stepsRef = useRef<(HTMLElement | null)[]>([])
+  const [active, setActive] = useState(0)
+  const [railFill, setRailFill] = useState(0)
+
+  useEffect(() => {
+    const onScroll = () => {
+      const steps = stepsRef.current.filter(Boolean) as HTMLElement[]
+      if (!steps.length) return
+
+      const focusY = window.innerHeight * 0.42
+      let best = 0
+      let bestDist = Infinity
+      steps.forEach((el, i) => {
+        const mid = el.getBoundingClientRect().top + el.offsetHeight / 2
+        const dist = Math.abs(mid - focusY)
+        if (dist < bestDist) {
+          bestDist = dist
+          best = i
+        }
+      })
+      setActive(best)
+
+      const first = steps[0].getBoundingClientRect()
+      const last = steps[steps.length - 1].getBoundingClientRect()
+      const start = first.top + window.scrollY
+      const end = last.top + window.scrollY + last.height * 0.35
+      const current = window.scrollY + focusY
+      setRailFill(clamp((current - start) / Math.max(1, end - start), 0, 1))
+    }
+
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [])
+
+  return (
+    <section
+      className="hiw"
+      id="how-it-works"
+      ref={sectionRef as never}
+      aria-labelledby="workflow-title"
+    >
+      <div className="hiw-inner">
+        <h2 className="hiw-title" id="workflow-title">
+          How it works
+        </h2>
+
+        <div className="hiw-grid">
+          <div className="hiw-sticky" aria-hidden="true">
+            <div className="hiw-viz-frame">
+              {workflow.map((item, i) => (
+                <div key={item.step} className={`hiw-viz-slot ${i === active ? 'is-active' : ''}`}>
+                  <img className="hiw-viz-media" src={item.image} alt="" />
+                  <div className="hiw-viz-veil" />
+                  <div className="hiw-panel">
+                    <p className="hiw-panel-label">{item.panel.label}</p>
+                    <strong>{item.panel.title}</strong>
+                    {item.panel.lines.map((line) => (
+                      <span key={line}>{line}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="hiw-steps">
+            <span className="hiw-rail" aria-hidden="true">
+              <span className="hiw-rail-fill" style={{ height: `${railFill * 100}%` }} />
+            </span>
+            {workflow.map((item, i) => (
+              <div
+                key={item.step}
+                className={`hiw-step ${i === active ? 'is-active' : ''}`}
+                ref={(el) => {
+                  stepsRef.current[i] = el
+                }}
+              >
+                <span className="hiw-step-n">{item.step}</span>
+                <h3 className="hiw-step-title">{item.title}</h3>
+                <p className="hiw-step-body">{item.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="hiw-cta">
+          <a className="btn btn-dark btn-pill" href="#cta">
+            Create Your Campaign
+            <span aria-hidden="true">→</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  )
+}
 
 export default function App() {
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly')
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8)
+    const onScroll = () => setScrolled(window.scrollY > 40)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -176,7 +431,7 @@ export default function App() {
     <div className="page">
       <div className="backdrop" aria-hidden="true" />
 
-      <header className={`nav ${scrolled ? 'nav-scrolled' : ''}`}>
+      <header className={`nav ${scrolled ? 'nav-scrolled' : 'nav-top'}`}>
         <div className="nav-inner">
           <Logo />
 
@@ -236,8 +491,8 @@ export default function App() {
               <span className="headline-accent">Our Creativity.</span>
             </h1>
             <p className="lede">
-              LUCE brings your product into the light — then builds a full marketing campaign
-              around it: studio visuals, videos, social content, and ads that stay true to what you sell.
+              Give LUCE one product. Get a complete marketing campaign — from visuals and videos to
+              social content and ad creatives.
             </p>
             <div className="hero-cta">
               <a className="btn btn-dark btn-pill" href="#cta">
@@ -248,7 +503,7 @@ export default function App() {
                 <span className="play-circle" aria-hidden="true">
                   ▶
                 </span>
-                Watch how it works
+                Watch Video
               </a>
             </div>
             <ul className="trust-row">
@@ -266,12 +521,51 @@ export default function App() {
             <div className="spark spark-2" aria-hidden="true" />
             <div className="spark spark-3" aria-hidden="true" />
 
+            <div className="hero-product">
+              <div className="hero-product-glow" aria-hidden="true" />
+              <img src={HERO_PRODUCT.image} alt={HERO_PRODUCT.name} />
+              <div className="hero-product-pedestal" aria-hidden="true" />
+            </div>
+
             {deliverables.map((card) => (
               <article key={card.title} className={`float-card ${card.className}`}>
-                <div className="float-media">
-                  <img src={card.image} alt={card.title} />
-                  {card.play && <span className="play-badge">▶</span>}
-                </div>
+                {card.kind === 'photos' ? (
+                  <div className="float-photos">
+                    {card.images.map((src) => (
+                      <img key={src} src={src} alt="" />
+                    ))}
+                  </div>
+                ) : card.kind === 'social' ? (
+                  <div className="float-social">
+                    <div className="float-social-head">
+                      <img src={card.image} alt="" />
+                      <div>
+                        <strong>{card.handle}</strong>
+                        <span>Sponsored</span>
+                      </div>
+                    </div>
+                    <p>“{card.quote}”</p>
+                    <div className="float-social-bar" aria-hidden="true">
+                      <span>♡ 2.4k</span>
+                      <span>💬 186</span>
+                      <span>↗ Share</span>
+                    </div>
+                  </div>
+                ) : card.kind === 'ad' ? (
+                  <div className="float-ad">
+                    <img src={card.image} alt="" />
+                    <div className="float-ad-copy">
+                      <em>{card.kicker}</em>
+                      <strong>{card.headline}</strong>
+                      <span className="float-ad-cta">{card.cta}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="float-media">
+                    <img src={card.image} alt={card.title} />
+                    {card.play && <span className="play-badge">▶</span>}
+                  </div>
+                )}
                 <div className="float-meta">
                   <strong>{card.title}</strong>
                   <span>{card.caption}</span>
@@ -282,154 +576,171 @@ export default function App() {
         </section>
 
         <section className="demo" id="demo" aria-labelledby="demo-title">
-          <div className="section-head">
-            <p className="eyebrow">Campaign demo</p>
-            <h2 id="demo-title">How to create a full campaign with LUCE</h2>
+          <Reveal className="section-head">
+            <p className="eyebrow">Product demo</p>
+            <h2 id="demo-title">See how LUCE works</h2>
             <p>
-              A guided walkthrough of the whole flow — from product input to ZIP export —
-              so you can see exactly how LUCE builds your campaign.
+              From one product upload to a finished campaign pack — photos, UGC, social, and ads
+              ready to export.
             </p>
-          </div>
-          <CampaignDemoPlayer />
+          </Reveal>
+          <Reveal delay={100}>
+            <DemoVideoPlayer />
+          </Reveal>
         </section>
 
-        <section className="process" id="examples" aria-labelledby="process-title">
-          <div className="process-shell">
-            <h2 id="process-title">One product → a complete marketing campaign</h2>
-            <div className="process-grid">
-              {processSteps.map((step) => (
-                <div className="process-item" key={step.title}>
-                  <div className="process-icon">{step.icon}</div>
-                  <h3>{step.title}</h3>
-                  <p>{step.text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+        <section className="campaign" id="campaign" aria-labelledby="campaign-title">
+          <Reveal className="section-head">
+            <p className="eyebrow">One product campaign</p>
+            <h2 id="campaign-title">One moisturizer. Complete pack.</h2>
+            <p>
+              The same Daily Moisturizer — product still, the creator using it, then the marketing
+              film.
+            </p>
+          </Reveal>
+          <Reveal delay={100}>
+            <CampaignDemoPlayer />
+          </Reveal>
         </section>
 
-        <section className="gallery" aria-labelledby="gallery-title">
-          <div className="section-head">
-            <p className="eyebrow">Campaign visuals</p>
-            <h2 id="gallery-title">Lit like a studio. True to the product.</h2>
+        <section className="ugc" id="ugc" aria-labelledby="ugc-title">
+          <Reveal className="section-head">
+            <p className="eyebrow">UGC videos</p>
+            <h2 id="ugc-title">Real creators. Real product moments.</h2>
             <p>
-              From perfume and skincare to lifestyle goods — LUCE lights your product and
-              builds campaign assets around what you already sell.
+              A looping feed of creators using moisturizer and perfume — ready for Reels, TikTok,
+              and Shorts.
             </p>
-          </div>
-          <div className="gallery-grid">
-            {gallery.map((item) => (
-              <article key={item.title} className="gallery-card">
-                <img src={item.image} alt={item.title} loading="lazy" />
-                <div>
-                  <h3>{item.title}</h3>
-                  <p>{item.text}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-          <div className="dashboard-band">
-            <img
-              src="/images/luce-dashboard-mock.jpg"
-              alt="LUCE campaign dashboard preview"
-              loading="lazy"
-            />
-            <div>
-              <p className="eyebrow">Workspace</p>
-              <h3>Review, regenerate, and export from one dashboard</h3>
-              <p>
-                Every asset stays tied to the same product and campaign context — so your
-                visuals, videos, and copy feel like one brand story.
-              </p>
-            </div>
-          </div>
+          </Reveal>
+          <Reveal delay={100}>
+            <UgcReel />
+          </Reveal>
         </section>
 
-        <section className="workflow" id="how-it-works" aria-labelledby="workflow-title">
-          <div className="section-head">
-            <p className="eyebrow">How it works</p>
-            <h2 id="workflow-title">From product URL to campaign ZIP</h2>
-            <p>
-              Built for Shopify, e-commerce, and DTC brands that need professional content
-              without a full creative team.
-            </p>
-          </div>
-          <ol className="workflow-list">
-            {workflow.map((item) => (
-              <li key={item.step}>
-                <span className="step-num">{item.step}</span>
-                <div>
-                  <h3>{item.title}</h3>
-                  <p>{item.text}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
+        <ScrollPhrase />
+
+        <HowItWorks />
 
         <section className="features" id="features" aria-labelledby="features-title">
-          <div className="section-head">
+          <Reveal className="section-head">
             <p className="eyebrow">Why LUCE</p>
-            <h2 id="features-title">Built around light, product, and campaign</h2>
+            <h2 id="features-title">Built for brands that care how the product looks</h2>
             <p>
-              LUCE does not create isolated assets. It lights your product and builds one
-              campaign around it — with fidelity and consistency at the center.
+              Not generic AI noise — a campaign system centered on product fidelity, lighting, and
+              consistency.
             </p>
-          </div>
-          <div className="feature-grid">
-            {features.map((feature) => (
-              <article key={feature.title} className="feature-card">
+          </Reveal>
+          <div className="feature-grid feature-grid-3">
+            {features.map((feature, i) => (
+              <Reveal as="article" key={feature.title} className="feature-card text-only" delay={i * 70}>
                 <h3>{feature.title}</h3>
                 <p>{feature.text}</p>
-              </article>
+              </Reveal>
             ))}
           </div>
         </section>
 
         <section className="fidelity" aria-labelledby="fidelity-title">
-          <div className="fidelity-panel">
-            <div>
+          <Reveal className="fidelity-panel rich">
+            <div className="fidelity-visual">
+              {PRODUCT_LIGHTS.map((shot) => (
+                <figure key={shot.label} className={`fidelity-shot tone-${shot.tone}`}>
+                  <img src={shot.src} alt={`${HERO_PRODUCT.name} — ${shot.label}`} />
+                  <figcaption>{shot.label}</figcaption>
+                </figure>
+              ))}
+              <span className="fidelity-chip">Same bottle · New location</span>
+            </div>
+            <div className="fidelity-copy">
               <p className="eyebrow">Core principle</p>
               <h2 id="fidelity-title">Change the scene, not the product</h2>
               <p>
-                Beautiful AI images are useless if they distort your bottle, logo, or packaging.
-                LUCE treats your product as the source of truth — preserving shape, proportions,
-                colors, and distinctive details while transforming lighting and setting around it.
+                Beautiful AI images are useless if they distort your bottle, logo, or packaging. LUCE
+                treats your product as the source of truth — same shape, same color, same details —
+                while only the location and lighting around it change.
               </p>
+              <ul>
+                <li>Bottle color and packaging stay exact</li>
+                <li>Shape, logo, and proportions preserved</li>
+                <li>Only environment and lighting shift</li>
+                <li>One identity across every location shoot</li>
+              </ul>
             </div>
-            <ul>
-              <li>Preserves shape, logo and label</li>
-              <li>Keeps packaging and colors true</li>
-              <li>Varies lighting, props and lifestyle</li>
-              <li>One identity across every asset</li>
-            </ul>
-          </div>
+          </Reveal>
         </section>
 
         <section className="pricing" id="pricing" aria-labelledby="pricing-title">
-          <div className="early-access">
-            <p className="eyebrow">Early access</p>
-            <h2 id="pricing-title">Built for Shopify and DTC brands</h2>
-            <p>
-              LUCE MVP focuses on physical products — beauty, skincare, perfume, jewelry,
-              fashion accessories, home and lifestyle, and packaged goods.
-            </p>
-            <a className="btn btn-dark" href="#cta">
-              Request early access
-            </a>
+          <Reveal className="section-head">
+            <p className="eyebrow">Pricing</p>
+            <h2 id="pricing-title">Plans built for serious brands</h2>
+            <p>Clear tiers. Studio-quality campaigns. Upgrade when you are ready to scale.</p>
+          </Reveal>
+
+          <Reveal className="billing-toggle" delay={60}>
+            <button
+              type="button"
+              className={billing === 'monthly' ? 'active' : ''}
+              onClick={() => setBilling('monthly')}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              className={billing === 'yearly' ? 'active' : ''}
+              onClick={() => setBilling('yearly')}
+            >
+              Yearly
+              <span className="save-pill">Save 20%</span>
+            </button>
+          </Reveal>
+
+          <div className="pricing-grid">
+            {pricingPlans.map((plan, i) => {
+              const price = billing === 'monthly' ? plan.monthly : plan.yearly
+              return (
+                <Reveal
+                  as="article"
+                  key={plan.name}
+                  className={`price-card ${plan.featured ? 'featured' : ''}`}
+                  delay={i * 70}
+                >
+                  {plan.featured && <span className="price-badge">Most popular</span>}
+                  <h3>{plan.name}</h3>
+                  <p className="price-tagline">{plan.tagline}</p>
+                  <p className="price-amount">
+                    <span className="price-num">${price}</span>
+                    <span className="price-period">/ month</span>
+                  </p>
+                  {billing === 'yearly' && plan.monthly > 0 && (
+                    <p className="price-note">Billed yearly</p>
+                  )}
+                  <a className={`btn ${plan.featured ? 'btn-dark' : 'btn-ghost'}`} href="#cta">
+                    {plan.cta}
+                  </a>
+                  <ul>
+                    {plan.perks.map((perk) => (
+                      <li key={perk}>{perk}</li>
+                    ))}
+                  </ul>
+                </Reveal>
+              )
+            })}
           </div>
         </section>
 
         <section className="final-cta" id="cta" aria-labelledby="cta-title">
-          <div className="cta-banner">
-            <p className="cta-kicker">Your product</p>
-            <h2 id="cta-title">Is ready for its campaign.</h2>
-            <p>Give LUCE one product. We&apos;ll build the campaign around it.</p>
-            <a className="btn btn-light btn-pill" href="#top">
-              Create Campaign
-              <span aria-hidden="true">→</span>
-            </a>
-          </div>
+          <Reveal className="cta-banner">
+            <div className="cta-banner-veil" aria-hidden="true" />
+            <div className="cta-banner-content">
+              <p className="cta-kicker">Your product</p>
+              <h2 id="cta-title">Is ready for its campaign.</h2>
+              <p>Give LUCE one product. We&apos;ll build the campaign around it.</p>
+              <a className="btn btn-light btn-pill" href="#top">
+                Create Campaign
+                <span aria-hidden="true">→</span>
+              </a>
+            </div>
+          </Reveal>
         </section>
       </main>
 
@@ -441,9 +752,11 @@ export default function App() {
           </div>
           <div className="footer-links">
             <a href="#demo">Demo</a>
+            <a href="#campaign">Campaign</a>
+            <a href="#ugc">UGC</a>
             <a href="#how-it-works">How It Works</a>
             <a href="#features">Features</a>
-            <a href="#pricing">Early Access</a>
+            <a href="#pricing">Pricing</a>
             <a href="#login">Log in</a>
           </div>
           <p className="copyright">© {new Date().getFullYear()} LUCE. All rights reserved.</p>
