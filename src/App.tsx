@@ -503,7 +503,7 @@ export default function App() {
                 <span className="play-circle" aria-hidden="true">
                   ▶
                 </span>
-                Watch Video
+                See how it works
               </a>
             </div>
             <ul className="trust-row">
@@ -577,11 +577,11 @@ export default function App() {
 
         <section className="demo" id="demo" aria-labelledby="demo-title">
           <Reveal className="section-head">
-            <p className="eyebrow">Product demo</p>
-            <h2 id="demo-title">See how LUCE works</h2>
+            <p className="eyebrow">How the website works</p>
+            <h2 id="demo-title">See LUCE in action</h2>
             <p>
-              From one product upload to a finished campaign pack — photos, UGC, social, and ads
-              ready to export.
+              A quick walkthrough of the site — upload a product, confirm the brief, generate the
+              pack, and export from the dashboard.
             </p>
           </Reveal>
           <Reveal delay={100}>

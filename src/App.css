@@ -1159,6 +1159,182 @@
   overflow: hidden;
 }
 
+.demo-walk-app {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(123, 92, 255, 0.28), transparent 42%),
+    radial-gradient(circle at 82% 70%, rgba(45, 212, 200, 0.18), transparent 40%),
+    linear-gradient(160deg, #1a1624, #0f0d14 70%);
+  padding: 22px;
+  display: grid;
+}
+
+.demo-app-screen {
+  display: grid;
+  grid-template-columns: 1.35fr 0.75fr;
+  gap: 14px;
+  align-content: start;
+  animation: demoScreenIn 0.45s ease both;
+}
+
+@keyframes demoScreenIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.demo-app-top {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.demo-app-brand {
+  display: grid;
+  gap: 2px;
+  color: #fff;
+}
+
+.demo-app-brand strong {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+}
+
+.demo-app-brand span {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.demo-app-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.demo-app-nav i {
+  width: 28px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  display: block;
+}
+
+.demo-app-nav i.is-on {
+  background: linear-gradient(90deg, #7b5cff, #2fd4c8);
+}
+
+.demo-app-card {
+  border-radius: 18px;
+  padding: 18px 18px 16px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.demo-app-eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6d4dff;
+}
+
+.demo-app-card h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  color: #0b0b10;
+}
+
+.demo-app-card ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.demo-app-card li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f5f2fb;
+  font-size: 0.86rem;
+}
+
+.demo-app-card li span {
+  color: var(--muted);
+}
+
+.demo-app-card li strong {
+  color: var(--ink);
+  font-weight: 650;
+  text-align: right;
+}
+
+.demo-app-cta {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #0b0b10;
+  color: #fff;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.demo-app-side {
+  display: grid;
+  gap: 10px;
+  align-content: end;
+}
+
+.demo-app-thumb {
+  border-radius: 14px;
+  min-height: 72px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 50%),
+    linear-gradient(160deg, #2a2438, #17141f);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.demo-app-thumb.is-wide {
+  min-height: 118px;
+  background:
+    linear-gradient(135deg, rgba(123, 92, 255, 0.35), transparent 55%),
+    url('/images/moisturizer-studio.jpg') center / cover;
+}
+
+@media (max-width: 860px) {
+  .demo-app-screen {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-app-side {
+    grid-template-columns: 1.4fr 1fr 1fr;
+  }
+
+  .demo-app-thumb.is-wide {
+    min-height: 88px;
+  }
+}
+
 .demo-walk-visual img {
   position: absolute;
   inset: 0;
