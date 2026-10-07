@@ -6,31 +6,31 @@ const STEPS = [
     num: '01',
     label: 'Add product',
     title: 'Start with one product',
-    detail: 'Paste a URL or upload photos. LUCE learns packaging, category, and brand tone.',
+    detail: 'Paste a URL or upload photos. LUCE learns packaging, features, and brand context.',
     url: 'app.luce.ai/campaigns/new',
   },
   {
     id: 'brief',
     num: '02',
-    label: 'Confirm brief',
-    title: 'Lock the product brief',
-    detail: 'Review name, audience, and fidelity so every asset stays true to the bottle.',
+    label: 'Confirm',
+    title: 'Confirm what LUCE understood',
+    detail: 'Review name, features, and category so every asset starts from one source of truth.',
     url: 'app.luce.ai/campaigns/brief',
   },
   {
-    id: 'generate',
+    id: 'research',
     num: '03',
-    label: 'Generate pack',
-    title: 'Build the full campaign',
-    detail: 'Studio photos, UGC, social posts, and ads generate from that single product.',
-    url: 'app.luce.ai/campaigns/generate',
+    label: 'Research',
+    title: 'Research & strategy',
+    detail: 'Market context informs audience, positioning, angle, message, and creative direction.',
+    url: 'app.luce.ai/campaigns/strategy',
   },
   {
     id: 'export',
     num: '04',
-    label: 'Export',
-    title: 'Review and download',
-    detail: 'Pick winners in the dashboard, regenerate anything, then export one ZIP.',
+    label: 'Generate',
+    title: 'Generate the full campaign',
+    detail: 'Visuals, UGC, social, ads, and strategy in one pack — download a ZIP to publish.',
     url: 'app.luce.ai/campaigns/dashboard',
   },
 ]
@@ -84,8 +84,8 @@ export default function DemoVideoPlayer() {
             <nav>
               <span className={index === 0 ? 'on' : ''}>New</span>
               <span className={index === 1 ? 'on' : ''}>Brief</span>
-              <span className={index >= 2 ? 'on' : ''}>Assets</span>
-              <span className={index === 3 ? 'on' : ''}>Export</span>
+              <span className={index === 2 ? 'on' : ''}>Strategy</span>
+              <span className={index === 3 ? 'on' : ''}>Assets</span>
             </nav>
           </aside>
 
@@ -135,7 +135,7 @@ export default function DemoVideoPlayer() {
                     <h3>Daily Moisturizer</h3>
                   </div>
                   <button type="button" tabIndex={-1}>
-                    Generate
+                    Confirm
                   </button>
                 </header>
                 <div className="site-demo-brief">
@@ -164,37 +164,41 @@ export default function DemoVideoPlayer() {
               </>
             )}
 
-            {step.id === 'generate' && (
+            {step.id === 'research' && (
               <>
                 <header className="site-demo-header">
                   <div>
-                    <p>Generating</p>
-                    <h3>Campaign pack in progress</h3>
+                    <p>Campaign strategy</p>
+                    <h3>Research-backed brief</h3>
                   </div>
-                  <span className="site-demo-badge">68%</span>
+                  <button type="button" tabIndex={-1}>
+                    Generate
+                  </button>
                 </header>
                 <div className="site-demo-generate">
-                  <div className="site-demo-progress">
-                    <span style={{ width: '68%' }} />
-                  </div>
                   <ul>
                     <li className="done">
-                      <strong>Product photos</strong>
-                      <span>4 ready</span>
+                      <strong>Market research</strong>
+                      <span>Ready</span>
                     </li>
                     <li className="done">
-                      <strong>UGC videos</strong>
-                      <span>3 ready</span>
+                      <strong>Audience · Positioning</strong>
+                      <span>Locked</span>
                     </li>
                     <li className="active">
-                      <strong>Social + ads</strong>
-                      <span>Writing…</span>
+                      <strong>Creative direction</strong>
+                      <span>Premium · Clear CTA</span>
                     </li>
                   </ul>
-                  <div className="site-demo-previews">
-                    <img src="/images/moisturizer-studio.jpg" alt="" />
-                    <img src="/images/campaign-ugc-serum.jpg" alt="" />
-                    <img src="/images/campaign-perfume-studio.jpg" alt="" />
+                  <div className="site-demo-brief-meta">
+                    <div>
+                      <span>Angle</span>
+                      <strong>Daily ritual, visible glow</strong>
+                    </div>
+                    <div>
+                      <span>Message</span>
+                      <strong>One pump. All-day soft skin.</strong>
+                    </div>
                   </div>
                 </div>
               </>

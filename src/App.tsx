@@ -14,53 +14,10 @@ const navLinks = [
   { href: '#pricing', label: 'Pricing' },
 ]
 
-const deliverables = [
-  {
-    kind: 'photos' as const,
-    title: 'Product Photos',
-    caption: 'Studio · Lifestyle · Promo',
-    images: ['/images/campaign-perfume-studio.jpg', '/images/luce-product-photo.jpg'],
-    className: 'card-photos',
-  },
-  {
-    kind: 'media' as const,
-    title: 'UGC Video',
-    caption: 'Authentic short-form',
-    image: '/images/campaign-ugc-serum.jpg',
-    className: 'card-ugc',
-    play: true,
-  },
-  {
-    kind: 'social' as const,
-    title: 'Social Content',
-    caption: 'Captions · Hooks · CTAs',
-    quote: 'Good vibes. Great products.',
-    handle: '@luce.campaigns',
-    image: '/images/campaign-perfume-studio.jpg',
-    className: 'card-social',
-  },
-  {
-    kind: 'ad' as const,
-    title: 'Ad Creatives',
-    caption: 'Visuals + ad copy',
-    image: '/images/luce-product-photo.jpg',
-    kicker: 'New drop',
-    headline: 'Make it unforgettable.',
-    cta: 'Shop now',
-    className: 'card-ads',
-  },
-]
-
 const HERO_PRODUCT = {
   image: '/images/luce-product-photo.jpg',
   name: 'Rose Oud Perfume',
 }
-
-const trustPoints = [
-  'Studio-quality product light',
-  'True-to-product fidelity',
-  'Full campaign in one flow',
-]
 
 /** Same Rose Oud bottle — real location / lighting shoots only (no bottle recolor) */
 const PRODUCT_LIGHTS = [
@@ -85,7 +42,7 @@ const workflow = [
   {
     step: '01',
     title: 'Add your product',
-    text: 'Paste a product URL or upload images. LUCE instantly learns your packaging, audience, and brand tone.',
+    text: 'Paste a product URL or upload images. LUCE learns packaging, features, and brand context.',
     image: '/images/luce-product-photo.jpg',
     panel: {
       label: 'Create campaign',
@@ -95,8 +52,8 @@ const workflow = [
   },
   {
     step: '02',
-    title: 'Confirm the brief',
-    text: 'Review name, features, category, and voice — so every asset starts from one source of truth.',
+    title: 'Confirm what LUCE understood',
+    text: 'Review name, features, and category — so every asset starts from one source of truth.',
     image: '/images/campaign-perfume-studio.jpg',
     panel: {
       label: 'Product brief',
@@ -106,19 +63,19 @@ const workflow = [
   },
   {
     step: '03',
-    title: 'Generate the campaign',
-    text: 'One click creates studio photos, UGC videos, social posts, and ad creatives — all aligned.',
+    title: 'Research & strategy',
+    text: 'LUCE researches market context, then builds audience, positioning, angle, and creative direction.',
     image: '/images/campaign-ugc-serum.jpg',
     panel: {
-      label: 'Generating',
-      title: 'Full campaign pack',
-      lines: ['Studio photos ✓', 'UGC · Reel · Marketing'],
+      label: 'Campaign strategy',
+      title: 'Research-backed brief',
+      lines: ['Audience · Positioning', 'Angle · Message · CTA'],
     },
   },
   {
     step: '04',
-    title: 'Refine and export',
-    text: 'Preview, regenerate anything you want, then download one complete campaign ZIP ready to ship.',
+    title: 'Generate & download',
+    text: 'Get visuals, UGC, social, ads, and strategy in one pack — then download a ZIP to publish manually.',
     image: '/images/luce-dashboard-mock.jpg',
     panel: {
       label: 'Export ready',
@@ -130,28 +87,28 @@ const workflow = [
 
 const features = [
   {
-    title: 'Instant product profile',
-    text: 'LUCE reads your product and builds a campaign profile — identity, audience, and tone — in seconds.',
+    title: 'Product as source of truth',
+    text: 'LUCE confirms your real product first — shape, label, and packaging stay faithful across every asset.',
   },
   {
-    title: 'Studio lighting engine',
-    text: 'Change the scene and light, never the product. Softbox moods without distorting packaging.',
+    title: 'Research before creative',
+    text: 'Market, competitor, and trend context inform the campaign so assets are not disconnected AI shots.',
   },
   {
-    title: 'Hyper-realistic UGC',
-    text: 'Creator-style short clips your brand can post — apply, routine, and ring-light review formats.',
+    title: 'Strategy-led generation',
+    text: 'Audience, positioning, angle, and CTA are locked before visuals, UGC, social, and ads are created.',
   },
   {
-    title: 'Campaign consistency',
-    text: 'Photos, videos, copy, and ads share one product identity so everything feels like one brand story.',
+    title: 'True-to-product fidelity',
+    text: 'Change the scene and light, never the bottle. Softbox moods without distorting packaging.',
   },
   {
-    title: 'One-click campaign pack',
-    text: 'Stop juggling AI tools. Generate visuals, social content, and ads in a single workflow.',
+    title: 'One coherent campaign',
+    text: 'Photos, videos, copy, and ads share one product identity and one message — ready to publish.',
   },
   {
-    title: 'Review & regenerate',
-    text: 'Pick winners, regenerate weak assets, and export a polished ZIP from one dashboard.',
+    title: 'Review, refine, download',
+    text: 'Preview, regenerate individual assets, then export a complete ZIP. Manual publishing in MVP.',
   },
 ]
 
@@ -295,10 +252,10 @@ function ScrollPhrase() {
     <section className="phrase" ref={ref as never} aria-label="Campaign promise">
       <div className="phrase-pin">
         <h2 className="phrase-line phrase-line-1" style={{ opacity: line1Opacity }}>
-          Stop buying photos, videos, and ads separately
+          Stop juggling five AI tools for one campaign
         </h2>
         <h2 className="phrase-line phrase-line-2" style={{ opacity: line2Opacity }}>
-          One product. One campaign. Ready to ship.
+          One product. Research. Strategy. Complete campaign.
         </h2>
       </div>
     </section>
@@ -479,99 +436,46 @@ export default function App() {
       </header>
 
       <main id="top">
-        <section className="hero">
-          <div className="hero-copy">
-            <p className="eyebrow">
-              <span className="eyebrow-dot" aria-hidden="true" />
-              AI Campaign Creation Platform
-            </p>
-            <h1>
-              Your Product.
-              <br />
-              <span className="headline-accent">Our Creativity.</span>
-            </h1>
-            <p className="lede">
-              Give LUCE one product. Get a complete marketing campaign — from visuals and videos to
-              social content and ad creatives.
-            </p>
-            <div className="hero-cta">
-              <a className="btn btn-dark btn-pill" href="#cta">
-                Create Your Campaign
-                <span aria-hidden="true">→</span>
-              </a>
-              <a className="btn-watch" href="#demo">
-                <span className="play-circle" aria-hidden="true">
-                  ▶
-                </span>
-                See how it works
-              </a>
-            </div>
-            <ul className="trust-row">
-              {trustPoints.map((point) => (
-                <li key={point}>{point}</li>
-              ))}
-            </ul>
+        <section className="hero" aria-label="LUCE hero">
+          <div className="hero-media" aria-hidden="true">
+            <img src={HERO_PRODUCT.image} alt="" />
+            <div className="hero-media-wash" />
           </div>
 
-          <div className="hero-visual">
-            <div className="orb orb-pink" aria-hidden="true" />
-            <div className="orb orb-lavender" aria-hidden="true" />
-            <div className="orb orb-sky" aria-hidden="true" />
-            <div className="spark spark-1" aria-hidden="true" />
-            <div className="spark spark-2" aria-hidden="true" />
-            <div className="spark spark-3" aria-hidden="true" />
+          <div className="hero-content">
+            <p className="hero-brand">LUCE</p>
+            <h1>Bring your product to light.</h1>
+            <p className="lede">
+              Give LUCE one product. Get a research-backed campaign — visuals, videos, social,
+              ads, and strategy.
+            </p>
 
-            <div className="hero-product">
-              <div className="hero-product-glow" aria-hidden="true" />
-              <img src={HERO_PRODUCT.image} alt={HERO_PRODUCT.name} />
-              <div className="hero-product-pedestal" aria-hidden="true" />
-            </div>
+            <form
+              className="hero-start"
+              onSubmit={(e) => {
+                e.preventDefault()
+                window.location.hash = '#cta'
+              }}
+            >
+              <label className="sr-only" htmlFor="hero-url">
+                Product URL
+              </label>
+              <input
+                id="hero-url"
+                type="url"
+                name="url"
+                placeholder="Paste a product URL — brand.com/products/…"
+                autoComplete="url"
+              />
+              <button type="submit" className="btn btn-dark">
+                Create campaign
+                <span aria-hidden="true">→</span>
+              </button>
+            </form>
 
-            {deliverables.map((card) => (
-              <article key={card.title} className={`float-card ${card.className}`}>
-                {card.kind === 'photos' ? (
-                  <div className="float-photos">
-                    {card.images.map((src) => (
-                      <img key={src} src={src} alt="" />
-                    ))}
-                  </div>
-                ) : card.kind === 'social' ? (
-                  <div className="float-social">
-                    <div className="float-social-head">
-                      <img src={card.image} alt="" />
-                      <div>
-                        <strong>{card.handle}</strong>
-                        <span>Sponsored</span>
-                      </div>
-                    </div>
-                    <p>“{card.quote}”</p>
-                    <div className="float-social-bar" aria-hidden="true">
-                      <span>♡ 2.4k</span>
-                      <span>💬 186</span>
-                      <span>↗ Share</span>
-                    </div>
-                  </div>
-                ) : card.kind === 'ad' ? (
-                  <div className="float-ad">
-                    <img src={card.image} alt="" />
-                    <div className="float-ad-copy">
-                      <em>{card.kicker}</em>
-                      <strong>{card.headline}</strong>
-                      <span className="float-ad-cta">{card.cta}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="float-media">
-                    <img src={card.image} alt={card.title} />
-                    {card.play && <span className="play-badge">▶</span>}
-                  </div>
-                )}
-                <div className="float-meta">
-                  <strong>{card.title}</strong>
-                  <span>{card.caption}</span>
-                </div>
-              </article>
-            ))}
+            <a className="hero-secondary" href="#demo">
+              See how LUCE works
+            </a>
           </div>
         </section>
 
@@ -580,8 +484,8 @@ export default function App() {
             <p className="eyebrow">Product walkthrough</p>
             <h2 id="demo-title">How LUCE works</h2>
             <p>
-              Follow the real workflow inside the product — from one upload to a finished campaign
-              pack ready to export.
+              Product → research → strategy → complete campaign. Follow the real workflow inside
+              LUCE.
             </p>
           </Reveal>
           <Reveal delay={100}>
@@ -733,8 +637,8 @@ export default function App() {
             <div className="cta-banner-veil" aria-hidden="true" />
             <div className="cta-banner-content">
               <p className="cta-kicker">Your product</p>
-              <h2 id="cta-title">Is ready for its campaign.</h2>
-              <p>Give LUCE one product. We&apos;ll build the campaign around it.</p>
+              <h2 id="cta-title">Ready for a research-backed campaign.</h2>
+              <p>Give LUCE one product. Get everything you need to market it.</p>
               <a className="btn btn-light btn-pill" href="#top">
                 Create Campaign
                 <span aria-hidden="true">→</span>
