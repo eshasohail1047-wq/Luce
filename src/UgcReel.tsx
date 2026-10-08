@@ -2,68 +2,136 @@ import { useEffect, useRef } from 'react'
 
 type Clip = {
   id: string
+  format: string
   creator: string
   product: string
   src: string
   poster: string
 }
 
-/** Five creators — mix of moisturizer + perfume UGC */
+/** Unique creators — real motion clips only (no Ken Burns stills) */
 const CLIPS: Clip[] = [
   {
-    id: 'ava',
-    creator: '@ava.skin',
-    product: 'Daily Moisturizer',
-    src: '/videos/creator-1.mp4',
-    poster: '/images/moisturizer-studio.jpg',
+    id: 'lipstick',
+    format: 'Makeup',
+    creator: '@luxe.lips',
+    product: 'Lip color apply',
+    src: '/videos/ugc-makeup-lipstick.mp4',
+    poster: '/images/ugc-makeup-lipstick.jpg',
   },
   {
-    id: 'luna',
+    id: 'ring',
+    format: 'UGC',
+    creator: '@glow.studio',
+    product: 'Skincare ritual',
+    src: '/videos/ugc-skincare-ringlight.mp4',
+    poster: '/images/moisturizer-ugc-poster.jpg',
+  },
+  {
+    id: 'man-skin',
+    format: 'Reel',
+    creator: '@marcus.skin',
+    product: 'Men’s grooming',
+    src: '/videos/ugc-man-skincare.mp4',
+    poster: '/images/ugc-man-skincare.jpg',
+  },
+  {
+    id: 'p1',
+    format: 'Story',
     creator: '@luna.scent',
     product: 'Rose Oud Perfume',
     src: '/videos/perfume-1.mp4',
-    poster: '/images/luce-product-photo.jpg',
+    poster: '/images/campaign-perfume-studio.jpg',
   },
   {
-    id: 'mila',
+    id: 'blush',
+    format: 'Makeup',
+    creator: '@soft.flush',
+    product: 'Blush apply',
+    src: '/videos/ugc-makeup-blush.mp4',
+    poster: '/images/ugc-makeup-blush.jpg',
+  },
+  {
+    id: 'c2',
+    format: 'Reel',
     creator: '@mila.glow',
     product: 'Face Cream',
     src: '/videos/creator-2.mp4',
     poster: '/images/campaign-beauty-flatlay.jpg',
   },
   {
-    id: 'isla',
-    creator: '@isla.fragrance',
-    product: 'Amber Perfume',
-    src: '/videos/perfume-5.mp4',
-    poster: '/images/campaign-perfume-studio.jpg',
+    id: 'man-frag',
+    format: 'UGC',
+    creator: '@alex.notes',
+    product: 'Fragrance spray',
+    src: '/videos/ugc-man-fragrance.mp4',
+    poster: '/images/ugc-man-fragrance.jpg',
   },
   {
-    id: 'ria',
+    id: 'moist',
+    format: 'UGC',
+    creator: '@dew.routine',
+    product: 'Moisturizer demo',
+    src: '/videos/ugc-moisturizer-demo.mp4',
+    poster: '/images/moisturizer-ad-apply.jpg',
+  },
+  {
+    id: 'c3',
+    format: 'UGC',
+    creator: '@noah.beauty',
+    product: 'Serum moment',
+    src: '/videos/creator-3.mp4',
+    poster: '/images/campaign-ugc-serum.jpg',
+  },
+  {
+    id: 'c4',
+    format: 'Story',
+    creator: '@jade.glow',
+    product: 'Morning routine',
+    src: '/videos/creator-4.mp4',
+    poster: '/images/campaign-beauty-flatlay.jpg',
+  },
+  {
+    id: 'p2',
+    format: 'Reel',
     creator: '@ria.reviews',
     product: 'Soft Perfume',
     src: '/videos/perfume-2.mp4',
-    poster: '/images/luce-product-photo.jpg',
+    poster: '/images/campaign-perfume-studio.jpg',
   },
 ]
 
 function MarqueeCard({ clip }: { clip: Clip }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const cardRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video) return
+    const card = cardRef.current
+    if (!video || !card) return
     video.muted = true
-    const tryPlay = () => {
+
+    const play = () => {
       void video.play().catch(() => {})
     }
-    tryPlay()
-    video.addEventListener('loadeddata', tryPlay)
-    return () => video.removeEventListener('loadeddata', tryPlay)
+
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) play()
+        else video.pause()
+      },
+      { threshold: 0.35 },
+    )
+    obs.observe(card)
+    video.addEventListener('loadeddata', play)
+    return () => {
+      obs.disconnect()
+      video.removeEventListener('loadeddata', play)
+    }
   }, [clip.src])
 
   return (
-    <article className="ugc-marquee-card">
+    <article ref={cardRef} className="ugc-marquee-card">
       <div className="ugc-marquee-phone">
         <video
           ref={videoRef}
@@ -75,8 +143,12 @@ function MarqueeCard({ clip }: { clip: Clip }) {
           autoPlay
           preload="auto"
         />
-        <span className="ugc-marquee-creator">{clip.creator}</span>
-        <span className="ugc-marquee-product">{clip.product}</span>
+        <div className="ugc-marquee-veil" aria-hidden="true" />
+        <span className="ugc-marquee-format">{clip.format}</span>
+        <div className="ugc-marquee-caption">
+          <span className="ugc-marquee-creator">{clip.creator}</span>
+          <span className="ugc-marquee-product">{clip.product}</span>
+        </div>
       </div>
     </article>
   )
