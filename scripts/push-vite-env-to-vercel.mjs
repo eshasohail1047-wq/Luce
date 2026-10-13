@@ -30,6 +30,8 @@ for (const raw of text.split(/\r?\n/)) {
         env,
         '--scope',
         'esha-s1',
+        '--type',
+        'config',
         '--force',
         '--yes',
         '--value',

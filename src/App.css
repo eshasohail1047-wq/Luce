@@ -2,8 +2,40 @@
   position: relative;
   overflow-x: clip;
   min-height: 100vh;
-  min-width: 1140px;
+  min-width: 0;
   width: 100%;
+  max-width: 100%;
+}
+
+@media (max-width: 860px) {
+  .nav-links {
+    display: none;
+  }
+
+  .menu-toggle {
+    display: grid;
+    place-items: center;
+  }
+
+  .mobile-menu.open {
+    display: grid;
+    gap: 8px;
+    padding: 12px 16px 18px;
+  }
+
+  .nav-actions .login {
+    display: none;
+  }
+
+  .hero {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .hero-prompt {
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 .page > .nav {

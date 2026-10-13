@@ -59,8 +59,13 @@ function formatAuthError(err: unknown): string {
   switch (code) {
     case 'auth/operation-not-allowed':
       return 'This sign-in method is not enabled in Firebase. Enable Google and Email/Password under Authentication → Sign-in method.'
-    case 'auth/unauthorized-domain':
-      return 'This domain is not authorized. Open http://localhost:5176/login (not 127.0.0.1), or add 127.0.0.1 in Authorized domains.'
+    case 'auth/unauthorized-domain': {
+      const host =
+        typeof window !== 'undefined' && window.location?.hostname
+          ? window.location.hostname
+          : 'this domain'
+      return `This domain is not authorized for Firebase Auth. In Firebase Console → Authentication → Settings → Authorized domains, add “${host}”, then try again.`
+    }
     case 'auth/popup-blocked':
       return 'Popup was blocked by the browser. Allow popups, or use redirect sign-in.'
     case 'auth/popup-closed-by-user':
@@ -245,6 +250,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signInWithGoogle() {
         setError(null)
         const auth = requireAuth()
+        const preferRedirect =
+          typeof window !== 'undefined' &&
+          (window.location.hostname.endsWith('.vercel.app') ||
+            window.location.hostname === 'luce-landing.vercel.app')
+
+        // Production Vercel: redirect is more reliable than popups (blockers / 3P cookies).
+        if (preferRedirect) {
+          await signInWithRedirect(auth, googleProvider)
+          return
+        }
+
         try {
           const result = await signInWithPopup(auth, googleProvider)
           await syncProfile(result.user)
