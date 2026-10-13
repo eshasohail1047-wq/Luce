@@ -1,0 +1,478 @@
+===== PAGE 1 =====
+LUCE — Bring Your Product to Light.    Page 1
+ LUCE
+ Bring Your Product to Light.
+ PRODUCT REQUIREMENTS DOCUMENT
+ MVP Product Specification  v2.0  October 2026
+CORE PRODUCT DEFINITION
+LUCE turns one real product into a complete, research-backed, consistent marketing campaign through one
+simple AI-powered workflow.
+ One product → Research → Strategy → Complete campaign
+
+
+===== PAGE 2 =====
+LUCE | PRODUCT REQUIREMENTS DOCUMENT
+LUCE — Bring Your Product to Light.    Page 2
+1. Executive Summary
+LUCE is an AI-powered campaign creation platform initially designed for Shopify, e-commerce and DTC physical-product
+brands. The user provides a product URL or product images and basic information. LUCE understands the product, researches
+relevant market context, builds a campaign strategy, and generates a complete marketing campaign around it.
+CORE CONCEPT
+One product → One research-backed campaign → Everything needed to market it.
+BRAND ITEM
+DEFINITION
+Brand
+LUCE
+Meaning
+Italian word meaning “Light.”
+Tagline
+LUCE — Bring Your Product to Light.
+Visible product line
+Give LUCE one product. Get everything you need to market it.
+Supporting line
+LUCE transforms one real product into a research-backed marketing campaign — from product visuals and
+videos to social content, ad creatives and campaign strategy.
+2. MVP WORKFLOW — PRIMARY PRODUCT FLOW
+MVP SCOPE — READ THIS FIRST
+The first release focuses ONLY on physical products for Shopify, e-commerce and DTC brands. Research,
+campaign strategy and asset generation are included in the MVP. Automatic publishing, scheduling, analytics,
+campaign optimization, SaaS workflows and multi-provider integrations remain future phases.
+STEP
+MVP STAGE
+WHAT HAPPENS
+01
+CREATE CAMPAIGN
+Start a new campaign.
+02
+ADD PRODUCT
+Paste product URL OR upload product image(s) and basic information.
+03
+PRODUCT
+UNDERSTANDING
+LUCE extracts or organizes product name, description, features, category, price, images and
+available brand information.
+04
+CONFIRM PRODUCT
+User reviews what LUCE understood; edits information or confirms and continues.
+05
+RESEARCH & DISCOVERY
+Campaign Agent researches relevant market, competitors and trends; asks only necessary questions
+and recommends audience/positioning if needed.
+06
+BUILD CAMPAIGN
+STRATEGY
+LUCE defines objective, target audience, insight, positioning, campaign angle, message, creative
+direction and CTA.
+07
+GENERATE CAMPAIGN
+User selects individual assets or chooses Generate Full Campaign. Assets use the same confirmed
+product and campaign context.
+08
+REVIEW RESULTS
+Results are grouped into Product Visuals, Videos, Social Content, Ad Creative and Strategy.
+09
+REFINE
+Preview, regenerate individual assets, refine through Agent if plan allows, copy text or download.
+10
+DOWNLOAD CAMPAIGN
+Download a complete ZIP package.
+11
+MANUAL PUBLISHING
+User posts downloaded content manually. No automatic social publishing in MVP.
+
+
+===== PAGE 3 =====
+LUCE | PRODUCT REQUIREMENTS DOCUMENT
+LUCE — Bring Your Product to Light.    Page 3
+MVP Deliverables
+ CATEGORY
+MVP OUTPUT
+Product visuals
+Professional product image; lifestyle image; promotional product creative
+Videos
+UGC-style short video; Reels/social video; product marketing video
+Social content
+Captions; marketing hooks; CTAs; hashtags
+Advertising
+Ad creative; ad copy
+Campaign strategy
+Campaign objective, audience, positioning, message, creative direction and CTA
+Research
+Relevant market research, competitor research and trend/creative opportunity research
+Campaign management
+Dashboard; cloud storage; saved campaigns
+Controls
+Preview; regenerate individual asset; copy text; supported Agent refinement
+Export
+Download complete campaign as ZIP
+Publishing
+Manual publishing only
+3. Problem Statement
+Small e-commerce and DTC brands often have a product but do not have professional product photography, video production,
+UGC creators, designers, copywriters, a full creative team or enough time to create content regularly.
+Current workflows may require multiple AI tools: one for product images, another for UGC, another for video, and others for
+captions and ads. This creates a fragmented workflow.
+Critical problem: AI product distortion. AI-generated product visuals can change the actual product, including bottle shape,
+logo, label, packaging, cap, colors and proportions. A beautiful AI image is still unusable if it no longer accurately represents the
+real product.
+Strategic problem: disconnected content. Individual assets may look good but fail to communicate one consistent campaign
+or connect to a clear audience, message or marketing objective.
+4. LUCE Solution
+LUCE treats the actual product as the central source of truth. The Campaign Agent understands the product, identifies missing
+information, conducts relevant research, develops a campaign strategy, and creates multiple marketing assets around the same
+product and campaign context.
+Example: Rose Oud perfume
+ INPUT
+LUCE UNDERSTANDS
+OUTPUT
+Product URL / product image
+Name, description, category, features, benefits,
+visuals and available brand information
+Research-backed strategy; product visuals; lifestyle
+visuals; UGC; marketing video; captions; hooks; CTAs;
+hashtags; ad creative and ad copy
+Core workflow
+PRODUCT → RESEARCH → STRATEGY → COMPLETE CAMPAIGN
+5. Target Audience
+Primary MVP target: small Shopify, e-commerce and DTC physical-product brands, especially brands that need regular social
+content, lack a large creative team, want professional content and want to reduce the complexity of using multiple tools.
+  Beauty
+  Skincare
+  Perfume
+  Jewelry
+
+
+===== PAGE 4 =====
+LUCE | PRODUCT REQUIREMENTS DOCUMENT
+LUCE — Bring Your Product to Light.    Page 4
+  Fashion accessories
+  Home & lifestyle
+  Food / consumer packaging
+  Small consumer brands
+6. User Input & Product Confirmation
+Option A — Product URL
+Example: brand.com/products/rose-oud
+  Product name
+  Product description
+  Product features
+  Product category
+  Price
+  Existing product images
+  Brand information where available
+Option B — Manual Upload
+  Product image(s)
+  Product name
+  Product description
+  Key features
+  Optional target audience
+  Optional brand tone
+WE FOUND YOUR PRODUCT
+Before generation, LUCE shows the product information it understood and allows the user to edit or confirm it. If the user
+provides only images, the Agent uses visual understanding and asks targeted questions when important information is missing.
+The product confirmation step is designed to reduce incorrect claims and product distortion.
+7. Campaign Builder
+After product confirmation, users can choose a full campaign or select individual asset types. The Campaign Agent determines
+which research and strategy steps are needed before generation.
+GROUP
+SELECTABLE ASSETS
+Product visuals
+Product image; lifestyle image; promotional creative
+Videos
+UGC-style video; Reels/social video; product marketing video
+Social content
+Captions; hooks; CTAs; hashtags
+Advertising
+Ad creative; ad copy
+Strategy & research
+Campaign strategy; audience/positioning recommendation; market/competitor/trend insights
+Campaign Agent behavior
+  Understand the product and campaign goal.
+  Ask only questions that materially affect campaign quality.
+  If the user does not know their target audience or positioning, research and recommend options.
+  Keep strategy and generated assets connected to one shared campaign context.
+
+
+===== PAGE 5 =====
+LUCE | PRODUCT REQUIREMENTS DOCUMENT
+LUCE — Bring Your Product to Light.    Page 5
+  Allow eligible users to request changes in natural language, such as “make it more premium” or “target working women.”
+8. Campaign Generation Experience
+The user selects Generate Campaign. LUCE should show clear progress states and explain the current stage without making
+the user understand technical AI steps.
+PROGRESS UI
+  Understanding product
+  Researching market and competitors
+  Building campaign strategy
+  Preparing creative direction
+  Generating selected assets
+  Saving campaign
+The system should handle failures gracefully, show useful status messages and allow retry where appropriate.
+9. Campaign Results
+ SECTION
+GENERATED
+ACTIONS
+Product visuals
+Product images, lifestyle visuals and promotional creatives
+Preview, regenerate, download
+Videos
+UGC-style, social/Reels and marketing videos
+Preview, regenerate, download
+Social content
+Captions, hooks, CTAs and hashtags
+Copy, edit where supported, regenerate
+Ad creative
+Advertising visuals and ad copy
+Preview, copy, regenerate, download
+Strategy & research
+Audience, positioning, campaign angle, key message and
+research summary
+Review and refine where plan allows
+Free vs Starter experience
+ PLAN
+EXPERIENCE
+Free
+Free = Get a Campaign. One campaign per month, basic research, limited campaign output, and campaign download. No
+ongoing conversational Agent refinement/rebuild experience.
+Starter
+Starter = Work With the Campaign Agent. More campaigns, direct Agent interaction, strategy and audience changes,
+asset regeneration, alternative campaign angles, and campaign refinement/rebuild.
+10. Product Fidelity
+CHANGE THE SCENE, NOT THE PRODUCT.
+LUCE should preserve important product characteristics including shape, proportions, logo, label, packaging, colors, cap, and
+other recognizable details. The generated asset should still clearly represent the user's real product. When a generation cannot
+reliably preserve a critical detail, the system should avoid presenting the output as a faithful product depiction.
+11. Campaign Consistency
+All generated assets should use the same confirmed product information, campaign strategy, audience, positioning, messaging
+and creative direction. The goal is one coherent brand campaign, not a collection of unrelated AI outputs.
+12. Campaign Storage
+Campaigns should be saved so users can revisit them. Firebase is the planned database and storage foundation.
+STORAGE FLOW
+USER → PRODUCT → CAMPAIGN → STRATEGY / RESEARCH → ASSETS → DASHBOARD → DOWNLOAD
+  Users: account and plan information
+
+
+===== PAGE 6 =====
+LUCE | PRODUCT REQUIREMENTS DOCUMENT
+LUCE — Bring Your Product to Light.    Page 6
+  Products: confirmed product details and source images
+  Campaigns: goals, research summaries, strategy and campaign context
+  Assets: generated images, videos and text outputs
+  Usage: campaign count and plan limits
+13. MVP Publishing Boundary
+MVP RULE
+Users download campaign assets and publish them manually. Automatic Instagram, TikTok or Facebook
+publishing, scheduling and social automation are future features, not MVP requirements.
+14. Functional Requirements
+ ID
+REQUIREMENT
+DESCRIPTION
+FR-01
+Product input
+Accept product URL or manual image upload and basic product details.
+FR-02
+Product understanding
+Extract or infer available product information and clearly identify missing details.
+FR-03
+Product confirmation
+Let user review, edit and confirm product information before generation.
+FR-04
+Smart questions
+Ask targeted questions only when needed; allow recommendations if the user is unsure.
+FR-05
+Research
+Conduct relevant market, competitor and trend research, with clear separation between observed
+information and recommendations.
+FR-06
+Campaign strategy
+Create a structured campaign strategy before generating assets.
+FR-07
+Campaign generation
+Generate selected assets using shared product and campaign context.
+FR-08
+Product fidelity
+Preserve important product identity details as far as generation capabilities allow.
+FR-09
+Results & refinement
+Group results, preview assets and regenerate individual items.
+FR-10
+Agent interaction
+Support conversational campaign refinement for eligible plans.
+FR-11
+Storage
+Save campaigns, product information, research/strategy context and assets.
+FR-12
+Export
+Provide complete campaign download, ideally as an organized ZIP.
+FR-13
+Plan limits
+Enforce Free campaign allowance and Starter entitlements.
+FR-14
+Manual publishing
+Make it clear that publishing is manual in MVP.
+15. Non-Functional Requirements
+  Beginner-friendly experience with clear labels and minimal setup.
+  Show product information for confirmation before generation.
+  Maintain shared campaign context across all assets.
+  Show progress, errors and retry options clearly.
+  Save campaigns persistently and allow users to revisit them.
+  Provide a predictable download/export structure.
+  Handle inaccessible product URLs gracefully and allow manual correction.
+  Treat research as evidence-informed guidance; do not fabricate competitor facts or trend claims.
+  Apply account-level access controls and plan limits to campaign data and generation.
+16. Success Criteria
+  A beginner can create a campaign without technical knowledge.
+
+
+===== PAGE 7 =====
+LUCE | PRODUCT REQUIREMENTS DOCUMENT
+LUCE — Bring Your Product to Light.    Page 7
+  Product information can be reviewed before generation.
+  The user receives a useful campaign strategy and relevant research summary.
+  Generated assets clearly belong to the same product.
+  The product remains recognizable and sufficiently faithful.
+  Users can regenerate individual assets.
+  Starter users can refine campaign direction through the Agent.
+  Users can save and revisit campaigns.
+  Users can download the complete campaign.
+  The workflow is significantly simpler than using multiple separate tools.
+17. End-to-End MVP User Journey
+  Owner opens LUCE.
+  Clicks Create Campaign.
+  Adds a product URL or chooses manual upload.
+  LUCE extracts or organizes product information.
+  Owner reviews and confirms the information.
+  Campaign Agent asks any necessary questions.
+  LUCE researches the market, competitors and relevant trends.
+  LUCE recommends audience or positioning if needed.
+  LUCE creates campaign strategy.
+  Owner clicks Generate Full Campaign.
+  LUCE generates the selected campaign assets.
+  Owner reviews grouped results and strategy.
+  Owner regenerates or refines individual assets where available.
+  Owner clicks Download Campaign.
+  LUCE creates an organized campaign ZIP.
+  Owner posts content manually.
+18. Conceptual Product Architecture
+MVP FLOW
+USER → PRODUCT URL / IMAGE → PRODUCT UNDERSTANDING → PRODUCT CONFIRMATION → LUCE
+CAMPAIGN AGENT → SMART QUESTIONS → MARKET / COMPETITOR / TREND RESEARCH → CAMPAIGN
+STRATEGY → AI CONTENT GENERATION → CAMPAIGN RESULTS → USER REVIEW → REGENERATE /
+DOWNLOAD → FIREBASE DATABASE + STORAGE
+The Campaign Agent is the orchestration layer: it coordinates product understanding, questions, research, strategy and
+generation. Individual AI models/services may support specific tasks behind the scenes, but the user experiences one
+connected workflow.
+
+
+===== PAGE 8 =====
+LUCE | PRODUCT REQUIREMENTS DOCUMENT
+LUCE — Bring Your Product to Light.    Page 8
+19. MVP vs Future Roadmap
+ FEATURE
+MVP
+FUTURE
+Physical product URL/image input
+Included
+Improve coverage
+Product understanding and confirmation
+Included
+Improve accuracy
+Smart questions and recommendations
+Included
+More personalization
+Market / competitor / trend research
+Basic, relevant research
+Deeper research and monitoring
+Campaign strategy
+Included
+More advanced strategy testing
+Images, videos, social copy, ad creative
+Selected campaign outputs
+More formats and variants
+Campaign storage and ZIP download
+Included
+More export options
+Conversational Campaign Agent
+Starter-level refinement
+More advanced agent workflows
+Social publishing and scheduling
+Not included
+Future
+Analytics and campaign optimization
+Not included
+Future
+SaaS / digital product workflows
+Not included
+Future
+Multiple AI providers / marketplace
+Not included as user-facing feature
+Future consideration
+20. Future Phase — Social Platform Integration
+Potential future capabilities include connecting Instagram, TikTok and Facebook accounts, scheduling content, publishing posts
+and managing a content calendar. These features are not part of the MVP.
+FUTURE WORKFLOW
+CAMPAIGN → CONNECT SOCIAL → PLAN CALENDAR → SCHEDULE → PUBLISH → REVIEW PERFORMANCE
+21. Future Phase — SaaS Expansion
+The initial product is focused on physical consumer products. SaaS, digital products and other business categories may be
+evaluated after the physical-product workflow is validated.
+22. Future — Multiple AI Providers
+The internal architecture may use different AI services for research, image generation, video generation or other tasks. A
+user-facing AI provider marketplace is not an MVP requirement.
+LONG-TERM ARCHITECTURE
+One Campaign Agent coordinates specialized capabilities while maintaining shared product and campaign context.
+23. Key Differentiator & Positioning
+LUCE should not position itself as simply another AI image, video or UGC generator. Its central difference is the connected
+workflow: Product → Research → Strategy → Campaign.
+  Research-first workflow: campaign decisions are informed by relevant market and competitor context.
+  Complete campaign: deliver a coordinated set of assets rather than isolated generations.
+  Product fidelity: preserve the real product as the source of truth.
+  Campaign consistency: keep the audience, message and creative direction aligned.
+  One workflow: reduce the need to move between separate tools.
+24. MVP Non-Goals
+  Full social media management.
+
+
+===== PAGE 9 =====
+LUCE | PRODUCT REQUIREMENTS DOCUMENT
+LUCE — Bring Your Product to Light.    Page 9
+  Automatic publishing.
+  Scheduling.
+  Advanced analytics.
+  Campaign optimization and autopilot marketing.
+  SaaS/digital product workflow.
+  AI provider marketplace.
+  Unlimited third-party subscriptions.
+  Advanced multi-platform automation.
+25. Final Product Definition
+ONE SENTENCE
+LUCE turns one real product into a research-backed, complete marketing campaign through one simple
+AI-powered workflow.
+MVP
+FUTURE
+Physical product understanding; relevant research; campaign strategy;
+consistent campaign assets; review, regeneration, storage and
+download.
+Social connections; scheduling; automatic publishing; analytics;
+optimization; autopilot marketing; broader product categories.
+26. Long-Term Vision
+LONG-TERM VISION
+PRODUCT → RESEARCH → STRATEGY → CAMPAIGN → CONNECT SOCIAL PLATFORMS → SCHEDULE →
+PUBLISH → ANALYZE → IMPROVE
+ASSET
+ROSE OUD EXAMPLE
+Product understanding
+Perfume name, scent notes, packaging, price and brand details
+Research and strategy
+Relevant audience, competitor context, positioning and campaign angle
+Product visuals
+Accurate bottle and packaging in professional scenes
+Lifestyle visuals
+Perfume in an appropriate lifestyle context
+UGC / short video
+Creator-style product demonstration or reaction concept
+Marketing video
+Structured product-focused promotional video
+Social content
+Captions, hooks, CTAs and hashtags
+Ad creative
+Campaign-aligned advertising visuals and copy
+ END OF PRD
