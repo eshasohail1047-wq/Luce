@@ -1,14 +1,15 @@
 type LogoProps = {
-  href?: string
+  /** Pass null when the parent already provides the link. */
+  href?: string | null
 }
 
 /**
- * LUCE wordmark — Outfit typeface, lens orb in U,
+ * LUCE wordmark — Outfit (same family as body/headings), lens orb in U,
  * open three-bar E, soft light accents. Transparent.
  */
 export default function Logo({ href = '#top' }: LogoProps) {
-  return (
-    <a className="logo logo-wordmark" href={href} aria-label="LUCE home">
+  const mark = (
+    <>
       <span className="logo-lockup" aria-hidden="true">
         <span className="logo-letters">
           <span className="ch">L</span>
@@ -28,6 +29,20 @@ export default function Logo({ href = '#top' }: LogoProps) {
         </span>
       </span>
       <span className="sr-only">LUCE</span>
+    </>
+  )
+
+  if (href === null) {
+    return (
+      <span className="logo logo-wordmark" aria-label="LUCE">
+        {mark}
+      </span>
+    )
+  }
+
+  return (
+    <a className="logo logo-wordmark" href={href} aria-label="LUCE home">
+      {mark}
     </a>
   )
 }

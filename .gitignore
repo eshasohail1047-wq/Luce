@@ -2,7 +2,16 @@ node_modules
 dist
 .DS_Store
 *.local
+.env
+.env.*
+!.env.example
 prd_extract.txt
 .vercel
 .tsbuildinfo
 *.tsbuildinfo
+
+# Firebase Admin secrets — never commit
+*-firebase-adminsdk-*.json
+**/serviceAccount*.json
+firebase-service-account.json
+.env*

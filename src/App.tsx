@@ -10,6 +10,16 @@ const navLinks = [
   { href: '#faq', label: 'FAQ' },
 ]
 
+/** Send visitors to login, then into the app (not back to the landing hero). */
+function goToApp(path: '/app' | '/app/campaigns/new' = '/app/campaigns/new') {
+  try {
+    sessionStorage.setItem('luce.postLoginPath', path)
+  } catch {
+    /* ignore */
+  }
+  window.location.href = '/login'
+}
+
 const faqs = [
   {
     tag: 'Getting started',
@@ -586,7 +596,14 @@ function HowItWorks() {
         </div>
 
         <div className="hiw-cta">
-          <a className="btn btn-dark btn-pill" href="#cta">
+          <a
+            className="btn btn-dark btn-pill"
+            href="/login"
+            onClick={(e) => {
+              e.preventDefault()
+              goToApp('/app/campaigns/new')
+            }}
+          >
             Create Your Campaign
             <span aria-hidden="true">→</span>
           </a>
@@ -634,10 +651,24 @@ export default function App() {
           </nav>
 
           <div className="nav-actions">
-            <a className="login" href="#login">
+            <a
+              className="login"
+              href="/login"
+              onClick={(e) => {
+                e.preventDefault()
+                goToApp('/app')
+              }}
+            >
               Log in
             </a>
-            <a className="btn btn-grad" href="#cta">
+            <a
+              className="btn btn-grad"
+              href="/login"
+              onClick={(e) => {
+                e.preventDefault()
+                goToApp('/app/campaigns/new')
+              }}
+            >
               Create campaign
               <span aria-hidden="true">→</span>
             </a>
@@ -659,10 +690,25 @@ export default function App() {
               {link.label}
             </a>
           ))}
-          <a href="#login" onClick={() => setMenuOpen(false)}>
+          <a
+            href="/login"
+            onClick={(e) => {
+              e.preventDefault()
+              setMenuOpen(false)
+              goToApp('/app')
+            }}
+          >
             Log in
           </a>
-          <a className="btn btn-dark" href="#cta" onClick={() => setMenuOpen(false)}>
+          <a
+            className="btn btn-dark"
+            href="/login"
+            onClick={(e) => {
+              e.preventDefault()
+              setMenuOpen(false)
+              goToApp('/app/campaigns/new')
+            }}
+          >
             Create Your Campaign
           </a>
         </div>
@@ -720,7 +766,24 @@ export default function App() {
               className="hero-prompt"
               onSubmit={(e) => {
                 e.preventDefault()
-                window.location.hash = '#cta'
+                const form = e.currentTarget
+                const urlInput = form.elements.namedItem('url') as HTMLInputElement | null
+                const productUrl = urlInput?.value?.trim()
+                if (productUrl) {
+                  try {
+                    sessionStorage.setItem('luce.pendingProductUrl', productUrl)
+                  } catch {
+                    /* ignore */
+                  }
+                }
+                if (heroImageName) {
+                  try {
+                    sessionStorage.setItem('luce.pendingProductHint', heroImageName)
+                  } catch {
+                    /* ignore */
+                  }
+                }
+                goToApp('/app/campaigns/new')
               }}
             >
               <div className="hero-prompt-field">
@@ -1006,7 +1069,14 @@ export default function App() {
                   {billing === 'yearly' && plan.monthly > 0 && (
                     <p className="price-note">Billed yearly</p>
                   )}
-                  <a className={`btn ${plan.featured ? 'btn-dark' : 'btn-ghost'}`} href="#cta">
+                  <a
+                    className={`btn ${plan.featured ? 'btn-dark' : 'btn-ghost'}`}
+                    href="/login"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      goToApp('/app/campaigns/new')
+                    }}
+                  >
                     {plan.cta}
                   </a>
                   <ul>
@@ -1037,7 +1107,14 @@ export default function App() {
                 <li>ZIP export · manual publish</li>
               </ul>
 
-              <a className="btn btn-grad btn-pill faq-intro-cta" href="#cta">
+              <a
+                className="btn btn-grad btn-pill faq-intro-cta"
+                href="/login"
+                onClick={(e) => {
+                  e.preventDefault()
+                  goToApp('/app/campaigns/new')
+                }}
+              >
                 Start free
                 <span aria-hidden="true">→</span>
               </a>
@@ -1056,10 +1133,30 @@ export default function App() {
               <p className="cta-kicker">Your product · To light</p>
               <h2 id="cta-title">Ready for a research-backed campaign.</h2>
               <p>Give LUCE one product. Get everything you need to market it.</p>
-              <a className="btn btn-pill cta-banner-btn" href="#top">
-                Create Campaign
-                <span aria-hidden="true">→</span>
-              </a>
+
+              <div className="cta-actions">
+                <a
+                  className="btn btn-pill cta-banner-btn"
+                  href="/login"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    goToApp('/app/campaigns/new')
+                  }}
+                >
+                  Create campaign
+                  <span aria-hidden="true">→</span>
+                </a>
+                <a
+                  className="cta-login-link"
+                  href="/login"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    goToApp('/app')
+                  }}
+                >
+                  Already have an account? Log in
+                </a>
+              </div>
             </div>
           </Reveal>
         </section>
@@ -1074,7 +1171,14 @@ export default function App() {
               <p className="footer-tag">
                 Bring your product to light — research-backed campaigns for Shopify &amp; DTC.
               </p>
-              <a className="btn btn-grad btn-pill footer-cta" href="#cta">
+              <a
+                className="btn btn-grad btn-pill footer-cta"
+                href="/login"
+                onClick={(e) => {
+                  e.preventDefault()
+                  goToApp('/app/campaigns/new')
+                }}
+              >
                 Start free
                 <span aria-hidden="true">→</span>
               </a>
@@ -1093,7 +1197,15 @@ export default function App() {
               <div className="footer-col">
                 <h3>Company</h3>
                 <a href="#audience">Who it’s for</a>
-                <a href="#cta">Early access</a>
+                <a
+                  href="/login"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    goToApp('/app')
+                  }}
+                >
+                  Log in
+                </a>
                 <a href="mailto:hello@luce.ai">Contact</a>
               </div>
 
