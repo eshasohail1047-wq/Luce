@@ -21,7 +21,6 @@
   --shadow-soft: 0 10px 28px rgba(109, 40, 200, 0.08);
   --radius: 16px;
   --radius-lg: 24px;
-  /* One family sitewide — hierarchy via weight, not mixed typefaces */
   --font-display: 'Outfit', system-ui, sans-serif;
   --font-logo: 'Outfit', system-ui, sans-serif;
   --font-body: 'Outfit', system-ui, sans-serif;

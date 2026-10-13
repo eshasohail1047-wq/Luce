@@ -1,6 +1,8 @@
 import {
   addDoc,
   collection,
+  doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
@@ -336,4 +338,39 @@ export async function listUserCampaigns(userId: string): Promise<CampaignDoc[]> 
     const bTime = b.updatedAt?.toMillis?.() ?? 0
     return bTime - aTime
   })
+}
+
+export type ProductSummary = {
+  id: string
+  name: string
+  category: string
+  imageUrl?: string
+}
+
+/** Loads real product records — no placeholder images. */
+export async function getProductsByIds(ids: string[]): Promise<Map<string, ProductSummary>> {
+  const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))]
+  const map = new Map<string, ProductSummary>()
+
+  await Promise.all(
+    unique.map(async (id) => {
+      try {
+        const snap = await getDoc(doc(requireDb(), 'products', id))
+        if (!snap.exists()) return
+        const data = snap.data()
+        const urls = Array.isArray(data.imageUrls) ? data.imageUrls : []
+        const firstUrl = typeof urls[0] === 'string' ? urls[0] : undefined
+        map.set(id, {
+          id,
+          name: String(data.name ?? 'Product'),
+          category: String(data.category ?? '').trim(),
+          imageUrl: firstUrl,
+        })
+      } catch (err) {
+        console.error('[campaigns] product load failed', id, err)
+      }
+    }),
+  )
+
+  return map
 }
