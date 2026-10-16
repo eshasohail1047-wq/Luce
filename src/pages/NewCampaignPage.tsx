@@ -1,15 +1,24 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import CreativeDirectionFields from '../components/CreativeDirectionFields'
 import { useAuth } from '../auth/AuthProvider'
 import { createCampaignWithProduct, type ProductSourceType } from '../lib/campaigns'
+import { canAccessFullCampaign } from '../lib/planAccess'
+import UpgradeGate from '../components/UpgradeGate'
+import type {
+  BackgroundId,
+  LightingId,
+  MoodId,
+  StyleThemeId,
+} from '../lib/creativeDirection'
 import {
   CAMPAIGN_DELIVERABLES,
   type DeliverableId,
 } from '../lib/deliverables'
 
 export default function NewCampaignPage() {
-  const { user, loading } = useAuth()
+  const { user, plan, loading } = useAuth()
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -25,6 +34,11 @@ export default function NewCampaignPage() {
   const [dragOver, setDragOver] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
   const [selectedDeliverables, setSelectedDeliverables] = useState<DeliverableId[]>([])
+  const [prompt, setPrompt] = useState('')
+  const [lighting, setLighting] = useState<LightingId | ''>('')
+  const [background, setBackground] = useState<BackgroundId | ''>('')
+  const [mood, setMood] = useState<MoodId | ''>('')
+  const [styleTheme, setStyleTheme] = useState<StyleThemeId | ''>('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
@@ -40,7 +54,9 @@ export default function NewCampaignPage() {
   }, [imageFile])
 
   useEffect(() => {
+    // Try-free flow lands in Image Studio; only hydrate here if something is left over.
     try {
+      if (sessionStorage.getItem('luce.tryFreeImages') === '1') return
       const pendingUrl = sessionStorage.getItem('luce.pendingProductUrl')
       if (pendingUrl) {
         setSourceType('url')
@@ -64,6 +80,14 @@ export default function NewCampaignPage() {
 
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (!canAccessFullCampaign(plan)) {
+    return (
+      <AppLayout>
+        <UpgradeGate title="Full Campaign" feature="Research-backed campaign packs" />
+      </AppLayout>
+    )
   }
 
   function pickFile(file: File | null | undefined) {
@@ -115,6 +139,13 @@ export default function NewCampaignPage() {
         category: category.trim() || undefined,
         imageFile: sourceType === 'upload' ? imageFile : null,
         deliverables: selectedDeliverables,
+        creativeDirection: {
+          prompt,
+          lighting: lighting || undefined,
+          background: background || undefined,
+          mood: mood || undefined,
+          styleTheme: styleTheme || undefined,
+        },
       })
       if (result.storageWarning) setWarning(result.storageWarning)
       navigate(`/app/campaigns/${result.campaignId}`, { replace: true })
@@ -131,20 +162,27 @@ export default function NewCampaignPage() {
   return (
     <AppLayout>
       <main className="app-main campaign-create studio-page">
-        <header className="create-banner tone-campaign">
-          <div className="create-banner-copy">
-            <p className="dash-kicker">Campaign</p>
-            <h1>New campaign</h1>
-            <p className="app-lead">
-              Add a product photo or URL. Leave options blank for a full pack.
+        <header className="studio-hero tone-campaign">
+          <div className="studio-hero-copy">
+            <p className="studio-hero-kicker">Full Campaign</p>
+            <h1>Build a complete campaign pack</h1>
+            <p className="studio-hero-lead">
+              Start from a product photo or URL. LUCE creates research-backed images, video, and ads
+              that stay true to your packaging.
             </p>
+            <ol className="studio-hero-steps" aria-label="How it works">
+              <li>Add product</li>
+              <li>Choose deliverables</li>
+              <li>Generate pack</li>
+            </ol>
           </div>
-          <div className="create-banner-media" aria-hidden="true">
-            <img src="/images/campaign-perfume-studio.jpg" alt="" />
+          <div className="studio-hero-media" aria-hidden="true">
+            <img src="/images/campaign-beauty-flatlay.jpg" alt="" />
+            <div className="studio-hero-glow" />
           </div>
         </header>
 
-        <form className="app-form campaign-form create-panel" onSubmit={onSubmit}>
+        <form className="app-form campaign-form create-panel studio-panel" onSubmit={onSubmit}>
           <section className="form-section">
             <div className="form-section-head">
               <h2>Product</h2>
@@ -326,6 +364,21 @@ export default function NewCampaignPage() {
               </div>
             )}
           </section>
+
+          <CreativeDirectionFields
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            lighting={lighting}
+            onLightingChange={setLighting}
+            background={background}
+            onBackgroundChange={setBackground}
+            mood={mood}
+            onMoodChange={setMood}
+            styleTheme={styleTheme}
+            onStyleThemeChange={setStyleTheme}
+            disabled={busy}
+            promptPlaceholder="e.g. Luxury perfume campaign — soft lavender light, keep bottle exact, quiet premium mood…"
+          />
 
           <section className="form-section">
             <div className="form-section-head">

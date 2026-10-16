@@ -1,27 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import Logo from '../Logo'
 import { useAuth } from '../auth/AuthProvider'
+import { resolvePostLoginPath } from '../lib/postLogin'
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'forgot-sent' | 'forgot-google'
 
 const REMEMBER_KEY = 'luce.auth.rememberEmail'
-
-function postLoginPath() {
-  try {
-    const next = sessionStorage.getItem('luce.postLoginPath')
-    if (next === '/app/campaigns/new' || next === '/app') {
-      sessionStorage.removeItem('luce.postLoginPath')
-      return next
-    }
-    if (sessionStorage.getItem('luce.pendingProductUrl')) {
-      return '/app/campaigns/new'
-    }
-  } catch {
-    /* ignore */
-  }
-  return '/app'
-}
 
 function GoogleMark() {
   return (
@@ -90,9 +75,15 @@ export default function LoginPage() {
     clearError,
   } = useAuth()
   const navigate = useNavigate()
+  const destRef = useRef<string | null>(null)
   const [mode, setMode] = useState<AuthMode>('signin')
   const [busy, setBusy] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
+
+  function destination() {
+    if (!destRef.current) destRef.current = resolvePostLoginPath()
+    return destRef.current
+  }
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -115,7 +106,7 @@ export default function LoginPage() {
   }, [])
 
   if (!loading && user) {
-    return <Navigate to={postLoginPath()} replace />
+    return <Navigate to={destination()} replace />
   }
 
   function switchMode(next: AuthMode) {
@@ -133,7 +124,7 @@ export default function LoginPage() {
     clearError()
     try {
       await signInWithGoogle()
-      navigate(postLoginPath(), { replace: true })
+      navigate(destination(), { replace: true })
     } catch (err) {
       console.error('[login] google failed', err)
       setLocalError(
@@ -224,7 +215,7 @@ export default function LoginPage() {
           /* ignore */
         }
       }
-      navigate(postLoginPath(), { replace: true })
+      navigate(destination(), { replace: true })
     } catch (err) {
       console.error('[login] email auth failed', err)
       setLocalError(

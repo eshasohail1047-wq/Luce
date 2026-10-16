@@ -12,21 +12,21 @@ import {
   type DeliverableId,
   type StudioKind,
 } from '../lib/deliverables'
+import { statusLabel, studioPathFor } from '../lib/workspaceUi'
 
 type CampaignView = {
   title: string
   status: string
   productName: string
+  productId: string
   productUrl?: string
   mode: 'campaign' | 'studio'
   studioKind?: StudioKind
   deliverables: DeliverableId[]
   selectedAssets: string[]
   includeStrategy: boolean
-}
-
-function statusLabel(status: string) {
-  return status.replaceAll('_', ' ')
+  tryFree: boolean
+  imageUrl?: string
 }
 
 function assetLabel(id: string) {
@@ -37,6 +37,20 @@ function assetLabel(id: string) {
   const ad = AD_STYLES.find((s) => s.id === id)
   if (ad) return ad.label
   return id.replaceAll('_', ' ')
+}
+
+const STEPS = [
+  { id: 'product', label: 'Product' },
+  { id: 'generate', label: 'Generate' },
+  { id: 'review', label: 'Review' },
+  { id: 'export', label: 'Export' },
+] as const
+
+function activeStep(status: string) {
+  if (status === 'exported') return 3
+  if (status === 'ready') return 2
+  if (status === 'generating' || status === 'researching' || status === 'strategy_ready') return 1
+  return 0
 }
 
 export default function CampaignDetailPage() {
@@ -62,11 +76,29 @@ export default function CampaignDetailPage() {
           if (!cancelled) setError('You do not have access to this campaign.')
           return
         }
+
+        let imageUrl: string | undefined
+        const productId = String(data.productId ?? '')
+        if (productId) {
+          try {
+            const productSnap = await getDoc(doc(requireDb(), 'products', productId))
+            if (productSnap.exists()) {
+              const urls = Array.isArray(productSnap.data().imageUrls)
+                ? productSnap.data().imageUrls
+                : []
+              if (typeof urls[0] === 'string') imageUrl = urls[0]
+            }
+          } catch {
+            /* optional */
+          }
+        }
+
         if (!cancelled) {
           setCampaign({
             title: String(data.title ?? 'Campaign'),
             status: String(data.status ?? 'draft'),
             productName: String(data.productName ?? 'Product'),
+            productId,
             productUrl: data.productUrl ? String(data.productUrl) : undefined,
             mode: data.mode === 'studio' ? 'studio' : 'campaign',
             studioKind: data.studioKind as StudioKind | undefined,
@@ -77,6 +109,8 @@ export default function CampaignDetailPage() {
               ? data.selectedAssets.map(String)
               : [],
             includeStrategy: Boolean(data.includeStrategy),
+            tryFree: Boolean(data.tryFree),
+            imageUrl,
           })
         }
       } catch (err) {
@@ -118,20 +152,26 @@ export default function CampaignDetailPage() {
     return []
   })()
 
-  const cover =
-    campaign?.mode === 'studio'
-      ? campaign.studioKind === 'photos'
-        ? '/images/moisturizer-studio.jpg'
-        : campaign.studioKind === 'videos'
-          ? '/images/output-ugc.jpg'
-          : '/images/output-ads.jpg'
-      : '/images/campaign-perfume-studio.jpg'
+  const step = campaign ? activeStep(campaign.status) : 0
+  const createMorePath = campaign
+    ? studioPathFor({ mode: campaign.mode, studioKind: campaign.studioKind })
+    : '/app/studio/photos'
+  const readyToGenerate =
+    campaign &&
+    (campaign.status === 'product_confirmed' ||
+      campaign.status === 'draft' ||
+      campaign.status === 'product_pending')
 
   return (
     <AppLayout>
-      <main className="app-main campaign-create studio-page">
+      <main className="app-main campaign-create studio-page campaign-detail">
         {error || !campaign ? (
-          <p className="auth-error">{error || 'Something went wrong.'}</p>
+          <div className="dash-empty">
+            <p className="auth-error">{error || 'Something went wrong.'}</p>
+            <Link className="dash-create-btn dash-create-btn-sm" to="/app/campaigns">
+              Back to campaigns
+            </Link>
+          </div>
         ) : (
           <>
             <header
@@ -140,6 +180,7 @@ export default function CampaignDetailPage() {
               <div className="create-banner-copy">
                 <p className="dash-kicker">
                   {campaign.mode === 'studio' ? 'Studio project' : 'Campaign'}
+                  {campaign.tryFree ? ' · Free trial' : ''}
                 </p>
                 <div className="dash-card-top" style={{ marginBottom: 8 }}>
                   <span className={`dash-status status-${campaign.status}`}>
@@ -150,54 +191,109 @@ export default function CampaignDetailPage() {
                 <p className="app-lead">{campaign.productName}</p>
               </div>
               <div className="create-banner-media" aria-hidden="true">
-                <img src={cover} alt="" />
+                {campaign.imageUrl ? (
+                  <img src={campaign.imageUrl} alt="" />
+                ) : (
+                  <img
+                    src={
+                      campaign.mode === 'studio'
+                        ? campaign.studioKind === 'photos'
+                          ? '/images/moisturizer-studio.jpg'
+                          : campaign.studioKind === 'videos'
+                            ? '/images/output-ugc.jpg'
+                            : '/images/output-ads.jpg'
+                        : '/images/campaign-perfume-studio.jpg'
+                    }
+                    alt=""
+                  />
+                )}
               </div>
             </header>
 
-            <div className="app-panel create-panel">
-              <h2>Product</h2>
-              <p>
-                <strong>{campaign.productName}</strong>
-              </p>
-              {campaign.productUrl ? (
-                <p>
-                  <a href={campaign.productUrl} target="_blank" rel="noreferrer">
-                    View product page
-                  </a>
-                </p>
-              ) : null}
+            <ol className="campaign-progress" aria-label="Project progress">
+              {STEPS.map((s, i) => (
+                <li
+                  key={s.id}
+                  className={
+                    i < step ? 'is-done' : i === step ? 'is-current' : undefined
+                  }
+                >
+                  <span className="campaign-progress-index">{i + 1}</span>
+                  <span>{s.label}</span>
+                </li>
+              ))}
+            </ol>
+
+            <div className="campaign-detail-grid">
+              <div className="app-panel create-panel">
+                <h2>Product</h2>
+                <div className="campaign-product-row">
+                  {campaign.imageUrl ? (
+                    <img className="campaign-product-thumb" src={campaign.imageUrl} alt="" />
+                  ) : (
+                    <span className="campaign-product-thumb dash-thumb-fallback" aria-hidden="true">
+                      {campaign.productName.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                  <div>
+                    <p>
+                      <strong>{campaign.productName}</strong>
+                    </p>
+                    {campaign.productUrl ? (
+                      <p>
+                        <a href={campaign.productUrl} target="_blank" rel="noreferrer">
+                          View product page
+                        </a>
+                      </p>
+                    ) : (
+                      <p className="dash-muted">Uploaded product photo</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="app-panel create-panel">
+                <h2>Included</h2>
+                {packLabels.length > 0 ? (
+                  <ul className="detail-pack-list">
+                    {packLabels.map((label) => (
+                      <li key={label}>{label}</li>
+                    ))}
+                    {campaign.mode === 'campaign' &&
+                      campaign.includeStrategy &&
+                      !campaign.deliverables.includes('strategy') && <li>Strategy & research</li>}
+                  </ul>
+                ) : (
+                  <p>Full default pack</p>
+                )}
+              </div>
             </div>
 
-            <div className="app-panel create-panel">
-              <h2>Included</h2>
-              {packLabels.length > 0 ? (
-                <ul className="detail-pack-list">
-                  {packLabels.map((label) => (
-                    <li key={label}>{label}</li>
-                  ))}
-                  {campaign.mode === 'campaign' &&
-                    campaign.includeStrategy &&
-                    !campaign.deliverables.includes('strategy') && <li>Strategy & research</li>}
-                </ul>
-              ) : (
-                <p>Full default pack</p>
-              )}
-            </div>
-
-            <div className="app-panel create-panel">
-              <h2>Next</h2>
+            <div className="app-panel create-panel campaign-next-panel">
+              <h2>{readyToGenerate ? 'Ready to generate' : 'Next'}</h2>
               <p>
-                {campaign.mode === 'studio'
-                  ? 'Generation for this studio project comes next.'
-                  : 'Research, strategy, and creative generation come next.'}
+                {readyToGenerate
+                  ? campaign.tryFree && campaign.studioKind === 'photos'
+                    ? 'Your free image pack is queued. Generation hooks in next — product fidelity stays locked.'
+                    : campaign.mode === 'studio'
+                      ? 'Product is confirmed. Generation for this studio project hooks in next.'
+                      : 'Product is confirmed. Research, strategy, and creative generation hook in next.'
+                  : campaign.status === 'generating'
+                    ? 'Assets are generating. This page will show results when the pipeline is connected.'
+                    : campaign.status === 'ready' || campaign.status === 'exported'
+                      ? 'This project is complete. Open Library for finished packs once exports land.'
+                      : 'Continue from Studio or start another project.'}
               </p>
               <div className="detail-actions">
-                <Link className="btn btn-grad" to="/app/campaigns/new">
-                  New campaign
+                <Link className="btn btn-grad" to={createMorePath}>
+                  {campaign.mode === 'studio' ? 'Create another' : 'New campaign'}
                   <span aria-hidden="true">→</span>
                 </Link>
+                <Link className="btn btn-ghost" to="/app/campaigns">
+                  All campaigns
+                </Link>
                 <Link className="btn btn-ghost" to="/app">
-                  Studio
+                  Dashboard
                 </Link>
               </div>
             </div>

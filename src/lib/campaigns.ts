@@ -13,6 +13,10 @@ import {
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
 import { requireDb, requireStorage } from './firebase'
 import {
+  sanitizeCreativeDirection,
+  type CreativeDirection,
+} from './creativeDirection'
+import {
   resolveAdStyles,
   resolveDeliverables,
   resolvePhotoStyles,
@@ -48,10 +52,13 @@ export type CampaignDoc = {
   status: CampaignStatus
   productName: string
   productUrl?: string
+  sourceType?: ProductSourceType
   mode?: CampaignMode
   studioKind?: StudioKind
   deliverables?: DeliverableId[]
   selectedAssets?: AssetType[]
+  creativeDirection?: CreativeDirection
+  tryFree?: boolean
   createdAt?: Timestamp
   updatedAt?: Timestamp
 }
@@ -68,18 +75,24 @@ export type CreateCampaignInput = {
   imageFile?: File | null
   /** Empty / omitted = full default pack */
   deliverables?: DeliverableId[]
+  creativeDirection?: CreativeDirection
 }
 
 export type CreateStudioInput = {
   userId: string
   kind: StudioKind
+  sourceType?: ProductSourceType
+  productUrl?: string
   productName?: string
   description?: string
   brand?: string
-  imageFile: File
+  imageFile?: File | null
   photoStyles?: PhotoStyleId[]
   videoStyles?: VideoStyleId[]
   adStyles?: AdStyleId[]
+  creativeDirection?: CreativeDirection
+  /** Landing “Try free” path — first image pack on free plan */
+  tryFree?: boolean
 }
 
 function guessNameFromUrl(url: string) {
@@ -225,6 +238,8 @@ export async function createCampaignWithProduct(input: CreateCampaignInput) {
     imageFile: sourceType === 'upload' ? input.imageFile : null,
   })
 
+  const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})
+
   const campaignRef = await addDoc(collection(requireDb(), 'campaigns'), {
     userId: input.userId,
     productId: productRef.id,
@@ -238,6 +253,7 @@ export async function createCampaignWithProduct(input: CreateCampaignInput) {
     selectedAssets: resolved.selectedAssets,
     includeStrategy: resolved.includeStrategy,
     progressStep: 'product_confirmed',
+    ...(creativeDirection ? { creativeDirection } : {}),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
@@ -252,10 +268,31 @@ export async function createCampaignWithProduct(input: CreateCampaignInput) {
 }
 
 export async function createStudioProject(input: CreateStudioInput) {
-  assertImageFile(input.imageFile, true)
+  const sourceType: ProductSourceType =
+    input.sourceType === 'url' || (input.productUrl?.trim() && !input.imageFile)
+      ? 'url'
+      : 'upload'
+  const productUrl = input.productUrl?.trim() || ''
+
+  if (sourceType === 'url') {
+    if (!productUrl) throw new Error('Add a product URL to continue.')
+    try {
+      const parsed = new URL(productUrl)
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error('invalid')
+      }
+    } catch {
+      throw new Error('Enter a valid product URL (including https://).')
+    }
+  } else {
+    assertImageFile(input.imageFile, true)
+  }
 
   const displayName =
-    input.productName?.trim() || guessNameFromFile(input.imageFile)
+    input.productName?.trim() ||
+    (sourceType === 'upload' && input.imageFile
+      ? guessNameFromFile(input.imageFile)
+      : guessNameFromUrl(productUrl))
 
   let selectedAssets: AssetType[]
   let titleSuffix: string
@@ -273,27 +310,31 @@ export async function createStudioProject(input: CreateStudioInput) {
 
   const { productRef, imagePaths, imageUrls, storageWarning } = await createProductRecord({
     userId: input.userId,
-    sourceType: 'upload',
-    productUrl: '',
+    sourceType,
+    productUrl,
     displayName,
     description: input.description,
     brand: input.brand,
-    imageFile: input.imageFile,
+    imageFile: sourceType === 'upload' ? input.imageFile : null,
   })
+
+  const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})
 
   const campaignRef = await addDoc(collection(requireDb(), 'campaigns'), {
     userId: input.userId,
     productId: productRef.id,
     title: `${displayName} — ${titleSuffix}`,
     productName: displayName,
-    productUrl: '',
-    sourceType: 'upload',
+    productUrl: productUrl || '',
+    sourceType,
     mode: 'studio' satisfies CampaignMode,
     studioKind: input.kind,
     status: 'product_confirmed' satisfies CampaignStatus,
     selectedAssets,
     includeStrategy: false,
     progressStep: 'product_confirmed',
+    ...(input.tryFree ? { tryFree: true } : {}),
+    ...(creativeDirection ? { creativeDirection } : {}),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
@@ -320,6 +361,10 @@ export async function listUserCampaigns(userId: string): Promise<CampaignDoc[]> 
       status: (data.status as CampaignStatus) || 'draft',
       productName: String(data.productName ?? 'Product'),
       productUrl: data.productUrl ? String(data.productUrl) : undefined,
+      sourceType:
+        data.sourceType === 'url' || data.sourceType === 'upload'
+          ? (data.sourceType as ProductSourceType)
+          : undefined,
       mode: (data.mode as CampaignMode) || 'campaign',
       studioKind: data.studioKind as StudioKind | undefined,
       deliverables: Array.isArray(data.deliverables)
@@ -328,6 +373,10 @@ export async function listUserCampaigns(userId: string): Promise<CampaignDoc[]> 
       selectedAssets: Array.isArray(data.selectedAssets)
         ? (data.selectedAssets as AssetType[])
         : undefined,
+      creativeDirection: data.creativeDirection
+        ? sanitizeCreativeDirection(data.creativeDirection as CreativeDirection)
+        : undefined,
+      tryFree: Boolean(data.tryFree),
       createdAt: data.createdAt as CampaignDoc['createdAt'],
       updatedAt: data.updatedAt as CampaignDoc['updatedAt'],
     }
@@ -344,7 +393,46 @@ export type ProductSummary = {
   id: string
   name: string
   category: string
+  brand?: string
+  sourceType?: ProductSourceType
+  sourceUrl?: string
   imageUrl?: string
+  campaignCount?: number
+  updatedAt?: Timestamp
+}
+
+export async function listUserProducts(userId: string): Promise<ProductSummary[]> {
+  const q = query(collection(requireDb(), 'products'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  const campaigns = await listUserCampaigns(userId)
+  const countByProduct = new Map<string, number>()
+  for (const c of campaigns) {
+    if (!c.productId) continue
+    countByProduct.set(c.productId, (countByProduct.get(c.productId) ?? 0) + 1)
+  }
+
+  const rows: ProductSummary[] = snap.docs.map((d) => {
+    const data = d.data()
+    const urls = Array.isArray(data.imageUrls) ? data.imageUrls : []
+    const firstUrl = typeof urls[0] === 'string' ? urls[0] : undefined
+    return {
+      id: d.id,
+      name: String(data.name ?? 'Product'),
+      category: String(data.category ?? '').trim(),
+      brand: String(data.brand ?? '').trim() || undefined,
+      sourceType: data.sourceType === 'url' ? 'url' : 'upload',
+      sourceUrl: data.sourceUrl ? String(data.sourceUrl) : undefined,
+      imageUrl: firstUrl,
+      campaignCount: countByProduct.get(d.id) ?? 0,
+      updatedAt: data.updatedAt as Timestamp | undefined,
+    }
+  })
+
+  return rows.sort((a, b) => {
+    const aTime = a.updatedAt?.toMillis?.() ?? 0
+    const bTime = b.updatedAt?.toMillis?.() ?? 0
+    return bTime - aTime
+  })
 }
 
 /** Loads real product records — no placeholder images. */

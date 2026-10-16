@@ -27,9 +27,23 @@ import {
   requireDb,
 } from '../lib/firebase'
 import { requestPasswordReset } from '../lib/resetPassword'
+import {
+  DEFAULT_WORKSPACE,
+  loadUserSettings,
+  saveDisplayName,
+  saveUserPlan,
+  saveWorkspaceSettings,
+  type UserPlan,
+  type WorkspaceSettings,
+} from '../lib/userSettings'
+import { resetPostLoginCache } from '../lib/postLogin'
+
+export type { UserPlan } from '../lib/userSettings'
 
 type AuthContextValue = {
   user: User | null
+  plan: UserPlan
+  workspace: WorkspaceSettings
   loading: boolean
   error: string | null
   signInWithGoogle: () => Promise<void>
@@ -43,8 +57,15 @@ type AuthContextValue = {
   resetPassword: (
     email: string,
   ) => Promise<{ sent: boolean; googleOnly: boolean; reason?: string }>
+  updateDisplayName: (name: string) => Promise<void>
+  updatePlan: (plan: UserPlan) => Promise<void>
+  updateWorkspace: (workspace: Partial<WorkspaceSettings>) => Promise<void>
   signOut: () => Promise<void>
   clearError: () => void
+}
+
+function normalizePlan(value: unknown): UserPlan {
+  return value === 'pro' ? 'pro' : 'free'
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -124,7 +145,7 @@ function detectProvider(user: User): 'google' | 'password' {
   return 'password'
 }
 
-async function ensureUserDocument(user: User) {
+async function ensureUserDocument(user: User): Promise<UserPlan> {
   const ref = doc(requireDb(), 'users', user.uid)
   const snap = await getDoc(ref)
   if (snap.exists()) {
@@ -138,7 +159,7 @@ async function ensureUserDocument(user: User) {
       },
       { merge: true },
     )
-    return
+    return normalizePlan(snap.data()?.plan)
   }
 
   await setDoc(ref, {
@@ -150,6 +171,7 @@ async function ensureUserDocument(user: User) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
+  return 'free'
 }
 
 async function syncProfile(user: User) {
@@ -176,6 +198,8 @@ async function syncProfile(user: User) {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [plan, setPlan] = useState<UserPlan>('free')
+  const [workspace, setWorkspace] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -227,10 +251,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(safety)
       if (next) {
         try {
-          await ensureUserDocument(next)
+          const nextPlan = await ensureUserDocument(next)
+          const settings = await loadUserSettings(next.uid)
+          if (active) {
+            setPlan(settings.plan || nextPlan)
+            setWorkspace(settings.workspace)
+          }
         } catch (err) {
           console.error('[auth] failed to sync user doc', err)
+          if (active) {
+            setPlan('free')
+            setWorkspace(DEFAULT_WORKSPACE)
+          }
         }
+      } else if (active) {
+        setPlan('free')
+        setWorkspace(DEFAULT_WORKSPACE)
       }
     })
 
@@ -244,9 +280,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      plan,
+      workspace,
       loading,
       error,
       clearError: () => setError(null),
+      async updateDisplayName(name) {
+        if (!user) throw new Error('Not signed in.')
+        await saveDisplayName(user, name)
+        setUser(requireAuth().currentUser)
+      },
+      async updatePlan(nextPlan) {
+        if (!user) throw new Error('Not signed in.')
+        await saveUserPlan(user.uid, nextPlan)
+        setPlan(nextPlan)
+      },
+      async updateWorkspace(next) {
+        if (!user) throw new Error('Not signed in.')
+        await saveWorkspaceSettings(user.uid, next)
+        setWorkspace((prev) => ({ ...prev, ...next }))
+      },
       async signInWithGoogle() {
         setError(null)
         const auth = requireAuth()
@@ -397,10 +450,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signOut() {
         setError(null)
+        resetPostLoginCache()
         await firebaseSignOut(requireAuth())
       },
     }),
-    [user, loading, error],
+    [user, plan, workspace, loading, error],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

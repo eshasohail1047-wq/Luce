@@ -5,8 +5,11 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import NewCampaignPage from './pages/NewCampaignPage'
 import CampaignDetailPage from './pages/CampaignDetailPage'
+import CampaignsPage from './pages/CampaignsPage'
+import ProductsPage from './pages/ProductsPage'
+import LibraryPage from './pages/LibraryPage'
 import StudioPage from './pages/StudioPage'
-import WorkspaceStubPage from './pages/WorkspaceStubPage'
+import SettingsPage from './pages/SettingsPage'
 
 export default function AppRouter() {
   return (
@@ -16,12 +19,12 @@ export default function AppRouter() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/app" element={<DashboardPage />} />
-          <Route path="/app/products" element={<WorkspaceStubPage />} />
-          <Route path="/app/library" element={<WorkspaceStubPage />} />
-          <Route path="/app/settings" element={<WorkspaceStubPage />} />
+          <Route path="/app/products" element={<ProductsPage />} />
+          <Route path="/app/library" element={<LibraryPage />} />
+          <Route path="/app/settings" element={<SettingsPage />} />
           <Route path="/app/campaigns/new" element={<NewCampaignPage />} />
           <Route path="/app/campaigns/:campaignId" element={<CampaignDetailPage />} />
-          <Route path="/app/campaigns" element={<WorkspaceStubPage />} />
+          <Route path="/app/campaigns" element={<CampaignsPage />} />
           <Route path="/app/studio/:kind" element={<StudioPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import Logo from './Logo'
 import UgcReel from './UgcReel'
+import { stashPendingProduct } from './lib/pendingProduct'
+import { setPostLoginPath, type PostLoginPath } from './lib/postLogin'
 import './App.css'
+
+function markTryFree() {
+  try {
+    sessionStorage.setItem('luce.tryFreeImages', '1')
+  } catch {
+    /* ignore */
+  }
+}
 
 const navLinks = [
   { href: '#how-it-works', label: 'How it works' },
@@ -11,12 +21,8 @@ const navLinks = [
 ]
 
 /** Send visitors to login, then into the app (not back to the landing hero). */
-function goToApp(path: '/app' | '/app/campaigns/new' = '/app/campaigns/new') {
-  try {
-    sessionStorage.setItem('luce.postLoginPath', path)
-  } catch {
-    /* ignore */
-  }
+function goToApp(path: PostLoginPath = '/app/studio/photos') {
+  setPostLoginPath(path)
   window.location.href = '/login'
 }
 
@@ -255,13 +261,13 @@ const pricingPlans = [
     tagline: 'Explore the workflow',
     monthly: 0,
     yearly: 0,
-    cta: 'Start free',
+    cta: 'Try free images',
     featured: false,
     perks: [
-      '1 product campaign',
+      'Free product image studio',
       '3 studio product photos',
-      '1 UGC-style clip',
-      'Basic social captions',
+      'Packaging-true stills',
+      'Basic creative direction',
       'Watermarked exports',
     ],
   },
@@ -768,22 +774,22 @@ export default function App() {
                 e.preventDefault()
                 const form = e.currentTarget
                 const urlInput = form.elements.namedItem('url') as HTMLInputElement | null
-                const productUrl = urlInput?.value?.trim()
-                if (productUrl) {
-                  try {
-                    sessionStorage.setItem('luce.pendingProductUrl', productUrl)
-                  } catch {
-                    /* ignore */
-                  }
-                }
-                if (heroImageName) {
-                  try {
-                    sessionStorage.setItem('luce.pendingProductHint', heroImageName)
-                  } catch {
-                    /* ignore */
-                  }
-                }
-                goToApp('/app/campaigns/new')
+                const productUrl =
+                  heroInput === 'url' ? urlInput?.value?.trim() || '' : ''
+                const named = form.elements.namedItem('image') as HTMLInputElement | null
+                const attach = document.getElementById(
+                  'hero-image-attach',
+                ) as HTMLInputElement | null
+                const file = named?.files?.[0] || attach?.files?.[0] || null
+                void (async () => {
+                  await stashPendingProduct({
+                    url: productUrl || undefined,
+                    file,
+                    hint: heroImageName || undefined,
+                    tryFree: true,
+                  })
+                  goToApp('/app/studio/photos')
+                })()
               }}
             >
               <div className="hero-prompt-field">
@@ -869,7 +875,7 @@ export default function App() {
                 </button>
               </div>
             </form>
-            <p className="hero-free-note">First campaign free — no card required</p>
+            <p className="hero-free-note">First product images free — no card required</p>
           </div>
         </section>
 
@@ -1074,7 +1080,10 @@ export default function App() {
                     href="/login"
                     onClick={(e) => {
                       e.preventDefault()
-                      goToApp('/app/campaigns/new')
+                      if (plan.monthly === 0) markTryFree()
+                      goToApp(
+                        plan.monthly === 0 ? '/app/studio/photos' : '/app/campaigns/new',
+                      )
                     }}
                   >
                     {plan.cta}
@@ -1112,10 +1121,11 @@ export default function App() {
                 href="/login"
                 onClick={(e) => {
                   e.preventDefault()
-                  goToApp('/app/campaigns/new')
+                  markTryFree()
+                  goToApp('/app/studio/photos')
                 }}
               >
-                Start free
+                Try free images
                 <span aria-hidden="true">→</span>
               </a>
             </Reveal>
@@ -1176,10 +1186,11 @@ export default function App() {
                 href="/login"
                 onClick={(e) => {
                   e.preventDefault()
-                  goToApp('/app/campaigns/new')
+                  markTryFree()
+                  goToApp('/app/studio/photos')
                 }}
               >
-                Start free
+                Try free images
                 <span aria-hidden="true">→</span>
               </a>
             </div>
