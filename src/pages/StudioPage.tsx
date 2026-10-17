@@ -14,13 +14,34 @@ import {
   AD_STYLES,
   PHOTO_STYLES,
   VIDEO_STYLES,
+  resolveAdStyles,
+  resolvePhotoStyles,
+  resolveVideoStyles,
   type AdStyleId,
   type PhotoStyleId,
   type StudioKind,
   type VideoStyleId,
 } from '../lib/deliverables'
+import { updateCampaignStatus } from '../lib/campaigns'
+import {
+  fileToDataUrl,
+  isLocalCampaignId,
+  newLocalId,
+  saveLocalCampaign,
+  stashCampaignImage,
+  stashCampaignOutputs,
+  updateLocalCampaign,
+  withTimeout,
+} from '../lib/localDemoCampaign'
+import { recreateMockOutput, type MockOutput } from '../lib/mockCampaign'
 import { consumePendingProduct } from '../lib/pendingProduct'
 import { canAccessStudio } from '../lib/planAccess'
+import {
+  clearRecreateSession,
+  dataUrlToFile,
+  loadRecreateSession,
+  type RecreateSession,
+} from '../lib/recreateSession'
 import UpgradeGate from '../components/UpgradeGate'
 
 const VALID_KINDS: StudioKind[] = ['photos', 'videos', 'ads']
@@ -58,6 +79,8 @@ export default function StudioPage() {
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [tryFree, setTryFree] = useState(false)
+  const [recreate, setRecreate] = useState<RecreateSession | null>(null)
+  const isRecreate = Boolean(recreate) || searchParams.get('recreate') === '1'
 
   useEffect(() => {
     if (!imageFile) {
@@ -73,6 +96,43 @@ export default function StudioPage() {
     if (!user) return
     let cancelled = false
     void (async () => {
+      const session = loadRecreateSession()
+      if (
+        session &&
+        searchParams.get('recreate') === '1' &&
+        (!kind || session.studioKind === kind)
+      ) {
+        if (cancelled) return
+        setRecreate(session)
+        setProductName(session.productName)
+        setShowDetails(true)
+        if (session.productUrl) {
+          setSourceType('url')
+          setProductUrl(session.productUrl)
+        }
+        if (session.imageUrl) {
+          setSourceType('upload')
+          setPreviewUrl(session.imageUrl)
+          const file = await dataUrlToFile(
+            session.imageUrl,
+            `${session.productName || 'product'}.jpg`,
+          )
+          if (!cancelled && file) setImageFile(file)
+        }
+        const asset = session.assetType
+        if (session.studioKind === 'photos' && PHOTO_STYLES.some((s) => s.id === asset)) {
+          setPhotoStyles([asset as PhotoStyleId])
+        } else if (session.studioKind === 'videos' && VIDEO_STYLES.some((s) => s.id === asset)) {
+          setVideoStyles([asset as VideoStyleId])
+        } else if (session.studioKind === 'ads' && AD_STYLES.some((s) => s.id === asset)) {
+          setAdStyles([asset as AdStyleId])
+        }
+        setPrompt(
+          `Recreate “${session.label}”.\nWhat I want changed: `,
+        )
+        return
+      }
+
       const pending = await consumePendingProduct()
       if (cancelled) return
       if (pending.tryFree) setTryFree(true)
@@ -93,9 +153,10 @@ export default function StudioPage() {
     return () => {
       cancelled = true
     }
-  }, [user])
+  }, [user, kind, searchParams])
 
   useEffect(() => {
+    if (searchParams.get('recreate') === '1') return
     setPhotoStyles([])
     setVideoStyles([])
     setAdStyles([])
@@ -106,6 +167,7 @@ export default function StudioPage() {
     setStyleTheme('')
     setError(null)
     setWarning(null)
+    setRecreate(null)
 
     const style = searchParams.get('style')
     if (kind === 'videos' && style === 'ugc') {
@@ -173,9 +235,96 @@ export default function StudioPage() {
     return adStyles.length
   }
 
+  async function applyRecreateAndReturn(session: RecreateSession) {
+    const outputs: MockOutput[] =
+      session.outputs?.length > 0
+        ? session.outputs
+        : [
+            {
+              id: session.assetId,
+              assetType: session.assetType,
+              label: session.label,
+              kind: session.kind,
+              imageUrl: session.imageUrl,
+              version: 1,
+            },
+          ]
+
+    const index = Math.max(
+      0,
+      outputs.findIndex((o) => o.id === session.assetId || o.assetType === session.assetType),
+    )
+    const current = outputs[index] || outputs[0]!
+    let next = recreateMockOutput(
+      current,
+      index,
+      productName.trim() || session.productName,
+      previewUrl || session.imageUrl,
+    )
+    const directionNote = prompt.trim()
+    next = {
+      ...next,
+      note: directionNote
+        ? `Recreated in studio · ${directionNote.slice(0, 120)}`
+        : next.note,
+      text:
+        next.kind === 'copy'
+          ? directionNote
+            ? `${directionNote}\n\n—\nUpdated for ${productName.trim() || session.productName}`
+            : next.text
+          : next.text,
+    }
+    const nextOutputs = outputs.map((o, i) => (i === index ? next : o))
+    const nextStatus =
+      session.campaignStatus === 'exported' ? 'ready' : session.campaignStatus || 'ready'
+
+    stashCampaignOutputs(session.campaignId, nextOutputs)
+
+    if (isLocalCampaignId(session.campaignId)) {
+      updateLocalCampaign(session.campaignId, {
+        status: nextStatus,
+        outputs: nextOutputs,
+        imageUrl: previewUrl || session.imageUrl,
+      })
+    } else {
+      try {
+        await updateCampaignStatus(session.campaignId, nextStatus as 'ready' | 'generating' | 'exported', {
+          outputs: nextOutputs,
+          demoPack: true,
+        })
+      } catch (err) {
+        console.warn('[Studio] Firestore recreate save failed — using local stash', err)
+      }
+    }
+
+    clearRecreateSession()
+    navigate(`/app/campaigns/${session.campaignId}`, { replace: true })
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!user || !kind) return
+
+    const session = recreate || loadRecreateSession()
+    if (session && searchParams.get('recreate') === '1') {
+      if (!prompt.trim()) {
+        setError('Describe what you want changed before recreating.')
+        return
+      }
+      setBusy(true)
+      setError(null)
+      setWarning(null)
+      try {
+        await new Promise((r) => setTimeout(r, 700))
+        await applyRecreateAndReturn(session)
+      } catch (err) {
+        console.error(err)
+        setError(err instanceof Error ? err.message : 'Could not recreate this asset.')
+        setBusy(false)
+      }
+      return
+    }
+
     if (sourceType === 'upload' && !imageFile) {
       setError('Add a product photo to continue.')
       return
@@ -187,42 +336,94 @@ export default function StudioPage() {
     setBusy(true)
     setError(null)
     setWarning(null)
+
+    let imageDataUrl: string | undefined
     try {
-      const result = await createStudioProject({
-        userId: user.uid,
-        kind,
-        sourceType,
-        productUrl: sourceType === 'url' ? productUrl.trim() : undefined,
-        productName: productName.trim() || undefined,
-        description: description.trim() || undefined,
-        brand: brand.trim() || undefined,
-        imageFile: sourceType === 'upload' ? imageFile : null,
-        photoStyles,
-        videoStyles,
-        adStyles,
-        tryFree: tryFree && kind === 'photos',
-        creativeDirection: {
-          prompt,
-          lighting: lighting || undefined,
-          background: background || undefined,
-          mood: mood || undefined,
-          styleTheme: styleTheme || undefined,
-        },
-      })
-      if (result.storageWarning) setWarning(result.storageWarning)
+      if (imageFile) imageDataUrl = await fileToDataUrl(imageFile)
+    } catch {
+      /* optional */
+    }
+
+    const selectedAssets =
+      kind === 'photos'
+        ? resolvePhotoStyles(photoStyles)
+        : kind === 'videos'
+          ? resolveVideoStyles(videoStyles)
+          : resolveAdStyles(adStyles)
+    const displayName =
+      productName.trim() ||
+      (imageFile ? imageFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '') ||
+      'Untitled product'
+
+    try {
+      const result = await withTimeout(
+        createStudioProject({
+          userId: user.uid,
+          kind,
+          sourceType,
+          productUrl: sourceType === 'url' ? productUrl.trim() : undefined,
+          productName: productName.trim() || undefined,
+          description: description.trim() || undefined,
+          brand: brand.trim() || undefined,
+          imageFile: sourceType === 'upload' ? imageFile : null,
+          photoStyles,
+          videoStyles,
+          adStyles,
+          tryFree: tryFree && kind === 'photos',
+          creativeDirection: {
+            prompt,
+            lighting: lighting || undefined,
+            background: background || undefined,
+            mood: mood || undefined,
+            styleTheme: styleTheme || undefined,
+          },
+        }),
+        12_000,
+        'create-studio',
+      )
+      if (imageDataUrl) stashCampaignImage(result.campaignId, imageDataUrl)
       navigate(`/app/campaigns/${result.campaignId}`, { replace: true })
     } catch (err) {
-      console.error(err)
-      setError(err instanceof Error ? err.message : 'Could not start this project.')
-    } finally {
-      setBusy(false)
+      console.warn('[Studio] falling back to local demo project', err)
+      try {
+        const id = newLocalId('studio')
+        const titleSuffix =
+          kind === 'photos' ? 'Photos' : kind === 'videos' ? 'Videos' : 'Ads'
+        const imageUrl = imageDataUrl || previewUrl || undefined
+        saveLocalCampaign({
+          id,
+          title: `${displayName} — ${titleSuffix}`,
+          status: 'product_confirmed',
+          productName: displayName,
+          productId: `local-product-${id}`,
+          productUrl: sourceType === 'url' ? productUrl.trim() : undefined,
+          mode: 'studio',
+          studioKind: kind,
+          deliverables: [],
+          selectedAssets,
+          includeStrategy: false,
+          tryFree: tryFree && kind === 'photos',
+          imageUrl,
+          createdAt: Date.now(),
+        })
+        if (imageUrl) stashCampaignImage(id, imageUrl)
+        navigate(`/app/campaigns/${id}`, { replace: true })
+      } catch (localErr) {
+        console.error(localErr)
+        setError(
+          localErr instanceof Error
+            ? localErr.message
+            : 'Could not start this project.',
+        )
+        setBusy(false)
+      }
     }
   }
 
   const isUgcFocus = kind === 'videos' && searchParams.get('style') === 'ugc'
   const usingDefaults = selectionCount() === 0
 
-  const studioMeta =
+  const baseMeta =
     kind === 'photos'
       ? {
           kicker: 'Image Studio',
@@ -269,6 +470,20 @@ export default function StudioPage() {
               stylesHint: 'Select creatives, copy, or both — blank uses defaults.',
             }
 
+  const studioMeta =
+    isRecreate && recreate
+      ? {
+          ...baseMeta,
+          kicker: `Recreate · ${baseMeta.kicker}`,
+          title: `Recreate “${recreate.label}”`,
+          lead: 'Tell us what you want changed — lighting, scene, mood, or copy. Your product photo stays locked for fidelity.',
+          image: recreate.imageUrl || previewUrl || baseMeta.image,
+          cta: busy ? 'Saving…' : 'Apply recreate',
+          stylesTitle: 'Confirm style',
+          stylesHint: 'Pre-selected from your campaign. Change it if needed.',
+        }
+      : baseMeta
+
   const styleVisuals: Record<string, string> = {
     product_image: '/images/fidelity-studio.jpg',
     lifestyle_image: '/images/campaign-home-lifestyle.jpg',
@@ -288,16 +503,34 @@ export default function StudioPage() {
             <p className="studio-hero-kicker">{studioMeta.kicker}</p>
             <h1>{studioMeta.title}</h1>
             <p className="studio-hero-lead">{studioMeta.lead}</p>
-            {tryFree && kind === 'photos' && (
+            {isRecreate && recreate ? (
+              <p className="studio-free-banner" role="status">
+                Editing from your campaign — describe changes below, then apply
+              </p>
+            ) : null}
+            {tryFree && kind === 'photos' && !isRecreate && (
               <p className="studio-free-banner" role="status">
                 Free trial — first image pack included, no card required
               </p>
             )}
             <ol className="studio-hero-steps" aria-label="How it works">
-              <li>{sourceType === 'url' ? 'Confirm product' : 'Upload product'}</li>
-              <li>Set creative direction</li>
-              <li>Generate</li>
+              <li>{isRecreate ? 'Confirm product' : sourceType === 'url' ? 'Confirm product' : 'Upload product'}</li>
+              <li>{isRecreate ? 'Describe changes' : 'Set creative direction'}</li>
+              <li>{isRecreate ? 'Apply' : 'Generate'}</li>
             </ol>
+            {isRecreate && recreate ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ marginTop: 12 }}
+                onClick={() => {
+                  clearRecreateSession()
+                  navigate(`/app/campaigns/${recreate.campaignId}`)
+                }}
+              >
+                ← Back to campaign
+              </button>
+            ) : null}
           </div>
           <div className="studio-hero-media" aria-hidden="true">
             <img src={studioMeta.image} alt="" />
@@ -309,7 +542,11 @@ export default function StudioPage() {
           <section className="form-section">
             <div className="form-section-head">
               <h2>1. Product</h2>
-              <p>Photo or product page URL</p>
+              <p>
+                {isRecreate
+                  ? 'Your campaign product — change only if needed'
+                  : 'Photo or product page URL'}
+              </p>
             </div>
 
             <div className="source-toggle" role="tablist" aria-label="Product source">
@@ -468,7 +705,11 @@ export default function StudioPage() {
           <section className="form-section">
             <div className="form-section-head">
               <h2>2. Creative direction</h2>
-              <p>Optional — shape lighting, mood, and scene</p>
+              <p>
+                {isRecreate
+                  ? 'Required — write what you want changed'
+                  : 'Optional — shape lighting, mood, and scene'}
+              </p>
             </div>
             <CreativeDirectionFields
               prompt={prompt}
@@ -483,11 +724,13 @@ export default function StudioPage() {
               onStyleThemeChange={setStyleTheme}
               disabled={busy}
               promptPlaceholder={
-                kind === 'photos'
-                  ? 'e.g. Soft morning light on marble, keep bottle label sharp…'
-                  : kind === 'videos'
-                    ? 'e.g. Slow 360 reveal, soft voiceover energy, keep packaging true…'
-                    : 'e.g. Bold offer creative for Meta ads, clean white space for CTA…'
+                isRecreate
+                  ? 'e.g. Brighter lighting, white background, less glitter, keep packaging sharp…'
+                  : kind === 'photos'
+                    ? 'e.g. Soft morning light on marble, keep bottle label sharp…'
+                    : kind === 'videos'
+                      ? 'e.g. Slow 360 reveal, soft voiceover energy, keep packaging true…'
+                      : 'e.g. Bold offer creative for Meta ads, clean white space for CTA…'
               }
             />
           </section>
@@ -617,7 +860,11 @@ export default function StudioPage() {
           )}
 
           <button type="submit" className="btn btn-grad campaign-submit studio-submit" disabled={busy}>
-            {busy ? 'Creating…' : studioMeta.cta}
+            {busy
+              ? isRecreate
+                ? 'Applying…'
+                : 'Creating…'
+              : studioMeta.cta}
             <span aria-hidden="true">→</span>
           </button>
         </form>

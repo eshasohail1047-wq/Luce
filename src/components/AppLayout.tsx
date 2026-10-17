@@ -1,7 +1,9 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import Logo from '../Logo'
 import { useAuth } from '../auth/AuthProvider'
+import { listUserCampaigns, listUserProducts, type CampaignDoc, type ProductSummary } from '../lib/campaigns'
+import { campaignModeLabel } from '../lib/workspaceUi'
 
 const MAIN_NAV = [
   { to: '/app', label: 'Dashboard', end: true, icon: 'home' as const },
@@ -135,12 +137,22 @@ type AppLayoutProps = {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const { user, plan, signOut } = useAuth()
+  const navigate = useNavigate()
   const displayName = user?.displayName?.trim() || user?.email?.split('@')[0] || 'Account'
   const initial = displayName.slice(0, 1).toUpperCase()
   const planLabel = plan === 'pro' ? 'Pro plan' : 'Free plan'
   const [menuOpen, setMenuOpen] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [campaigns, setCampaigns] = useState<CampaignDoc[]>([])
+  const [products, setProducts] = useState<ProductSummary[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
+  const notifRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
+  const notifId = useId()
+  const searchId = useId()
 
   async function handleLogout() {
     setMenuOpen(false)
@@ -153,12 +165,65 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   useEffect(() => {
-    if (!menuOpen) return
+    if (!user) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const [cRows, pRows] = await Promise.all([
+          listUserCampaigns(user.uid),
+          listUserProducts(user.uid),
+        ])
+        if (!cancelled) {
+          setCampaigns(cRows)
+          setProducts(pRows)
+        }
+      } catch (err) {
+        console.error('[AppLayout] search index failed', err)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
+  const searchHits = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return { campaigns: [] as CampaignDoc[], products: [] as ProductSummary[] }
+    return {
+      campaigns: campaigns
+        .filter(
+          (c) =>
+            c.title.toLowerCase().includes(q) ||
+            c.productName.toLowerCase().includes(q),
+        )
+        .slice(0, 5),
+      products: products
+        .filter(
+          (p) =>
+            p.name.toLowerCase().includes(q) ||
+            (p.brand || '').toLowerCase().includes(q) ||
+            (p.category || '').toLowerCase().includes(q),
+        )
+        .slice(0, 5),
+    }
+  }, [searchQuery, campaigns, products])
+
+  useEffect(() => {
+    if (!menuOpen && !notifOpen && !searchOpen) return
     const onPointerDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
+      const target = event.target as Node
+      if (menuOpen && menuRef.current && !menuRef.current.contains(target)) setMenuOpen(false)
+      if (notifOpen && notifRef.current && !notifRef.current.contains(target)) setNotifOpen(false)
+      if (searchOpen && searchRef.current && !searchRef.current.contains(target)) {
+        setSearchOpen(false)
+      }
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpen(false)
+      if (event.key === 'Escape') {
+        setMenuOpen(false)
+        setNotifOpen(false)
+        setSearchOpen(false)
+      }
     }
     document.addEventListener('mousedown', onPointerDown)
     document.addEventListener('keydown', onKeyDown)
@@ -166,7 +231,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [menuOpen])
+  }, [menuOpen, notifOpen, searchOpen])
 
   return (
     <div className="studio-shell">
@@ -273,34 +338,122 @@ export default function AppLayout({ children }: AppLayoutProps) {
       <div className="studio-stage">
         <header className="studio-topbar">
           <div className="studio-topbar-left">
-            <label className="studio-topbar-search">
-              <span className="sr-only">Search</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-3.5-3.5" />
-              </svg>
-              <input
-                type="search"
-                placeholder="Search coming soon…"
-                disabled
-                title="Search will be available after generation launches"
-              />
-            </label>
+            <div className="studio-topbar-search-wrap" ref={searchRef}>
+              <label className="studio-topbar-search" htmlFor={searchId}>
+                <span className="sr-only">Search</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5" />
+                </svg>
+                <input
+                  id={searchId}
+                  type="search"
+                  placeholder="Search products, campaigns…"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value)
+                    setSearchOpen(true)
+                  }}
+                  onFocus={() => setSearchOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && searchQuery.trim()) {
+                      e.preventDefault()
+                      setSearchOpen(false)
+                      navigate(`/app/campaigns?q=${encodeURIComponent(searchQuery.trim())}`)
+                    }
+                  }}
+                />
+              </label>
+              {searchOpen && searchQuery.trim() ? (
+                <div className="studio-search-menu" role="listbox" aria-label="Search results">
+                  {searchHits.products.length === 0 && searchHits.campaigns.length === 0 ? (
+                    <p className="studio-search-empty">No matches for “{searchQuery.trim()}”</p>
+                  ) : (
+                    <>
+                      {searchHits.products.length > 0 ? (
+                        <div className="studio-search-group">
+                          <p>Products</p>
+                          {searchHits.products.map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="studio-search-item"
+                              onClick={() => {
+                                setSearchOpen(false)
+                                setSearchQuery('')
+                                navigate('/app/products')
+                              }}
+                            >
+                              <strong>{p.name}</strong>
+                              <span>{p.brand || p.category || 'Product'}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      {searchHits.campaigns.length > 0 ? (
+                        <div className="studio-search-group">
+                          <p>Campaigns</p>
+                          {searchHits.campaigns.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              className="studio-search-item"
+                              onClick={() => {
+                                setSearchOpen(false)
+                                setSearchQuery('')
+                                navigate(`/app/campaigns/${c.id}`)
+                              }}
+                            >
+                              <strong>{c.title || c.productName}</strong>
+                              <span>{campaignModeLabel(c)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="studio-topbar-actions">
-            <button
-              type="button"
-              className="studio-topbar-icon"
-              aria-label="Notifications coming soon"
-              title="Notifications coming soon"
-              disabled
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                <path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" />
-                <path d="M10 20a2 2 0 0 0 4 0" />
-              </svg>
-            </button>
+            <div className="studio-topbar-notif" ref={notifRef}>
+              <button
+                type="button"
+                className={`studio-topbar-icon${notifOpen ? ' is-open' : ''}`}
+                aria-label="Notifications"
+                aria-expanded={notifOpen}
+                aria-controls={notifId}
+                onClick={() => {
+                  setNotifOpen((v) => !v)
+                  setMenuOpen(false)
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                  <path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" />
+                  <path d="M10 20a2 2 0 0 0 4 0" />
+                </svg>
+              </button>
+              {notifOpen ? (
+                <div className="studio-notif-menu" id={notifId} role="menu">
+                  <div className="studio-notif-head">
+                    <strong>Notifications</strong>
+                  </div>
+                  <p className="studio-notif-empty">
+                    You’re all caught up. Export alerts will appear here when generation finishes.
+                  </p>
+                  <Link
+                    role="menuitem"
+                    to="/app/settings#help"
+                    className="studio-account-menu-item"
+                    onClick={() => setNotifOpen(false)}
+                  >
+                    Help &amp; support
+                  </Link>
+                </div>
+              ) : null}
+            </div>
             <div className="studio-topbar-account" ref={menuRef}>
               <button
                 type="button"

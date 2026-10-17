@@ -14,8 +14,16 @@ import type {
 } from '../lib/creativeDirection'
 import {
   CAMPAIGN_DELIVERABLES,
+  resolveDeliverables,
   type DeliverableId,
 } from '../lib/deliverables'
+import {
+  fileToDataUrl,
+  newLocalId,
+  saveLocalCampaign,
+  stashCampaignImage,
+  withTimeout,
+} from '../lib/localDemoCampaign'
 
 export default function NewCampaignPage() {
   const { user, plan, loading } = useAuth()
@@ -121,39 +129,94 @@ export default function NewCampaignPage() {
     )
   }
 
+  async function createLocalDemoAndGo(imageDataUrl?: string) {
+    const displayName =
+      productName.trim() ||
+      (imageFile ? imageFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '') ||
+      (productUrl.trim() ? 'Product from URL' : 'Untitled product')
+    const resolved = resolveDeliverables(selectedDeliverables)
+    const id = newLocalId('campaign')
+    const imageUrl = imageDataUrl || previewUrl || undefined
+    saveLocalCampaign({
+      id,
+      title: `${displayName} campaign`,
+      status: 'product_confirmed',
+      productName: displayName,
+      productId: `local-product-${id}`,
+      productUrl: productUrl.trim() || undefined,
+      mode: 'campaign',
+      deliverables: resolved.deliverables,
+      selectedAssets: resolved.selectedAssets,
+      includeStrategy: resolved.includeStrategy,
+      tryFree: false,
+      imageUrl,
+      createdAt: Date.now(),
+    })
+    if (imageUrl) stashCampaignImage(id, imageUrl)
+    navigate(`/app/campaigns/${id}`, { replace: true })
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!user) return
+    if (sourceType === 'upload' && !imageFile) {
+      setError('Add a product photo to continue.')
+      return
+    }
+    if (sourceType === 'url' && !productUrl.trim()) {
+      setError('Enter a product URL to continue.')
+      return
+    }
     setBusy(true)
     setError(null)
     setWarning(null)
+
+    let imageDataUrl: string | undefined
     try {
-      const result = await createCampaignWithProduct({
-        userId: user.uid,
-        sourceType,
-        productName: productName.trim() || undefined,
-        productUrl: productUrl.trim() || undefined,
-        description: description.trim() || undefined,
-        brand: brand.trim() || undefined,
-        price: price.trim() || undefined,
-        category: category.trim() || undefined,
-        imageFile: sourceType === 'upload' ? imageFile : null,
-        deliverables: selectedDeliverables,
-        creativeDirection: {
-          prompt,
-          lighting: lighting || undefined,
-          background: background || undefined,
-          mood: mood || undefined,
-          styleTheme: styleTheme || undefined,
-        },
-      })
-      if (result.storageWarning) setWarning(result.storageWarning)
+      if (imageFile) imageDataUrl = await fileToDataUrl(imageFile)
+    } catch {
+      /* optional preview */
+    }
+
+    try {
+      const result = await withTimeout(
+        createCampaignWithProduct({
+          userId: user.uid,
+          sourceType,
+          productName: productName.trim() || undefined,
+          productUrl: productUrl.trim() || undefined,
+          description: description.trim() || undefined,
+          brand: brand.trim() || undefined,
+          price: price.trim() || undefined,
+          category: category.trim() || undefined,
+          imageFile: sourceType === 'upload' ? imageFile : null,
+          deliverables: selectedDeliverables,
+          creativeDirection: {
+            prompt,
+            lighting: lighting || undefined,
+            background: background || undefined,
+            mood: mood || undefined,
+            styleTheme: styleTheme || undefined,
+          },
+        }),
+        12_000,
+        'create-campaign',
+      )
+      if (imageDataUrl) stashCampaignImage(result.campaignId, imageDataUrl)
       navigate(`/app/campaigns/${result.campaignId}`, { replace: true })
     } catch (err) {
-      console.error(err)
-      setError(err instanceof Error ? err.message : 'Could not create campaign.')
-    } finally {
-      setBusy(false)
+      console.warn('[NewCampaign] falling back to local demo campaign', err)
+      try {
+        await createLocalDemoAndGo(imageDataUrl)
+      } catch (localErr) {
+        console.error(localErr)
+        setError(
+          localErr instanceof Error
+            ? localErr.message
+            : 'Could not create campaign. Try again.',
+        )
+        setBusy(false)
+      }
     }
   }
 

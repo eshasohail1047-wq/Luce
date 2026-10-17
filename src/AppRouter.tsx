@@ -10,6 +10,7 @@ import ProductsPage from './pages/ProductsPage'
 import LibraryPage from './pages/LibraryPage'
 import StudioPage from './pages/StudioPage'
 import SettingsPage from './pages/SettingsPage'
+import LegalPage from './pages/LegalPage'
 
 export default function AppRouter() {
   return (
@@ -17,6 +18,9 @@ export default function AppRouter() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/privacy" element={<LegalPage />} />
+          <Route path="/terms" element={<LegalPage />} />
+          <Route path="/cookies" element={<LegalPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/app" element={<DashboardPage />} />
           <Route path="/app/products" element={<ProductsPage />} />

@@ -607,10 +607,11 @@ function HowItWorks() {
             href="/login"
             onClick={(e) => {
               e.preventDefault()
-              goToApp('/app/campaigns/new')
+              markTryFree()
+              goToApp('/app/studio/photos')
             }}
           >
-            Create Your Campaign
+            Try free images
             <span aria-hidden="true">→</span>
           </a>
         </div>
@@ -672,10 +673,11 @@ export default function App() {
               href="/login"
               onClick={(e) => {
                 e.preventDefault()
-                goToApp('/app/campaigns/new')
+                markTryFree()
+                goToApp('/app/studio/photos')
               }}
             >
-              Create campaign
+              Try free
               <span aria-hidden="true">→</span>
             </a>
             <button
@@ -712,10 +714,11 @@ export default function App() {
             onClick={(e) => {
               e.preventDefault()
               setMenuOpen(false)
-              goToApp('/app/campaigns/new')
+              markTryFree()
+              goToApp('/app/studio/photos')
             }}
           >
-            Create Your Campaign
+            Try free images
           </a>
         </div>
       </header>
@@ -1150,10 +1153,11 @@ export default function App() {
                   href="/login"
                   onClick={(e) => {
                     e.preventDefault()
-                    goToApp('/app/campaigns/new')
+                    markTryFree()
+                    goToApp('/app/studio/photos')
                   }}
                 >
-                  Create campaign
+                  Try free images
                   <span aria-hidden="true">→</span>
                 </a>
                 <a
@@ -1229,9 +1233,9 @@ export default function App() {
 
               <div className="footer-col">
                 <h3>Legal</h3>
-                <a href="#privacy">Privacy</a>
-                <a href="#terms">Terms</a>
-                <a href="#cookies">Cookies</a>
+                <a href="/privacy">Privacy</a>
+                <a href="/terms">Terms</a>
+                <a href="/cookies">Cookies</a>
               </div>
             </div>
           </div>
@@ -1239,18 +1243,10 @@ export default function App() {
           <div className="footer-meta">
             <p className="copyright">© {new Date().getFullYear()} LUCE</p>
             <div className="footer-social" aria-label="Social">
-              <a href="https://x.com" target="_blank" rel="noreferrer">
-                X
-              </a>
-              <a href="https://instagram.com" target="_blank" rel="noreferrer">
-                Instagram
-              </a>
-              <a href="https://linkedin.com" target="_blank" rel="noreferrer">
-                LinkedIn
-              </a>
-              <a href="https://youtube.com" target="_blank" rel="noreferrer">
-                YouTube
-              </a>
+              <a href="mailto:hello@luce.ai">Email</a>
+              <a href="/privacy">Privacy</a>
+              <a href="/terms">Terms</a>
+              <a href="#faq">FAQ</a>
             </div>
           </div>
 

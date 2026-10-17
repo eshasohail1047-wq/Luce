@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
+import { updateCampaignStatus } from '../lib/campaigns'
 import { requireDb } from '../lib/firebase'
 import {
   AD_STYLES,
@@ -12,6 +13,24 @@ import {
   type DeliverableId,
   type StudioKind,
 } from '../lib/deliverables'
+import {
+  fileToDataUrl,
+  isLocalCampaignId,
+  loadLocalCampaign,
+  loadStashedCampaignImage,
+  loadStashedCampaignOutputs,
+  stashCampaignImage,
+  updateLocalCampaign,
+} from '../lib/localDemoCampaign'
+import {
+  buildMockOutputs,
+  downloadMockPack,
+  type MockOutput,
+} from '../lib/mockCampaign'
+import {
+  saveRecreateSession,
+  studioKindForAsset,
+} from '../lib/recreateSession'
 import { statusLabel, studioPathFor } from '../lib/workspaceUi'
 
 type CampaignView = {
@@ -27,6 +46,7 @@ type CampaignView = {
   includeStrategy: boolean
   tryFree: boolean
   imageUrl?: string
+  outputs?: MockOutput[]
 }
 
 function assetLabel(id: string) {
@@ -56,9 +76,16 @@ function activeStep(status: string) {
 export default function CampaignDetailPage() {
   const { campaignId } = useParams()
   const { user, loading } = useAuth()
+  const navigate = useNavigate()
   const [campaign, setCampaign] = useState<CampaignView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fetching, setFetching] = useState(true)
+  const [actionBusy, setActionBusy] = useState(false)
+  const [actionMsg, setActionMsg] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
+  const [previewId, setPreviewId] = useState<string | null>(null)
+  const [replacingPhoto, setReplacingPhoto] = useState(false)
+  const productFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!user || !campaignId) return
@@ -66,6 +93,36 @@ export default function CampaignDetailPage() {
 
     ;(async () => {
       try {
+        const stashed = loadStashedCampaignImage(campaignId)
+
+        if (isLocalCampaignId(campaignId)) {
+          const local = loadLocalCampaign(campaignId)
+          if (!local) {
+            if (!cancelled) setError('Demo campaign not found. Create a new one.')
+            return
+          }
+          if (!cancelled) {
+            setCampaign({
+              title: local.title,
+              status: local.status,
+              productName: local.productName,
+              productId: local.productId,
+              productUrl: local.productUrl,
+              mode: local.mode,
+              studioKind: local.studioKind,
+              deliverables: local.deliverables,
+              selectedAssets: local.selectedAssets,
+              includeStrategy: local.includeStrategy,
+              tryFree: local.tryFree,
+              imageUrl: local.imageUrl || stashed,
+              outputs:
+                loadStashedCampaignOutputs<MockOutput[]>(campaignId) ||
+                local.outputs,
+            })
+          }
+          return
+        }
+
         const snap = await getDoc(doc(requireDb(), 'campaigns', campaignId))
         if (!snap.exists()) {
           if (!cancelled) setError('Campaign not found.')
@@ -77,7 +134,7 @@ export default function CampaignDetailPage() {
           return
         }
 
-        let imageUrl: string | undefined
+        let imageUrl: string | undefined = stashed
         const productId = String(data.productId ?? '')
         if (productId) {
           try {
@@ -92,6 +149,12 @@ export default function CampaignDetailPage() {
             /* optional */
           }
         }
+        if (!imageUrl) imageUrl = stashed
+
+        const stashedOutputs = loadStashedCampaignOutputs<MockOutput[]>(campaignId)
+        const savedOutputs = Array.isArray(data.outputs)
+          ? (data.outputs as MockOutput[])
+          : undefined
 
         if (!cancelled) {
           setCampaign({
@@ -111,6 +174,7 @@ export default function CampaignDetailPage() {
             includeStrategy: Boolean(data.includeStrategy),
             tryFree: Boolean(data.tryFree),
             imageUrl,
+            outputs: stashedOutputs?.length ? stashedOutputs : savedOutputs,
           })
         }
       } catch (err) {
@@ -125,6 +189,196 @@ export default function CampaignDetailPage() {
       cancelled = true
     }
   }, [user, campaignId])
+
+  const outputs = useMemo(() => {
+    if (!campaign) return []
+    if (campaign.outputs && campaign.outputs.length > 0) return campaign.outputs
+    if (campaign.status === 'ready' || campaign.status === 'exported') {
+      return buildMockOutputs({
+        productName: campaign.productName,
+        productImageUrl: campaign.imageUrl,
+        selectedAssets: campaign.selectedAssets,
+        studioKind: campaign.studioKind,
+        mode: campaign.mode,
+      })
+    }
+    return []
+  }, [campaign])
+
+  const preview =
+    outputs.find((o) => o.id === previewId) || outputs[0] || null
+
+  useEffect(() => {
+    if (!previewId && outputs[0]) setPreviewId(outputs[0].id)
+  }, [outputs, previewId])
+
+  async function persistStatus(
+    status: string,
+    extra: { outputs?: MockOutput[] } = {},
+  ) {
+    if (!campaignId) return
+    if (isLocalCampaignId(campaignId)) {
+      updateLocalCampaign(campaignId, { status, ...extra })
+      return
+    }
+    await updateCampaignStatus(campaignId, status as 'generating' | 'ready' | 'exported', {
+      ...(extra.outputs ? { outputs: extra.outputs, demoPack: true } : {}),
+    })
+  }
+
+  async function runMockGenerate() {
+    if (!campaignId || !campaign) return
+    setActionBusy(true)
+    setError(null)
+    setActionMsg(null)
+    setProgress(8)
+    try {
+      await persistStatus('generating')
+      setCampaign((prev) => (prev ? { ...prev, status: 'generating' } : prev))
+
+      for (const value of [28, 52, 74, 90]) {
+        await new Promise((r) => setTimeout(r, 420))
+        setProgress(value)
+      }
+
+      const nextOutputs = buildMockOutputs({
+        productName: campaign.productName,
+        productImageUrl: campaign.imageUrl,
+        selectedAssets: campaign.selectedAssets,
+        studioKind: campaign.studioKind,
+        mode: campaign.mode,
+      })
+
+      await persistStatus('ready', { outputs: nextOutputs })
+      setProgress(100)
+      setCampaign((prev) =>
+        prev ? { ...prev, status: 'ready', outputs: nextOutputs } : prev,
+      )
+      setActionMsg('Demo campaign pack ready — preview below. (No AI API used.)')
+      if (nextOutputs[0]) setPreviewId(nextOutputs[0].id)
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Could not generate demo pack.')
+    } finally {
+      setActionBusy(false)
+      setTimeout(() => setProgress(0), 600)
+    }
+  }
+
+  async function runExport() {
+    if (!campaignId || !campaign || outputs.length === 0) return
+    setActionBusy(true)
+    setError(null)
+    setActionMsg(null)
+    try {
+      await downloadMockPack(outputs, campaign.productName)
+      await persistStatus('exported')
+      setCampaign((prev) => (prev ? { ...prev, status: 'exported' } : prev))
+      setActionMsg('Export started — images and copy download to your device.')
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Could not export pack.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  async function replaceProductPhoto(file: File | null | undefined) {
+    if (!file || !campaign || !campaignId) return
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image (JPG, PNG, or WebP).')
+      return
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      setError('Image must be under 12MB.')
+      return
+    }
+    setReplacingPhoto(true)
+    setError(null)
+    setActionMsg(null)
+    try {
+      const dataUrl = await fileToDataUrl(file)
+      stashCampaignImage(campaignId, dataUrl)
+      const guess = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim()
+      const nextName =
+        campaign.productName && campaign.productName !== 'Untitled product'
+          ? campaign.productName
+          : guess || campaign.productName
+
+      let nextOutputs = campaign.outputs
+      if (nextOutputs && nextOutputs.length > 0) {
+        nextOutputs = nextOutputs.map((item) =>
+          item.assetType === 'product_image' || item.assetType === 'ad_creative'
+            ? {
+                ...item,
+                imageUrl: dataUrl,
+                note: 'Updated with your new product photo',
+                version: (item.version || 1) + 1,
+                id: `${item.assetType}-updated-${Date.now()}`,
+              }
+            : item,
+        )
+      }
+
+      if (isLocalCampaignId(campaignId)) {
+        updateLocalCampaign(campaignId, {
+          imageUrl: dataUrl,
+          productName: nextName,
+          ...(nextOutputs ? { outputs: nextOutputs } : {}),
+        })
+      } else if (
+        nextOutputs &&
+        (campaign.status === 'ready' ||
+          campaign.status === 'exported' ||
+          campaign.status === 'generating')
+      ) {
+        await persistStatus(
+          campaign.status === 'exported' ? 'ready' : campaign.status,
+          { outputs: nextOutputs },
+        )
+      }
+
+      setCampaign((prev) =>
+        prev
+          ? {
+              ...prev,
+              imageUrl: dataUrl,
+              productName: nextName,
+              outputs: nextOutputs,
+            }
+          : prev,
+      )
+      setActionMsg('Product photo updated — banner and product shots use your new image.')
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Could not update product photo.')
+    } finally {
+      setReplacingPhoto(false)
+      if (productFileRef.current) productFileRef.current.value = ''
+    }
+  }
+
+  function openRecreateInStudio(item: MockOutput) {
+    if (!campaign || !campaignId) return
+    const studioKind = studioKindForAsset(item.assetType)
+    saveRecreateSession({
+      campaignId,
+      assetId: item.id,
+      assetType: item.assetType,
+      label: item.label,
+      kind: item.kind,
+      productName: campaign.productName,
+      productUrl: campaign.productUrl,
+      imageUrl: campaign.imageUrl,
+      studioKind,
+      note: item.note,
+      outputs,
+      campaignStatus: campaign.status,
+    })
+    navigate(
+      `/app/studio/${studioKind}?recreate=1&asset=${encodeURIComponent(item.assetType)}`,
+    )
+  }
 
   if (loading || fetching) {
     return (
@@ -161,6 +415,11 @@ export default function CampaignDetailPage() {
     (campaign.status === 'product_confirmed' ||
       campaign.status === 'draft' ||
       campaign.status === 'product_pending')
+  const showResults =
+    campaign &&
+    (campaign.status === 'ready' ||
+      campaign.status === 'exported' ||
+      (campaign.status === 'generating' && outputs.length > 0))
 
   return (
     <AppLayout>
@@ -181,6 +440,7 @@ export default function CampaignDetailPage() {
                 <p className="dash-kicker">
                   {campaign.mode === 'studio' ? 'Studio project' : 'Campaign'}
                   {campaign.tryFree ? ' · Free trial' : ''}
+                  {' · '}Demo preview
                 </p>
                 <div className="dash-card-top" style={{ marginBottom: 8 }}>
                   <span className={`dash-status status-${campaign.status}`}>
@@ -190,9 +450,9 @@ export default function CampaignDetailPage() {
                 <h1>{campaign.title}</h1>
                 <p className="app-lead">{campaign.productName}</p>
               </div>
-              <div className="create-banner-media" aria-hidden="true">
+              <div className="create-banner-media">
                 {campaign.imageUrl ? (
-                  <img src={campaign.imageUrl} alt="" />
+                  <img src={campaign.imageUrl} alt={campaign.productName} />
                 ) : (
                   <img
                     src={
@@ -207,6 +467,9 @@ export default function CampaignDetailPage() {
                     alt=""
                   />
                 )}
+                {campaign.imageUrl ? (
+                  <span className="create-banner-product-tag">Your product</span>
+                ) : null}
               </div>
             </header>
 
@@ -224,34 +487,73 @@ export default function CampaignDetailPage() {
               ))}
             </ol>
 
-            <div className="campaign-detail-grid">
-              <div className="app-panel create-panel">
-                <h2>Product</h2>
-                <div className="campaign-product-row">
-                  {campaign.imageUrl ? (
-                    <img className="campaign-product-thumb" src={campaign.imageUrl} alt="" />
-                  ) : (
-                    <span className="campaign-product-thumb dash-thumb-fallback" aria-hidden="true">
-                      {campaign.productName.slice(0, 1).toUpperCase()}
-                    </span>
-                  )}
-                  <div>
-                    <p>
-                      <strong>{campaign.productName}</strong>
-                    </p>
-                    {campaign.productUrl ? (
-                      <p>
-                        <a href={campaign.productUrl} target="_blank" rel="noreferrer">
-                          View product page
-                        </a>
-                      </p>
-                    ) : (
-                      <p className="dash-muted">Uploaded product photo</p>
-                    )}
-                  </div>
+            <section className="app-panel create-panel product-source-panel" aria-labelledby="product-source-title">
+              <div className="product-source-head">
+                <div>
+                  <h2 id="product-source-title">Product</h2>
+                  <p className="product-source-sub">
+                    This is the photo used on your banner and for product fidelity in the pack.
+                  </p>
                 </div>
+                <input
+                  ref={productFileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  hidden
+                  onChange={(e) => void replaceProductPhoto(e.target.files?.[0])}
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost product-source-replace"
+                  disabled={replacingPhoto || actionBusy}
+                  onClick={() => productFileRef.current?.click()}
+                >
+                  {replacingPhoto
+                    ? 'Updating…'
+                    : campaign.imageUrl
+                      ? 'Replace photo'
+                      : 'Upload photo'}
+                </button>
               </div>
 
+              <div className="product-source-body">
+                <div className="product-source-media">
+                  {campaign.imageUrl ? (
+                    <img src={campaign.imageUrl} alt={campaign.productName} />
+                  ) : (
+                    <button
+                      type="button"
+                      className="product-source-empty"
+                      onClick={() => productFileRef.current?.click()}
+                      disabled={replacingPhoto}
+                    >
+                      <strong>Add your product photo</strong>
+                      <span>JPG, PNG, or WebP</span>
+                    </button>
+                  )}
+                  {campaign.imageUrl ? (
+                    <span className="product-source-badge">Uploaded photo</span>
+                  ) : null}
+                </div>
+                <div className="product-source-meta">
+                  <p className="product-source-name">{campaign.productName}</p>
+                  {campaign.productUrl ? (
+                    <p>
+                      <a href={campaign.productUrl} target="_blank" rel="noreferrer">
+                        View product page
+                      </a>
+                    </p>
+                  ) : (
+                    <p className="dash-muted">Source: your uploaded product photo</p>
+                  )}
+                  <p className="product-source-hint">
+                    Change this photo anytime — the review banner updates immediately.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <div className="campaign-detail-grid">
               <div className="app-panel create-panel">
                 <h2>Included</h2>
                 {packLabels.length > 0 ? (
@@ -267,36 +569,211 @@ export default function CampaignDetailPage() {
                   <p>Full default pack</p>
                 )}
               </div>
+              <div className="app-panel create-panel product-source-note">
+                <h2>How it’s used</h2>
+                <ul className="detail-pack-list">
+                  <li>Hero banner on this page</li>
+                  <li>Product / studio shots in results</li>
+                  <li>Reference when you recreate assets</li>
+                </ul>
+              </div>
             </div>
 
             <div className="app-panel create-panel campaign-next-panel">
-              <h2>{readyToGenerate ? 'Ready to generate' : 'Next'}</h2>
+              <h2>
+                {readyToGenerate
+                  ? 'Generate demo campaign'
+                  : campaign.status === 'generating'
+                    ? 'Generating demo pack…'
+                    : campaign.status === 'ready'
+                      ? 'Review your pack'
+                      : campaign.status === 'exported'
+                        ? 'Exported'
+                        : 'Next'}
+              </h2>
               <p>
                 {readyToGenerate
-                  ? campaign.tryFree && campaign.studioKind === 'photos'
-                    ? 'Your free image pack is queued. Generation hooks in next — product fidelity stays locked.'
-                    : campaign.mode === 'studio'
-                      ? 'Product is confirmed. Generation for this studio project hooks in next.'
-                      : 'Product is confirmed. Research, strategy, and creative generation hook in next.'
+                  ? 'This creates a realistic preview pack so you can see results and export — no AI API calls.'
                   : campaign.status === 'generating'
-                    ? 'Assets are generating. This page will show results when the pipeline is connected.'
-                    : campaign.status === 'ready' || campaign.status === 'exported'
-                      ? 'This project is complete. Open Library for finished packs once exports land.'
-                      : 'Continue from Studio or start another project.'}
+                    ? 'Building studio, lifestyle, and promo-style previews…'
+                    : campaign.status === 'ready'
+                      ? 'Preview each asset, then export the demo pack to your device.'
+                      : 'Your demo pack was exported. You can generate again anytime.'}
               </p>
+
+              {campaign.status === 'generating' && progress > 0 ? (
+                <div className="campaign-gen-progress" aria-live="polite">
+                  <div className="campaign-gen-bar">
+                    <span style={{ width: `${progress}%` }} />
+                  </div>
+                  <p>{progress < 100 ? `Generating… ${progress}%` : 'Finishing…'}</p>
+                </div>
+              ) : null}
+
+              {actionMsg ? (
+                <p className="settings-success" role="status">
+                  {actionMsg}
+                </p>
+              ) : null}
+
               <div className="detail-actions">
-                <Link className="btn btn-grad" to={createMorePath}>
-                  {campaign.mode === 'studio' ? 'Create another' : 'New campaign'}
-                  <span aria-hidden="true">→</span>
+                {readyToGenerate ? (
+                  <button
+                    type="button"
+                    className="btn btn-grad"
+                    disabled={actionBusy}
+                    onClick={() => void runMockGenerate()}
+                  >
+                    {actionBusy ? 'Generating…' : 'Generate campaign preview'}
+                    <span aria-hidden="true">→</span>
+                  </button>
+                ) : null}
+                {campaign.status === 'generating' && !actionBusy ? (
+                  <button
+                    type="button"
+                    className="btn btn-grad"
+                    disabled={actionBusy}
+                    onClick={() => void runMockGenerate()}
+                  >
+                    Finish demo generate
+                  </button>
+                ) : null}
+                {(campaign.status === 'ready' || campaign.status === 'exported') &&
+                outputs.length > 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn-grad"
+                    disabled={actionBusy}
+                    onClick={() => void runExport()}
+                  >
+                    {actionBusy ? 'Exporting…' : 'Export pack'}
+                  </button>
+                ) : null}
+                {(campaign.status === 'ready' || campaign.status === 'exported') &&
+                outputs.length === 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn-grad"
+                    disabled={actionBusy}
+                    onClick={() => void runMockGenerate()}
+                  >
+                    Build preview pack
+                  </button>
+                ) : null}
+                <Link className="btn btn-ghost" to={createMorePath}>
+                  Create another
                 </Link>
-                <Link className="btn btn-ghost" to="/app/campaigns">
-                  All campaigns
-                </Link>
-                <Link className="btn btn-ghost" to="/app">
-                  Dashboard
+                <Link className="btn btn-ghost" to="/app/library">
+                  Library
                 </Link>
               </div>
             </div>
+
+            {showResults && outputs.length > 0 ? (
+              <section className="results-section" aria-labelledby="results-title">
+                <div className="dash-panel-head">
+                  <h2 id="results-title">Campaign results</h2>
+                  <span className="library-count">{outputs.length}</span>
+                </div>
+                <p className="results-lead">
+                  Review pack for <strong>{campaign.productName}</strong>. Don’t like one? Open
+                  studio to describe what you want changed.
+                </p>
+
+                <div className="results-layout">
+                  <div className="results-grid">
+                    {outputs.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`results-card${previewId === item.id ? ' is-active' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          className="results-card-hit"
+                          onClick={() => setPreviewId(item.id)}
+                        >
+                          <span className="results-card-media">
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt="" />
+                            ) : (
+                              <span className="results-card-fallback">
+                                {item.label.slice(0, 1)}
+                              </span>
+                            )}
+                            {item.kind === 'video' ? (
+                              <span className="results-card-badge">Video</span>
+                            ) : null}
+                            {item.kind === 'copy' ? (
+                              <span className="results-card-badge">Copy</span>
+                            ) : null}
+                            {(item.version || 1) > 1 ? (
+                              <span className="results-card-badge results-card-badge-version">
+                                v{item.version}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="results-card-body">
+                            <strong>{item.label}</strong>
+                            <span>{item.note}</span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="results-recreate-btn"
+                          disabled={actionBusy}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openRecreateInStudio(item)
+                          }}
+                        >
+                          Recreate in studio
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <aside className="results-preview app-panel">
+                    {preview ? (
+                      <>
+                        <p className="results-preview-kicker">
+                          {preview.label}
+                          {(preview.version || 1) > 1 ? ` · v${preview.version}` : ''}
+                        </p>
+                        {preview.imageUrl ? (
+                          <div className="results-preview-media">
+                            <img src={preview.imageUrl} alt={preview.label} />
+                          </div>
+                        ) : null}
+                        {preview.text ? (
+                          <blockquote className="results-preview-copy">{preview.text}</blockquote>
+                        ) : (
+                          <p className="dash-muted">
+                            {preview.kind === 'video'
+                              ? 'Video still preview — recreate for another look.'
+                              : 'Image preview for review before export.'}
+                          </p>
+                        )}
+                        <p className="results-preview-note">{preview.note}</p>
+                        <button
+                          type="button"
+                          className="btn btn-ghost results-preview-recreate"
+                          disabled={actionBusy}
+                          onClick={() => openRecreateInStudio(preview)}
+                        >
+                          {preview.kind === 'copy'
+                            ? 'Recreate copy in studio'
+                            : preview.kind === 'video'
+                              ? 'Recreate video in studio'
+                              : 'Recreate image in studio'}
+                        </button>
+                      </>
+                    ) : (
+                      <p className="dash-muted">Select an asset to preview.</p>
+                    )}
+                  </aside>
+                </div>
+              </section>
+            ) : null}
           </>
         )}
       </main>

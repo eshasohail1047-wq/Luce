@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
 import {
@@ -39,6 +39,8 @@ export default function CampaignsPage() {
   const [listError, setListError] = useState<string | null>(null)
   const [listing, setListing] = useState(true)
   const [filter, setFilter] = useState<'all' | 'studio' | 'campaign'>('all')
+  const [searchParams] = useSearchParams()
+  const query = (searchParams.get('q') || '').trim().toLowerCase()
 
   useEffect(() => {
     if (!user) return
@@ -63,10 +65,18 @@ export default function CampaignsPage() {
   }, [user])
 
   const filtered = useMemo(() => {
-    if (filter === 'studio') return campaigns.filter((c) => c.mode === 'studio')
-    if (filter === 'campaign') return campaigns.filter((c) => c.mode !== 'studio')
-    return campaigns
-  }, [campaigns, filter])
+    let rows = campaigns
+    if (filter === 'studio') rows = rows.filter((c) => c.mode === 'studio')
+    if (filter === 'campaign') rows = rows.filter((c) => c.mode !== 'studio')
+    if (query) {
+      rows = rows.filter(
+        (c) =>
+          c.title.toLowerCase().includes(query) ||
+          c.productName.toLowerCase().includes(query),
+      )
+    }
+    return rows
+  }, [campaigns, filter, query])
 
   if (loading) {
     return (
@@ -84,10 +94,13 @@ export default function CampaignsPage() {
         <header className="workspace-list-header">
           <div>
             <h1>Campaigns</h1>
-            <p>Studio projects and full campaign packs in one place.</p>
+            <p>
+              Studio projects and full campaign packs in one place.
+              {query ? ` Showing results for “${searchParams.get('q')}”.` : ''}
+            </p>
           </div>
-          <Link className="dash-create-btn" to="/app/campaigns/new">
-            <span aria-hidden="true">+</span> New campaign
+          <Link className="dash-create-btn" to="/app/studio/photos">
+            <span aria-hidden="true">+</span> New images
           </Link>
         </header>
 

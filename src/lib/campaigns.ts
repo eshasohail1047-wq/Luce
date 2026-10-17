@@ -157,35 +157,30 @@ async function createProductRecord(input: {
   let imageUrls: string[] = []
   let storageWarning: string | null = null
 
+  // Never block campaign create on Storage — upload in the background.
   if (input.sourceType === 'upload' && input.imageFile) {
     const path = `users/${input.userId}/products/${productRef.id}/source.${extFromFile(input.imageFile)}`
-    try {
-      const storageRef = ref(requireStorage(), path)
-      await uploadBytes(storageRef, input.imageFile, {
-        contentType: input.imageFile.type || 'image/jpeg',
-        customMetadata: {
-          originalName: input.imageFile.name.slice(0, 120),
-        },
-      })
-      const url = await getDownloadURL(storageRef)
-      imagePaths = [path]
-      imageUrls = [url]
-      await updateDoc(productRef, {
-        imagePaths,
-        imageUrls,
-        updatedAt: serverTimestamp(),
-      })
-    } catch (err) {
-      console.error('[campaigns] storage upload failed', err)
-      const code =
-        typeof err === 'object' && err && 'code' in err
-          ? String((err as { code?: string }).code ?? '')
-          : ''
-      storageWarning =
-        code.includes('unauthorized') || code.includes('permission')
-          ? 'Saved, but the photo could not be uploaded yet.'
-          : 'Saved, but the photo could not be uploaded.'
-    }
+    const file = input.imageFile
+    storageWarning = 'Photo uploads in the background. You can generate the demo pack now.'
+    void (async () => {
+      try {
+        const storageRef = ref(requireStorage(), path)
+        await uploadBytes(storageRef, file, {
+          contentType: file.type || 'image/jpeg',
+          customMetadata: {
+            originalName: file.name.slice(0, 120),
+          },
+        })
+        const url = await getDownloadURL(storageRef)
+        await updateDoc(productRef, {
+          imagePaths: [path],
+          imageUrls: [url],
+          updatedAt: serverTimestamp(),
+        })
+      } catch (err) {
+        console.error('[campaigns] background storage upload failed', err)
+      }
+    })()
   }
 
   return { productRef, imagePaths, imageUrls, storageWarning }
@@ -432,6 +427,19 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
     const aTime = a.updatedAt?.toMillis?.() ?? 0
     const bTime = b.updatedAt?.toMillis?.() ?? 0
     return bTime - aTime
+  })
+}
+
+export async function updateCampaignStatus(
+  campaignId: string,
+  status: CampaignStatus,
+  extra: Record<string, unknown> = {},
+) {
+  await updateDoc(doc(requireDb(), 'campaigns', campaignId), {
+    status,
+    progressStep: status,
+    updatedAt: serverTimestamp(),
+    ...extra,
   })
 }
 
