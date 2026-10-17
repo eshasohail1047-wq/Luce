@@ -1,14 +1,9 @@
-import { Resend } from 'resend'
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-}
+import {
+  createResend,
+  EMAIL_RE,
+  escapeHtml,
+  getResendFrom,
+} from './resendClient'
 
 export type EarlyAccessResult =
   | { status: 200; body: { ok: true; id: string | null } }
@@ -19,8 +14,8 @@ export async function sendEarlyAccessEmail(input: {
   productUrl?: string
   source?: string
 }): Promise<EarlyAccessResult> {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey || apiKey.includes('xxxxxxxxx')) {
+  const resend = createResend()
+  if (!resend) {
     return {
       status: 500,
       body: { error: 'RESEND_API_KEY is not configured' },
@@ -37,9 +32,8 @@ export async function sendEarlyAccessEmail(input: {
     return { status: 400, body: { error: 'Enter a valid email address' } }
   }
 
-  const from = process.env.RESEND_FROM ?? 'LUCE <onboarding@resend.dev>'
+  const from = getResendFrom()
   const notifyTo = process.env.EARLY_ACCESS_NOTIFY_EMAIL
-  const resend = new Resend(apiKey)
   const safeEmail = escapeHtml(email)
   const safeUrl = escapeHtml(productUrl || 'Not provided')
   const safeSource = escapeHtml(source)

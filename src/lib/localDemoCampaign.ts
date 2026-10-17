@@ -56,6 +56,7 @@ export function isLocalCampaignId(id: string | undefined) {
 }
 
 const IMAGE_KEY = 'luce.campaignImage.'
+const OUTPUTS_KEY = 'luce.campaignOutputs.'
 
 /** Keep uploaded product photo available on review even if Storage is slow. */
 export function stashCampaignImage(campaignId: string, dataUrl: string) {
@@ -74,8 +75,6 @@ export function loadStashedCampaignImage(campaignId: string): string | undefined
   }
 }
 
-const OUTPUTS_KEY = 'luce.campaignOutputs.'
-
 export function stashCampaignOutputs(campaignId: string, outputs: unknown) {
   try {
     sessionStorage.setItem(OUTPUTS_KEY + campaignId, JSON.stringify(outputs))
@@ -92,6 +91,24 @@ export function loadStashedCampaignOutputs<T>(campaignId: string): T | undefined
   } catch {
     return undefined
   }
+}
+
+export function clearCampaignStash(campaignId: string) {
+  try {
+    sessionStorage.removeItem(IMAGE_KEY + campaignId)
+    sessionStorage.removeItem(OUTPUTS_KEY + campaignId)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function deleteLocalCampaign(id: string) {
+  try {
+    sessionStorage.removeItem(PREFIX + id)
+  } catch (err) {
+    console.error('[localDemo] delete failed', err)
+  }
+  clearCampaignStash(id)
 }
 
 export function fileToDataUrl(file: File): Promise<string> {

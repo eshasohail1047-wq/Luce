@@ -2,6 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
+import {
+  PLAN_OPTIONS,
+  isPaidPlan,
+  planLabel as formatPlanLabel,
+  type UserPlan,
+} from '../lib/plans'
 import { BRAND_TONE_OPTIONS } from '../lib/userSettings'
 
 export default function SettingsPage() {
@@ -61,7 +67,7 @@ export default function SettingsPage() {
 
   const displayName = user.displayName?.trim() || user.email?.split('@')[0] || 'Account'
   const initial = displayName.slice(0, 1).toUpperCase()
-  const planLabel = plan === 'pro' ? 'Pro' : 'Free'
+  const planLabel = formatPlanLabel(plan)
   const hasPasswordProvider = user.providerData.some((p) => p.providerId === 'password')
 
   async function onSaveProfile(e: FormEvent) {
@@ -98,13 +104,17 @@ export default function SettingsPage() {
     }
   }
 
-  async function onChangePlan(next: 'free' | 'pro') {
+  async function onChangePlan(next: UserPlan) {
     setError(null)
     setPlanMsg(null)
     setPlanBusy(true)
     try {
       await updatePlan(next)
-      setPlanMsg(next === 'pro' ? 'You’re now on the Pro plan.' : 'Switched to Free plan.')
+      setPlanMsg(
+        next === 'free'
+          ? 'Switched to Free plan.'
+          : `You’re now on the ${formatPlanLabel(next)} plan.`,
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update plan.')
     } finally {
@@ -205,38 +215,55 @@ export default function SettingsPage() {
         <section className="settings-card" id="plan" aria-labelledby="settings-plan-title">
           <div className="settings-card-head">
             <h2 id="settings-plan-title">Plan &amp; billing</h2>
-            {plan === 'pro' ? (
-              <span className="settings-plan-pill is-pro">PRO</span>
-            ) : (
-              <span className="settings-plan-pill">FREE</span>
-            )}
+            <span className={`settings-plan-pill${isPaidPlan(plan) ? ' is-pro' : ''}`}>
+              {planLabel.toUpperCase()}
+            </span>
           </div>
           <p className="settings-copy">
             You’re on the <strong>{planLabel}</strong> plan.
-            {plan === 'pro'
-              ? ' You have full access to images, video, ads, and campaigns.'
-              : ' Free includes Image Studio only. Video, ads, and full campaigns require Pro.'}
+            {isPaidPlan(plan)
+              ? ' You can generate images, video, ads, and full campaigns.'
+              : ' Free includes one image try. Browse every studio — upgrade when you generate video, ads, campaigns, or more images.'}
           </p>
-          <div className="settings-actions">
-            {plan === 'pro' ? (
-              <button
-                type="button"
-                className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
-                disabled={planBusy}
-                onClick={() => void onChangePlan('free')}
-              >
-                {planBusy ? 'Updating…' : 'Switch to Free'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="dash-create-btn dash-create-btn-sm"
-                disabled={planBusy}
-                onClick={() => void onChangePlan('pro')}
-              >
-                {planBusy ? 'Updating…' : 'Upgrade to Pro'}
-              </button>
-            )}
+          <div className="settings-plan-grid" role="group" aria-label="Choose a plan">
+            {PLAN_OPTIONS.map((option) => {
+              const active = plan === option.id
+              return (
+                <article
+                  key={option.id}
+                  className={`settings-plan-option${active ? ' is-active' : ''}${option.featured ? ' is-featured' : ''}`}
+                >
+                  <div className="settings-plan-option-head">
+                    <h3>{option.name}</h3>
+                    {option.featured ? <span>Popular</span> : null}
+                  </div>
+                  <p className="settings-plan-option-price">
+                    {option.monthly === 0 ? (
+                      <strong>Free</strong>
+                    ) : (
+                      <>
+                        <strong>${option.monthly}</strong>
+                        <span>/ mo</span>
+                      </>
+                    )}
+                  </p>
+                  <p className="settings-plan-option-tagline">{option.tagline}</p>
+                  <ul>
+                    {option.perks.slice(0, 3).map((perk) => (
+                      <li key={perk}>{perk}</li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    className={`dash-create-btn dash-create-btn-sm${active ? ' dash-create-btn-ghost' : ''}`}
+                    disabled={planBusy || active}
+                    onClick={() => void onChangePlan(option.id)}
+                  >
+                    {planBusy ? 'Updating…' : active ? 'Current plan' : `Choose ${option.name}`}
+                  </button>
+                </article>
+              )
+            })}
           </div>
           {planMsg && (
             <p className="settings-success" role="status">

@@ -3,6 +3,7 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
 import {
+  deleteUserCampaign,
   getProductsByIds,
   listUserCampaigns,
   type CampaignDoc,
@@ -39,8 +40,18 @@ export default function CampaignsPage() {
   const [listError, setListError] = useState<string | null>(null)
   const [listing, setListing] = useState(true)
   const [filter, setFilter] = useState<'all' | 'studio' | 'campaign'>('all')
+  const [confirmId, setConfirmId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [searchParams] = useSearchParams()
   const query = (searchParams.get('q') || '').trim().toLowerCase()
+
+  async function refreshCampaigns() {
+    if (!user) return
+    const rows = await listUserCampaigns(user.uid)
+    setCampaigns(rows)
+    const productMap = await getProductsByIds(rows.map((c) => c.productId))
+    setProductsById(productMap)
+  }
 
   useEffect(() => {
     if (!user) return
@@ -63,6 +74,22 @@ export default function CampaignsPage() {
       cancelled = true
     }
   }, [user])
+
+  async function handleDelete(campaignId: string) {
+    if (!user) return
+    setDeletingId(campaignId)
+    setListError(null)
+    try {
+      await deleteUserCampaign(user.uid, campaignId)
+      setConfirmId(null)
+      await refreshCampaigns()
+    } catch (err) {
+      console.error(err)
+      setListError(err instanceof Error ? err.message : 'Could not delete campaign.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const filtered = useMemo(() => {
     let rows = campaigns
@@ -155,8 +182,10 @@ export default function CampaignsPage() {
               const product = c.productId ? productsById.get(c.productId) : undefined
               const name = c.title || c.productName || 'Untitled'
               const done = isCampaignComplete(c.status)
+              const confirming = confirmId === c.id
+              const busy = deletingId === c.id
               return (
-                <li key={c.id}>
+                <li key={c.id} className="dash-campaign-item">
                   <Link className="dash-campaign-row" to={`/app/campaigns/${c.id}`}>
                     <ProductThumb name={name} imageUrl={product?.imageUrl} />
                     <div className="dash-campaign-meta">
@@ -171,6 +200,39 @@ export default function CampaignsPage() {
                     </span>
                     <span className="dash-campaign-time">{relativeTime(c)}</span>
                   </Link>
+                  <div className="dash-campaign-actions">
+                    {confirming ? (
+                      <>
+                        <span className="dash-campaign-confirm-label">Delete?</span>
+                        <button
+                          type="button"
+                          className="dash-campaign-delete-btn dash-campaign-delete-btn-confirm"
+                          disabled={busy}
+                          onClick={() => void handleDelete(c.id)}
+                        >
+                          {busy ? 'Deleting…' : 'Confirm'}
+                        </button>
+                        <button
+                          type="button"
+                          className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
+                          disabled={busy}
+                          onClick={() => setConfirmId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="dash-campaign-delete-btn"
+                        disabled={Boolean(deletingId)}
+                        aria-label={`Delete ${name}`}
+                        onClick={() => setConfirmId(c.id)}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </li>
               )
             })}

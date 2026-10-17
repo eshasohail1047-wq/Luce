@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import Logo from '../Logo'
 import { useAuth } from '../auth/AuthProvider'
 import { listUserCampaigns, listUserProducts, type CampaignDoc, type ProductSummary } from '../lib/campaigns'
+import { isPaidPlan, planLabel as formatPlanLabel } from '../lib/plans'
 import { campaignModeLabel } from '../lib/workspaceUi'
 
 const MAIN_NAV = [
@@ -140,7 +141,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const navigate = useNavigate()
   const displayName = user?.displayName?.trim() || user?.email?.split('@')[0] || 'Account'
   const initial = displayName.slice(0, 1).toUpperCase()
-  const planLabel = plan === 'pro' ? 'Pro plan' : 'Free plan'
+  const planLabel = `${formatPlanLabel(plan)} plan`
+  const paid = isPaidPlan(plan)
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -260,22 +262,21 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <div className="studio-rail-group">
             <p className="studio-rail-label">Create</p>
             <nav className="studio-rail-nav" aria-label="Create">
-              {CREATE_NAV.map((item) => {
-                const locked = item.pro && plan !== 'pro'
-                return (
-                  <NavLink
-                    key={item.to + item.label}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      `studio-rail-link${isActive ? ' is-active' : ''}${locked ? ' is-locked' : ''}`
-                    }
-                  >
-                    <NavIcon name={item.icon} />
-                    <span>{item.label}</span>
-                    {locked ? <span className="studio-rail-pro">Pro</span> : null}
-                  </NavLink>
-                )
-              })}
+              {CREATE_NAV.map((item) => (
+                <NavLink
+                  key={item.to + item.label}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `studio-rail-link${isActive ? ' is-active' : ''}`
+                  }
+                >
+                  <NavIcon name={item.icon} />
+                  <span>{item.label}</span>
+                  {item.pro && !paid ? (
+                    <span className="studio-rail-pro">Paid</span>
+                  ) : null}
+                </NavLink>
+              ))}
             </nav>
           </div>
 
@@ -314,7 +315,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
         <div className="studio-rail-footer">
           <div className="studio-promo">
-            {plan === 'pro' ? (
+            {paid ? (
               <>
                 <strong>Start a full campaign</strong>
                 <p>One product → images, video &amp; ads</p>
@@ -324,10 +325,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
               </>
             ) : (
               <>
-                <strong>Free: Image Studio</strong>
-                <p>Generate product images — upgrade for video &amp; ads</p>
+                <strong>Free image try</strong>
+                <p>Browse every studio — upgrade when you generate</p>
                 <Link className="studio-promo-btn" to="/app/studio/photos">
-                  Create images
+                  Try images free
                 </Link>
               </>
             )}
@@ -469,8 +470,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 </span>
                 <span className="studio-topbar-meta">
                   <strong className="studio-topbar-name">{displayName}</strong>
-                  <span className={`studio-topbar-plan${plan === 'pro' ? ' is-pro' : ''}`}>
-                    {plan === 'pro' ? <span className="studio-topbar-plan-badge">PRO</span> : null}
+                  <span className={`studio-topbar-plan${paid ? ' is-pro' : ''}`}>
+                    {paid ? (
+                      <span className="studio-topbar-plan-badge">
+                        {formatPlanLabel(plan).toUpperCase()}
+                      </span>
+                    ) : null}
                     {planLabel}
                   </span>
                 </span>
@@ -496,7 +501,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     className="studio-account-menu-item"
                     onClick={() => setMenuOpen(false)}
                   >
-                    {plan === 'pro' ? 'Manage plan' : 'Upgrade to Pro'}
+                    {paid ? 'Manage plan' : 'Upgrade plan'}
                   </Link>
                   <Link
                     role="menuitem"

@@ -220,62 +220,125 @@ export function recreateMockOutput(
   return buildOne(item.assetType, index, productName, productImageUrl, nextVersion)
 }
 
+function safeProductSlug(productName: string) {
+  return productName.replace(/[^\w\-]+/g, '_').slice(0, 40) || 'luce-pack'
+}
+
+function itemBaseName(item: MockOutput, productName: string) {
+  const safe = safeProductSlug(productName)
+  return `${safe}-${item.assetType}-v${item.version || 1}`
+}
+
+function triggerBrowserDownload(blobOrUrl: Blob | string, filename: string) {
+  const created = typeof blobOrUrl !== 'string'
+  const url = created ? URL.createObjectURL(blobOrUrl) : blobOrUrl
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  if (created) {
+    // Defer revoke so the browser can start the download
+    setTimeout(() => URL.revokeObjectURL(url), 1500)
+  }
+}
+
+function extFromMime(mime: string, fallback = 'jpg') {
+  if (mime.includes('png')) return 'png'
+  if (mime.includes('webp')) return 'webp'
+  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg'
+  if (mime.includes('gif')) return 'gif'
+  return fallback
+}
+
+/** Resolve image/video still to a Blob — works for data: URLs and same-origin /images/... */
+async function resolveAssetBlob(url: string): Promise<{ blob: Blob; ext: string }> {
+  if (url.startsWith('data:')) {
+    const match = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(url)
+    if (!match) throw new Error('Invalid data URL')
+    const mime = match[1] || 'image/png'
+    const isBase64 = Boolean(match[2])
+    const data = match[3] || ''
+    let blob: Blob
+    if (isBase64) {
+      const binary = atob(data)
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      blob = new Blob([bytes], { type: mime })
+    } else {
+      blob = new Blob([decodeURIComponent(data)], { type: mime })
+    }
+    return { blob, ext: extFromMime(mime, 'png') }
+  }
+
+  // Absolute same-origin path or relative /images/...
+  const resolved =
+    url.startsWith('/') || url.startsWith('./')
+      ? new URL(url, window.location.origin).href
+      : url
+
+  const res = await fetch(resolved)
+  if (!res.ok) throw new Error(`Failed to fetch asset (${res.status})`)
+  const blob = await res.blob()
+  const mime = blob.type || res.headers.get('content-type') || 'image/jpeg'
+  return { blob, ext: extFromMime(mime) }
+}
+
+/** Download a single result asset (image/video still → file; copy → .txt). */
+export async function downloadMockOutput(item: MockOutput, productName: string) {
+  const base = itemBaseName(item, productName)
+
+  if (item.kind === 'copy' && item.text) {
+    const blob = new Blob([item.text], { type: 'text/plain;charset=utf-8' })
+    triggerBrowserDownload(blob, `${base}.txt`)
+    return
+  }
+
+  if (!item.imageUrl) throw new Error('No file available for this asset')
+  const { blob, ext } = await resolveAssetBlob(item.imageUrl)
+  triggerBrowserDownload(blob, `${base}.${ext}`)
+}
+
+/** Download the full pack as a single ZIP (avoids multi-download browser blocks). */
 export async function downloadMockPack(
   outputs: MockOutput[],
   productName: string,
 ) {
-  const safe = productName.replace(/[^\w\-]+/g, '_').slice(0, 40) || 'luce-pack'
-  const textParts: string[] = [`LUCE demo export — ${productName}`, '']
+  const JSZip = (await import('jszip')).default
+  const zip = new JSZip()
+  const safe = safeProductSlug(productName)
+  const copyParts: string[] = [`LUCE demo export — ${productName}`, '']
+  let added = 0
 
   for (const item of outputs) {
     if (item.kind === 'copy' && item.text) {
-      textParts.push(`## ${item.label}`, item.text, '')
+      const base = itemBaseName(item, productName)
+      zip.file(`${base}.txt`, item.text)
+      copyParts.push(`## ${item.label}`, item.text, '')
+      added += 1
       continue
     }
     if (!item.imageUrl) continue
     try {
-      const res = await fetch(item.imageUrl)
-      if (!res.ok) continue
-      const blob = await res.blob()
-      const ext = blob.type.includes('png')
-        ? 'png'
-        : blob.type.includes('webp')
-          ? 'webp'
-          : 'jpg'
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${safe}-${item.assetType}-v${item.version || 1}.${ext}`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-      await new Promise((r) => setTimeout(r, 250))
-    } catch {
-      /* skip blocked remote / data URLs that fail fetch in some browsers */
-      if (item.imageUrl.startsWith('data:')) {
-        const a = document.createElement('a')
-        a.href = item.imageUrl
-        a.download = `${safe}-${item.assetType}-v${item.version || 1}.png`
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-        await new Promise((r) => setTimeout(r, 250))
-      }
+      const { blob, ext } = await resolveAssetBlob(item.imageUrl)
+      zip.file(`${itemBaseName(item, productName)}.${ext}`, blob)
+      added += 1
+    } catch (err) {
+      console.warn('Skipping asset in pack export:', item.id, err)
     }
   }
 
-  if (textParts.length > 2) {
-    const blob = new Blob([textParts.join('\n')], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${safe}-copy.txt`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
+  if (copyParts.length > 2) {
+    zip.file(`${safe}-copy.txt`, copyParts.join('\n'))
   }
+
+  if (added === 0 && copyParts.length <= 2) {
+    throw new Error('Nothing to export')
+  }
+
+  const zipBlob = await zip.generateAsync({ type: 'blob' })
+  triggerBrowserDownload(zipBlob, `${safe}-pack.zip`)
 }
 
 export type { AssetType }

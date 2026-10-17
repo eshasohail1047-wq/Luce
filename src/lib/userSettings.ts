@@ -1,8 +1,9 @@
 import { updateProfile, type User } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { requireDb } from './firebase'
+import { normalizeUserPlan, type UserPlan } from './plans'
 
-export type UserPlan = 'free' | 'pro'
+export type { UserPlan } from './plans'
 
 export type WorkspaceSettings = {
   brandName: string
@@ -25,12 +26,14 @@ export const BRAND_TONE_OPTIONS = [
 
 export async function loadUserSettings(userId: string): Promise<{
   plan: UserPlan
+  freeImageUsed: boolean
   workspace: WorkspaceSettings
 }> {
   const snap = await getDoc(doc(requireDb(), 'users', userId))
   const data = snap.data() || {}
   return {
-    plan: data.plan === 'pro' ? 'pro' : 'free',
+    plan: normalizeUserPlan(data.plan),
+    freeImageUsed: Boolean(data.freeImageUsed),
     workspace: {
       brandName: typeof data.brandName === 'string' ? data.brandName : '',
       brandTone: typeof data.brandTone === 'string' ? data.brandTone : DEFAULT_WORKSPACE.brandTone,
@@ -61,6 +64,17 @@ export async function saveUserPlan(userId: string, plan: UserPlan) {
     doc(requireDb(), 'users', userId),
     {
       plan,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  )
+}
+
+export async function markFreeImageUsed(userId: string) {
+  await setDoc(
+    doc(requireDb(), 'users', userId),
+    {
+      freeImageUsed: true,
       updatedAt: serverTimestamp(),
     },
     { merge: true },

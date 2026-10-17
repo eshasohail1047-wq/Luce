@@ -3,8 +3,11 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
-import { updateCampaignStatus } from '../lib/campaigns'
+import { deleteUserCampaign, updateCampaignStatus } from '../lib/campaigns'
 import { requireDb } from '../lib/firebase'
+import { canGenerate, type GenerateAction } from '../lib/planAccess'
+import { sendTransactionalEmail } from '../lib/transactionalEmail'
+import PaywallModal from '../components/PaywallModal'
 import {
   AD_STYLES,
   CAMPAIGN_DELIVERABLES,
@@ -24,6 +27,7 @@ import {
 } from '../lib/localDemoCampaign'
 import {
   buildMockOutputs,
+  downloadMockOutput,
   downloadMockPack,
   type MockOutput,
 } from '../lib/mockCampaign'
@@ -75,7 +79,8 @@ function activeStep(status: string) {
 
 export default function CampaignDetailPage() {
   const { campaignId } = useParams()
-  const { user, loading } = useAuth()
+  const { user, plan, freeImageUsed, markFreeImageUsed, workspace, loading } =
+    useAuth()
   const navigate = useNavigate()
   const [campaign, setCampaign] = useState<CampaignView | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -85,7 +90,35 @@ export default function CampaignDetailPage() {
   const [progress, setProgress] = useState(0)
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [replacingPhoto, setReplacingPhoto] = useState(false)
+  const [paywallOpen, setPaywallOpen] = useState(false)
+  const [paywallReason, setPaywallReason] = useState<string | undefined>()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const productFileRef = useRef<HTMLInputElement>(null)
+
+  function generateActionForCampaign(): GenerateAction {
+    if (!campaign) return 'campaign'
+    if (campaign.mode === 'studio') {
+      if (campaign.studioKind === 'videos') return 'videos'
+      if (campaign.studioKind === 'ads') return 'ads'
+      return 'photos'
+    }
+    return 'campaign'
+  }
+
+  function assertCanGenerate(): boolean {
+    if (!campaign) return false
+    const action = generateActionForCampaign()
+    const check = canGenerate({ plan, action, freeImageUsed })
+    if (check.allowed) return true
+    // Finish the one free image pack started before the try was consumed
+    if (action === 'photos' && campaign.tryFree && !campaign.outputs?.length) {
+      return true
+    }
+    setPaywallReason(check.reason)
+    setPaywallOpen(true)
+    return false
+  }
 
   useEffect(() => {
     if (!user || !campaignId) return
@@ -228,6 +261,7 @@ export default function CampaignDetailPage() {
 
   async function runMockGenerate() {
     if (!campaignId || !campaign) return
+    if (!assertCanGenerate()) return
     setActionBusy(true)
     setError(null)
     setActionMsg(null)
@@ -254,6 +288,20 @@ export default function CampaignDetailPage() {
       setCampaign((prev) =>
         prev ? { ...prev, status: 'ready', outputs: nextOutputs } : prev,
       )
+      if (
+        generateActionForCampaign() === 'photos' &&
+        plan === 'free' &&
+        (campaign.tryFree || !freeImageUsed)
+      ) {
+        await markFreeImageUsed()
+      }
+      if (workspace.notifyExports) {
+        void sendTransactionalEmail({
+          type: 'pack_ready',
+          productName: campaign.productName,
+          campaignUrl: `${window.location.origin}/app/campaigns/${campaignId}`,
+        })
+      }
       setActionMsg('Demo campaign pack ready — preview below. (No AI API used.)')
       if (nextOutputs[0]) setPreviewId(nextOutputs[0].id)
     } catch (err) {
@@ -274,12 +322,32 @@ export default function CampaignDetailPage() {
       await downloadMockPack(outputs, campaign.productName)
       await persistStatus('exported')
       setCampaign((prev) => (prev ? { ...prev, status: 'exported' } : prev))
-      setActionMsg('Export started — images and copy download to your device.')
+      if (workspace.notifyExports) {
+        void sendTransactionalEmail({
+          type: 'pack_exported',
+          productName: campaign.productName,
+          campaignUrl: `${window.location.origin}/app/campaigns/${campaignId}`,
+        })
+      }
+      setActionMsg('Pack ZIP downloaded to your device.')
     } catch (err) {
       console.error(err)
       setError(err instanceof Error ? err.message : 'Could not export pack.')
     } finally {
       setActionBusy(false)
+    }
+  }
+
+  async function runExportOne(item: MockOutput) {
+    if (!campaign) return
+    setError(null)
+    setActionMsg(null)
+    try {
+      await downloadMockOutput(item, campaign.productName)
+      setActionMsg(`Exported ${item.label}.`)
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Could not export asset.')
     }
   }
 
@@ -380,6 +448,22 @@ export default function CampaignDetailPage() {
     )
   }
 
+  async function handleDeleteCampaign() {
+    if (!user || !campaignId) return
+    setDeleting(true)
+    setError(null)
+    setActionMsg(null)
+    try {
+      await deleteUserCampaign(user.uid, campaignId)
+      navigate('/app/campaigns', { replace: true })
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Could not delete campaign.')
+      setConfirmDelete(false)
+      setDeleting(false)
+    }
+  }
+
   if (loading || fetching) {
     return (
       <div className="studio-shell studio-shell-alone">
@@ -423,6 +507,20 @@ export default function CampaignDetailPage() {
 
   return (
     <AppLayout>
+      <PaywallModal
+        open={paywallOpen}
+        title={
+          generateActionForCampaign() === 'photos'
+            ? 'Upgrade for more images'
+            : generateActionForCampaign() === 'videos'
+              ? 'Unlock video generation'
+              : generateActionForCampaign() === 'ads'
+                ? 'Unlock ads generation'
+                : 'Unlock campaign generation'
+        }
+        reason={paywallReason}
+        onClose={() => setPaywallOpen(false)}
+      />
       <main className="app-main campaign-create studio-page campaign-detail">
         {error || !campaign ? (
           <div className="dash-empty">
@@ -666,6 +764,36 @@ export default function CampaignDetailPage() {
                 <Link className="btn btn-ghost" to="/app/library">
                   Library
                 </Link>
+                {confirmDelete ? (
+                  <span className="campaign-delete-inline">
+                    <span className="dash-campaign-confirm-label">Delete this project?</span>
+                    <button
+                      type="button"
+                      className="settings-logout-btn"
+                      disabled={deleting || actionBusy}
+                      onClick={() => void handleDeleteCampaign()}
+                    >
+                      {deleting ? 'Deleting…' : 'Confirm delete'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={deleting}
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-ghost campaign-delete-trigger"
+                    disabled={actionBusy || deleting}
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             </div>
 
@@ -717,17 +845,30 @@ export default function CampaignDetailPage() {
                             <span>{item.note}</span>
                           </span>
                         </button>
-                        <button
-                          type="button"
-                          className="results-recreate-btn"
-                          disabled={actionBusy}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            openRecreateInStudio(item)
-                          }}
-                        >
-                          Recreate in studio
-                        </button>
+                        <div className="results-card-actions">
+                          <button
+                            type="button"
+                            className="results-recreate-btn"
+                            disabled={actionBusy}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void runExportOne(item)
+                            }}
+                          >
+                            Export
+                          </button>
+                          <button
+                            type="button"
+                            className="results-recreate-btn"
+                            disabled={actionBusy}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openRecreateInStudio(item)
+                            }}
+                          >
+                            Recreate in studio
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -754,18 +895,28 @@ export default function CampaignDetailPage() {
                           </p>
                         )}
                         <p className="results-preview-note">{preview.note}</p>
-                        <button
-                          type="button"
-                          className="btn btn-ghost results-preview-recreate"
-                          disabled={actionBusy}
-                          onClick={() => openRecreateInStudio(preview)}
-                        >
-                          {preview.kind === 'copy'
-                            ? 'Recreate copy in studio'
-                            : preview.kind === 'video'
-                              ? 'Recreate video in studio'
-                              : 'Recreate image in studio'}
-                        </button>
+                        <div className="results-preview-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost results-preview-recreate"
+                            disabled={actionBusy}
+                            onClick={() => void runExportOne(preview)}
+                          >
+                            Export
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost results-preview-recreate"
+                            disabled={actionBusy}
+                            onClick={() => openRecreateInStudio(preview)}
+                          >
+                            {preview.kind === 'copy'
+                              ? 'Recreate copy in studio'
+                              : preview.kind === 'video'
+                                ? 'Recreate video in studio'
+                                : 'Recreate image in studio'}
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <p className="dash-muted">Select an asset to preview.</p>

@@ -4,8 +4,8 @@ import AppLayout from '../components/AppLayout'
 import CreativeDirectionFields from '../components/CreativeDirectionFields'
 import { useAuth } from '../auth/AuthProvider'
 import { createCampaignWithProduct, type ProductSourceType } from '../lib/campaigns'
-import { canAccessFullCampaign } from '../lib/planAccess'
-import UpgradeGate from '../components/UpgradeGate'
+import { canGenerate } from '../lib/planAccess'
+import PaywallModal from '../components/PaywallModal'
 import type {
   BackgroundId,
   LightingId,
@@ -26,7 +26,7 @@ import {
 } from '../lib/localDemoCampaign'
 
 export default function NewCampaignPage() {
-  const { user, plan, loading } = useAuth()
+  const { user, plan, freeImageUsed, loading } = useAuth()
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -40,7 +40,7 @@ export default function NewCampaignPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
-  const [showDetails, setShowDetails] = useState(false)
+  const [showDetails, setShowDetails] = useState(true)
   const [selectedDeliverables, setSelectedDeliverables] = useState<DeliverableId[]>([])
   const [prompt, setPrompt] = useState('')
   const [lighting, setLighting] = useState<LightingId | ''>('')
@@ -50,6 +50,8 @@ export default function NewCampaignPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
+  const [paywallOpen, setPaywallOpen] = useState(false)
+  const [paywallReason, setPaywallReason] = useState<string | undefined>()
 
   useEffect(() => {
     if (!imageFile) {
@@ -90,12 +92,16 @@ export default function NewCampaignPage() {
     return <Navigate to="/login" replace />
   }
 
-  if (!canAccessFullCampaign(plan)) {
-    return (
-      <AppLayout>
-        <UpgradeGate title="Full Campaign" feature="Research-backed campaign packs" />
-      </AppLayout>
-    )
+  function assertCanCreate(): boolean {
+    const check = canGenerate({
+      plan,
+      action: 'campaign',
+      freeImageUsed,
+    })
+    if (check.allowed) return true
+    setPaywallReason(check.reason)
+    setPaywallOpen(true)
+    return false
   }
 
   function pickFile(file: File | null | undefined) {
@@ -167,6 +173,7 @@ export default function NewCampaignPage() {
       setError('Enter a product URL to continue.')
       return
     }
+    if (!assertCanCreate()) return
     setBusy(true)
     setError(null)
     setWarning(null)
@@ -224,7 +231,18 @@ export default function NewCampaignPage() {
 
   return (
     <AppLayout>
+      <PaywallModal
+        open={paywallOpen}
+        title="Unlock full campaigns"
+        reason={paywallReason}
+        onClose={() => setPaywallOpen(false)}
+      />
       <main className="app-main campaign-create studio-page">
+        {plan === 'free' ? (
+          <p className="studio-paid-banner" role="status">
+            Explore the full campaign builder — upgrade is only required when you create.
+          </p>
+        ) : null}
         <header className="studio-hero tone-campaign">
           <div className="studio-hero-copy">
             <p className="studio-hero-kicker">Full Campaign</p>

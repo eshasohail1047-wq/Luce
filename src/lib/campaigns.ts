@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -28,6 +29,11 @@ import {
   type StudioKind,
   type VideoStyleId,
 } from './deliverables'
+import {
+  clearCampaignStash,
+  deleteLocalCampaign,
+  isLocalCampaignId,
+} from './localDemoCampaign'
 
 export type CampaignStatus =
   | 'draft'
@@ -441,6 +447,30 @@ export async function updateCampaignStatus(
     updatedAt: serverTimestamp(),
     ...extra,
   })
+}
+
+/** Deletes a campaign owned by `userId` (Firestore or local demo). Clears stashed media. */
+export async function deleteUserCampaign(userId: string, campaignId: string) {
+  const id = campaignId.trim()
+  if (!userId || !id) throw new Error('Missing campaign.')
+
+  if (isLocalCampaignId(id)) {
+    deleteLocalCampaign(id)
+    return
+  }
+
+  const ref = doc(requireDb(), 'campaigns', id)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) {
+    clearCampaignStash(id)
+    throw new Error('Campaign not found.')
+  }
+  if (String(snap.data().userId ?? '') !== userId) {
+    throw new Error('You do not have access to this campaign.')
+  }
+
+  await deleteDoc(ref)
+  clearCampaignStash(id)
 }
 
 /** Loads real product records — no placeholder images. */

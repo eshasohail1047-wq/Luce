@@ -3,10 +3,9 @@ import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
 import { listUserProducts, type ProductSummary } from '../lib/campaigns'
-import type { UserPlan } from '../lib/userSettings'
 import { relativeTime } from '../lib/workspaceUi'
 
-function ProductCard({ product, plan }: { product: ProductSummary; plan: UserPlan }) {
+function ProductCard({ product }: { product: ProductSummary }) {
   return (
     <article className="product-card">
       <div className="product-card-media">
@@ -38,9 +37,9 @@ function ProductCard({ product, plan }: { product: ProductSummary; plan: UserPla
           </Link>
           <Link
             className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
-            to={plan === 'pro' ? '/app/campaigns/new' : '/app/settings#plan'}
+            to="/app/campaigns/new"
           >
-            {plan === 'pro' ? 'Full campaign' : 'Upgrade for campaigns'}
+            Full campaign
           </Link>
         </div>
       </div>
@@ -49,7 +48,7 @@ function ProductCard({ product, plan }: { product: ProductSummary; plan: UserPla
 }
 
 export default function ProductsPage() {
-  const { user, plan, loading } = useAuth()
+  const { user, loading } = useAuth()
   const [products, setProducts] = useState<ProductSummary[]>([])
   const [listError, setListError] = useState<string | null>(null)
   const [listing, setListing] = useState(true)
@@ -113,16 +112,16 @@ export default function ProductsPage() {
               </Link>
               <Link
                 className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
-                to={plan === 'pro' ? '/app/campaigns/new' : '/app/settings#plan'}
+                to="/app/campaigns/new"
               >
-                {plan === 'pro' ? 'Full campaign' : 'Upgrade to Pro'}
+                Full campaign
               </Link>
             </div>
           </div>
         ) : (
           <div className="product-grid">
             {products.map((product) => (
-              <ProductCard key={product.id} product={product} plan={plan} />
+              <ProductCard key={product.id} product={product} />
             ))}
           </div>
         )}

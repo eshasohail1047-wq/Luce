@@ -8,6 +8,7 @@ import {
   type CampaignDoc,
   type ProductSummary,
 } from '../lib/campaigns'
+import { isPaidPlan } from '../lib/plans'
 import {
   campaignModeLabel,
   isCampaignComplete,
@@ -128,11 +129,11 @@ export default function DashboardPage() {
             <div className="dash-hero-card-actions">
               <Link className="dash-create-btn" to="/app/studio/photos">
                 <span aria-hidden="true">+</span>{' '}
-                {plan === 'pro' ? 'Add your product' : 'Create free images'}
+                {isPaidPlan(plan) ? 'Add your product' : 'Try free images'}
               </Link>
-              {plan !== 'pro' ? (
+              {!isPaidPlan(plan) ? (
                 <Link className="dash-create-btn dash-create-btn-ghost" to="/app/settings#plan">
-                  Upgrade to Pro
+                  View plans
                 </Link>
               ) : null}
             </div>
@@ -148,11 +149,11 @@ export default function DashboardPage() {
           </div>
           <div className="dash-paths">
             {CREATE_PATHS.map((path) => {
-              const locked = path.pro && plan !== 'pro'
+              const paidHint = path.pro && !isPaidPlan(plan)
               return (
                 <Link
                   key={path.to + path.label}
-                  className={`dash-path${locked ? ' is-locked' : ''}`}
+                  className="dash-path"
                   to={path.to}
                 >
                   <img className="dash-path-img" src={path.image} alt="" />
@@ -160,9 +161,11 @@ export default function DashboardPage() {
                   <span className="dash-path-copy">
                     <strong>
                       {path.label}
-                      {locked ? <span className="dash-path-pro">Pro</span> : null}
+                      {paidHint ? <span className="dash-path-pro">Paid</span> : null}
                     </strong>
-                    <span>{locked ? 'Upgrade to unlock' : path.hint}</span>
+                    <span>
+                      {paidHint ? 'Browse free — pay when you generate' : path.hint}
+                    </span>
                   </span>
                 </Link>
               )

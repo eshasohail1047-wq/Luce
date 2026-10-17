@@ -30,19 +30,23 @@ import { requestPasswordReset } from '../lib/resetPassword'
 import {
   DEFAULT_WORKSPACE,
   loadUserSettings,
+  markFreeImageUsed as saveFreeImageUsed,
   saveDisplayName,
   saveUserPlan,
   saveWorkspaceSettings,
   type UserPlan,
   type WorkspaceSettings,
 } from '../lib/userSettings'
+import { isPaidPlan, normalizeUserPlan, planLabel } from '../lib/plans'
 import { resetPostLoginCache } from '../lib/postLogin'
+import { sendTransactionalEmail } from '../lib/transactionalEmail'
 
 export type { UserPlan } from '../lib/userSettings'
 
 type AuthContextValue = {
   user: User | null
   plan: UserPlan
+  freeImageUsed: boolean
   workspace: WorkspaceSettings
   loading: boolean
   error: string | null
@@ -59,13 +63,10 @@ type AuthContextValue = {
   ) => Promise<{ sent: boolean; googleOnly: boolean; reason?: string }>
   updateDisplayName: (name: string) => Promise<void>
   updatePlan: (plan: UserPlan) => Promise<void>
+  markFreeImageUsed: () => Promise<void>
   updateWorkspace: (workspace: Partial<WorkspaceSettings>) => Promise<void>
   signOut: () => Promise<void>
   clearError: () => void
-}
-
-function normalizePlan(value: unknown): UserPlan {
-  return value === 'pro' ? 'pro' : 'free'
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -145,10 +146,13 @@ function detectProvider(user: User): 'google' | 'password' {
   return 'password'
 }
 
-async function ensureUserDocument(user: User): Promise<UserPlan> {
+async function ensureUserDocument(
+  user: User,
+): Promise<{ plan: UserPlan; isNew: boolean; welcomeEmailSent: boolean }> {
   const ref = doc(requireDb(), 'users', user.uid)
   const snap = await getDoc(ref)
   if (snap.exists()) {
+    const data = snap.data() || {}
     await setDoc(
       ref,
       {
@@ -159,7 +163,11 @@ async function ensureUserDocument(user: User): Promise<UserPlan> {
       },
       { merge: true },
     )
-    return normalizePlan(snap.data()?.plan)
+    return {
+      plan: normalizeUserPlan(data.plan),
+      isNew: false,
+      welcomeEmailSent: Boolean(data.welcomeEmailSent),
+    }
   }
 
   await setDoc(ref, {
@@ -167,11 +175,30 @@ async function ensureUserDocument(user: User): Promise<UserPlan> {
     displayName: user.displayName ?? '',
     photoURL: user.photoURL ?? '',
     plan: 'free',
+    freeImageUsed: false,
+    welcomeEmailSent: false,
     authProvider: detectProvider(user),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
-  return 'free'
+  return { plan: 'free', isNew: true, welcomeEmailSent: false }
+}
+
+async function maybeSendWelcomeEmail(user: User, alreadySent: boolean) {
+  if (alreadySent || !user.email) return
+  try {
+    await sendTransactionalEmail({
+      type: 'welcome',
+      name: user.displayName || '',
+    })
+    await setDoc(
+      doc(requireDb(), 'users', user.uid),
+      { welcomeEmailSent: true, updatedAt: serverTimestamp() },
+      { merge: true },
+    )
+  } catch (err) {
+    console.warn('[auth] welcome email failed', err)
+  }
 }
 
 async function syncProfile(user: User) {
@@ -199,6 +226,7 @@ async function syncProfile(user: User) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [plan, setPlan] = useState<UserPlan>('free')
+  const [freeImageUsed, setFreeImageUsed] = useState(false)
   const [workspace, setWorkspace] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -228,7 +256,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const redirect = await getRedirectResult(auth)
         if (redirect?.user) {
           try {
-            await ensureUserDocument(redirect.user)
+            const created = await ensureUserDocument(redirect.user)
+            if (!created.welcomeEmailSent) {
+              void maybeSendWelcomeEmail(redirect.user, false)
+            }
           } catch (syncErr) {
             console.error('[auth] profile sync failed after redirect', syncErr)
             if (active) {
@@ -251,21 +282,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(safety)
       if (next) {
         try {
-          const nextPlan = await ensureUserDocument(next)
+          const created = await ensureUserDocument(next)
           const settings = await loadUserSettings(next.uid)
           if (active) {
-            setPlan(settings.plan || nextPlan)
+            setPlan(settings.plan || created.plan)
+            setFreeImageUsed(settings.freeImageUsed)
             setWorkspace(settings.workspace)
+          }
+          // Welcome once per account (first signup — not every sign-in)
+          if (!created.welcomeEmailSent) {
+            void maybeSendWelcomeEmail(next, false)
           }
         } catch (err) {
           console.error('[auth] failed to sync user doc', err)
           if (active) {
             setPlan('free')
+            setFreeImageUsed(false)
             setWorkspace(DEFAULT_WORKSPACE)
           }
         }
       } else if (active) {
         setPlan('free')
+        setFreeImageUsed(false)
         setWorkspace(DEFAULT_WORKSPACE)
       }
     })
@@ -281,6 +319,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       plan,
+      freeImageUsed,
       workspace,
       loading,
       error,
@@ -292,8 +331,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async updatePlan(nextPlan) {
         if (!user) throw new Error('Not signed in.')
+        const previous = plan
         await saveUserPlan(user.uid, nextPlan)
         setPlan(nextPlan)
+        if (isPaidPlan(nextPlan) && nextPlan !== previous) {
+          void sendTransactionalEmail({
+            type: 'plan_upgraded',
+            name: user.displayName || '',
+            planName: planLabel(nextPlan),
+          })
+        }
+      },
+      async markFreeImageUsed() {
+        if (!user) throw new Error('Not signed in.')
+        await saveFreeImageUsed(user.uid)
+        setFreeImageUsed(true)
       },
       async updateWorkspace(next) {
         if (!user) throw new Error('Not signed in.')
@@ -454,7 +506,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await firebaseSignOut(requireAuth())
       },
     }),
-    [user, plan, workspace, loading, error],
+    [user, plan, freeImageUsed, workspace, loading, error],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

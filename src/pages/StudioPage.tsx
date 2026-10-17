@@ -35,14 +35,14 @@ import {
 } from '../lib/localDemoCampaign'
 import { recreateMockOutput, type MockOutput } from '../lib/mockCampaign'
 import { consumePendingProduct } from '../lib/pendingProduct'
-import { canAccessStudio } from '../lib/planAccess'
+import { canGenerate, type GenerateAction } from '../lib/planAccess'
 import {
   clearRecreateSession,
   dataUrlToFile,
   loadRecreateSession,
   type RecreateSession,
 } from '../lib/recreateSession'
-import UpgradeGate from '../components/UpgradeGate'
+import PaywallModal from '../components/PaywallModal'
 
 const VALID_KINDS: StudioKind[] = ['photos', 'videos', 'ads']
 
@@ -54,7 +54,7 @@ export default function StudioPage() {
   const { kind: kindParam } = useParams()
   const kind = isStudioKind(kindParam) ? kindParam : null
   const [searchParams] = useSearchParams()
-  const { user, plan, loading } = useAuth()
+  const { user, plan, freeImageUsed, markFreeImageUsed, loading } = useAuth()
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -66,7 +66,7 @@ export default function StudioPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
-  const [showDetails, setShowDetails] = useState(false)
+  const [showDetails, setShowDetails] = useState(true)
   const [photoStyles, setPhotoStyles] = useState<PhotoStyleId[]>([])
   const [videoStyles, setVideoStyles] = useState<VideoStyleId[]>([])
   const [adStyles, setAdStyles] = useState<AdStyleId[]>([])
@@ -80,7 +80,32 @@ export default function StudioPage() {
   const [warning, setWarning] = useState<string | null>(null)
   const [tryFree, setTryFree] = useState(false)
   const [recreate, setRecreate] = useState<RecreateSession | null>(null)
+  const [paywallOpen, setPaywallOpen] = useState(false)
+  const [paywallReason, setPaywallReason] = useState<string | undefined>()
   const isRecreate = Boolean(recreate) || searchParams.get('recreate') === '1'
+
+  function generateActionForKind(): GenerateAction {
+    if (isRecreate) {
+      if (kind === 'videos') return 'recreate-videos'
+      if (kind === 'ads') return 'recreate-ads'
+      return 'recreate-photos'
+    }
+    if (kind === 'videos') return 'videos'
+    if (kind === 'ads') return 'ads'
+    return 'photos'
+  }
+
+  function assertCanGenerate(): boolean {
+    const check = canGenerate({
+      plan,
+      action: generateActionForKind(),
+      freeImageUsed,
+    })
+    if (check.allowed) return true
+    setPaywallReason(check.reason)
+    setPaywallOpen(true)
+    return false
+  }
 
   useEffect(() => {
     if (!imageFile) {
@@ -191,19 +216,6 @@ export default function StudioPage() {
     return <Navigate to="/app/studio/photos" replace />
   }
 
-  if (!canAccessStudio(plan, kind)) {
-    const titles: Record<StudioKind, { title: string; feature: string }> = {
-      photos: { title: 'Image Studio', feature: 'Product images' },
-      videos: { title: 'Video Studio', feature: 'Product videos & UGC' },
-      ads: { title: 'Ads & Social', feature: 'Ad creatives & social copy' },
-    }
-    return (
-      <AppLayout>
-        <UpgradeGate title={titles[kind].title} feature={titles[kind].feature} />
-      </AppLayout>
-    )
-  }
-
   function pickFile(file: File | null | undefined) {
     setError(null)
     setWarning(null)
@@ -311,11 +323,15 @@ export default function StudioPage() {
         setError('Describe what you want changed before recreating.')
         return
       }
+      if (!assertCanGenerate()) return
       setBusy(true)
       setError(null)
       setWarning(null)
       try {
         await new Promise((r) => setTimeout(r, 700))
+        if (generateActionForKind() === 'recreate-photos' && plan === 'free' && !freeImageUsed) {
+          await markFreeImageUsed()
+        }
         await applyRecreateAndReturn(session)
       } catch (err) {
         console.error(err)
@@ -333,6 +349,7 @@ export default function StudioPage() {
       setError('Add a product URL to continue.')
       return
     }
+    if (!assertCanGenerate()) return
     setBusy(true)
     setError(null)
     setWarning(null)
@@ -355,6 +372,8 @@ export default function StudioPage() {
       (imageFile ? imageFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '') ||
       'Untitled product'
 
+    const isFreeTry = kind === 'photos' && plan === 'free' && !freeImageUsed
+
     try {
       const result = await withTimeout(
         createStudioProject({
@@ -369,7 +388,7 @@ export default function StudioPage() {
           photoStyles,
           videoStyles,
           adStyles,
-          tryFree: tryFree && kind === 'photos',
+          tryFree: isFreeTry,
           creativeDirection: {
             prompt,
             lighting: lighting || undefined,
@@ -382,6 +401,8 @@ export default function StudioPage() {
         'create-studio',
       )
       if (imageDataUrl) stashCampaignImage(result.campaignId, imageDataUrl)
+      // Reserve the free image try when the project is started
+      if (isFreeTry) await markFreeImageUsed()
       navigate(`/app/campaigns/${result.campaignId}`, { replace: true })
     } catch (err) {
       console.warn('[Studio] falling back to local demo project', err)
@@ -402,11 +423,12 @@ export default function StudioPage() {
           deliverables: [],
           selectedAssets,
           includeStrategy: false,
-          tryFree: tryFree && kind === 'photos',
+          tryFree: isFreeTry,
           imageUrl,
           createdAt: Date.now(),
         })
         if (imageUrl) stashCampaignImage(id, imageUrl)
+        if (isFreeTry) await markFreeImageUsed()
         navigate(`/app/campaigns/${id}`, { replace: true })
       } catch (localErr) {
         console.error(localErr)
@@ -497,7 +519,25 @@ export default function StudioPage() {
 
   return (
     <AppLayout>
+      <PaywallModal
+        open={paywallOpen}
+        title={
+          kind === 'videos'
+            ? 'Unlock Video Studio generation'
+            : kind === 'ads'
+              ? 'Unlock Ads & Social generation'
+              : 'Upgrade for more images'
+        }
+        reason={paywallReason}
+        onClose={() => setPaywallOpen(false)}
+      />
       <main className={`app-main campaign-create studio-page studio-page-${studioMeta.accent}`}>
+        {plan === 'free' && kind !== 'photos' ? (
+          <p className="studio-paid-banner" role="status">
+            Explore the full {kind === 'videos' ? 'video' : 'ads'} workflow — upgrade is only
+            required when you generate.
+          </p>
+        ) : null}
         <header className={`studio-hero tone-${studioMeta.accent}`}>
           <div className="studio-hero-copy">
             <p className="studio-hero-kicker">{studioMeta.kicker}</p>

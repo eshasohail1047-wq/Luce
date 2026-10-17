@@ -101,6 +101,67 @@ function localApiRoutes(): Plugin {
           return
         }
 
+        if (url === '/api/transactional') {
+          if (req.method !== 'POST') {
+            res.statusCode = 405
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Method not allowed' }))
+            return
+          }
+          try {
+            const body = await readJsonBody(req)
+            const { verifyBearerToken } = await import('./api/_lib/firebaseAdmin.ts')
+            const { sendTransactionalEmail } = await import(
+              './api/_lib/transactional.ts'
+            )
+            const decoded = await verifyBearerToken(req.headers.authorization)
+            if (!decoded?.email) {
+              res.statusCode = 401
+              res.setHeader('Content-Type', 'application/json')
+              res.end(
+                JSON.stringify({
+                  error: 'Sign in required to send account emails.',
+                }),
+              )
+              return
+            }
+            const type = String(body.type ?? '')
+            const allowed = [
+              'welcome',
+              'plan_upgraded',
+              'pack_ready',
+              'pack_exported',
+            ]
+            if (!allowed.includes(type)) {
+              res.statusCode = 400
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ error: 'Unknown email type' }))
+              return
+            }
+            const result = await sendTransactionalEmail({
+              type: type as
+                | 'welcome'
+                | 'plan_upgraded'
+                | 'pack_ready'
+                | 'pack_exported',
+              email: decoded.email,
+              name: String(body.name ?? decoded.name ?? ''),
+              planName: String(body.planName ?? ''),
+              productName: String(body.productName ?? ''),
+              campaignUrl: String(body.campaignUrl ?? ''),
+            })
+            res.statusCode = result.status
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result.body))
+          } catch (err) {
+            console.error('[vite] transactional failed', err)
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Could not send email. Try again.' }))
+          }
+          return
+        }
+
         return next()
       })
     },
