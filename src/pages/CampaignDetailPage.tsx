@@ -9,10 +9,8 @@ import { canGenerate, type GenerateAction } from '../lib/planAccess'
 import { sendTransactionalEmail } from '../lib/transactionalEmail'
 import PaywallModal from '../components/PaywallModal'
 import {
-  AD_STYLES,
   CAMPAIGN_DELIVERABLES,
-  PHOTO_STYLES,
-  VIDEO_STYLES,
+  formatLabel,
   type DeliverableId,
   type StudioKind,
 } from '../lib/deliverables'
@@ -25,6 +23,13 @@ import {
   stashCampaignImage,
   updateLocalCampaign,
 } from '../lib/localDemoCampaign'
+import type { CreativeDirection } from '../lib/creativeDirection'
+import { sanitizeCreativeDirection } from '../lib/creativeDirection'
+import {
+  isImageAssetKind,
+  requestGenerateImages,
+  type ImageAssetKind,
+} from '../lib/generateImages'
 import {
   buildMockOutputs,
   downloadMockOutput,
@@ -51,16 +56,28 @@ type CampaignView = {
   tryFree: boolean
   imageUrl?: string
   outputs?: MockOutput[]
+  creativeDirection?: CreativeDirection
+}
+
+function mergeAiImages(
+  outputs: MockOutput[],
+  aiAssets: { type: ImageAssetKind; imageDataUrl: string; label?: string }[],
+): MockOutput[] {
+  const byType = new Map(aiAssets.map((a) => [a.type, a]))
+  return outputs.map((item) => {
+    if (!isImageAssetKind(item.assetType)) return item
+    const ai = byType.get(item.assetType)
+    if (!ai) return item
+    return {
+      ...item,
+      imageUrl: ai.imageDataUrl,
+      note: 'AI-generated · packaging fidelity from your product photo',
+    }
+  })
 }
 
 function assetLabel(id: string) {
-  const photo = PHOTO_STYLES.find((s) => s.id === id)
-  if (photo) return photo.label
-  const video = VIDEO_STYLES.find((s) => s.id === id)
-  if (video) return video.label
-  const ad = AD_STYLES.find((s) => s.id === id)
-  if (ad) return ad.label
-  return id.replaceAll('_', ' ')
+  return formatLabel(id) || id.replaceAll('_', ' ')
 }
 
 const STEPS = [
@@ -151,6 +168,7 @@ export default function CampaignDetailPage() {
               outputs:
                 loadStashedCampaignOutputs<MockOutput[]>(campaignId) ||
                 local.outputs,
+              creativeDirection: undefined,
             })
           }
           return
@@ -208,6 +226,11 @@ export default function CampaignDetailPage() {
             tryFree: Boolean(data.tryFree),
             imageUrl,
             outputs: stashedOutputs?.length ? stashedOutputs : savedOutputs,
+            creativeDirection: data.creativeDirection
+              ? sanitizeCreativeDirection(
+                  data.creativeDirection as CreativeDirection,
+                )
+              : undefined,
           })
         }
       } catch (err) {
@@ -270,18 +293,49 @@ export default function CampaignDetailPage() {
       await persistStatus('generating')
       setCampaign((prev) => (prev ? { ...prev, status: 'generating' } : prev))
 
-      for (const value of [28, 52, 74, 90]) {
+      for (const value of [28, 52, 74]) {
         await new Promise((r) => setTimeout(r, 420))
         setProgress(value)
       }
 
-      const nextOutputs = buildMockOutputs({
+      let nextOutputs = buildMockOutputs({
         productName: campaign.productName,
         productImageUrl: campaign.imageUrl,
         selectedAssets: campaign.selectedAssets,
         studioKind: campaign.studioKind,
         mode: campaign.mode,
       })
+
+      const imageKinds = nextOutputs
+        .map((o) => o.assetType)
+        .filter(isImageAssetKind)
+
+      let aiWarning: string | null = null
+      if (imageKinds.length > 0) {
+        setProgress(82)
+        setActionMsg('Generating AI product images…')
+        try {
+          const ai = await requestGenerateImages({
+            productName: campaign.productName,
+            productImage: campaign.imageUrl,
+            creativeDirection: campaign.creativeDirection,
+            assets: imageKinds,
+          })
+          nextOutputs = mergeAiImages(nextOutputs, ai.assets)
+          if (ai.partialErrors?.length) {
+            aiWarning = `Some AI images failed (${ai.partialErrors.length}); demo visuals kept for those.`
+          }
+        } catch (err) {
+          console.warn('[generate] OpenRouter fallback to mock', err)
+          aiWarning =
+            err instanceof Error
+              ? err.message
+              : 'AI images unavailable — using demo visuals.'
+        }
+      } else {
+        setProgress(90)
+        await new Promise((r) => setTimeout(r, 200))
+      }
 
       await persistStatus('ready', { outputs: nextOutputs })
       setProgress(100)
@@ -302,7 +356,21 @@ export default function CampaignDetailPage() {
           campaignUrl: `${window.location.origin}/app/campaigns/${campaignId}`,
         })
       }
-      setActionMsg('Demo campaign pack ready — preview below. (No AI API used.)')
+      const usedAi = nextOutputs.some(
+        (o) =>
+          isImageAssetKind(o.assetType) &&
+          o.imageUrl?.startsWith('data:image/') &&
+          o.note?.includes('AI-generated'),
+      )
+      setActionMsg(
+        usedAi
+          ? aiWarning
+            ? `Pack ready with AI images. ${aiWarning}`
+            : 'Pack ready — AI product images generated. Videos and copy stay demo.'
+          : aiWarning
+            ? `Demo pack ready. ${aiWarning}`
+            : 'Demo campaign pack ready — preview below.',
+      )
       if (nextOutputs[0]) setPreviewId(nextOutputs[0].id)
     } catch (err) {
       console.error(err)
@@ -376,7 +444,9 @@ export default function CampaignDetailPage() {
       let nextOutputs = campaign.outputs
       if (nextOutputs && nextOutputs.length > 0) {
         nextOutputs = nextOutputs.map((item) =>
-          item.assetType === 'product_image' || item.assetType === 'ad_creative'
+          item.assetType === 'photo_studio_packshot' ||
+          item.assetType === 'product_image' ||
+          item.assetType === 'ad_creative'
             ? {
                 ...item,
                 imageUrl: dataUrl,
@@ -691,12 +761,12 @@ export default function CampaignDetailPage() {
               </h2>
               <p>
                 {readyToGenerate
-                  ? 'This creates a realistic preview pack so you can see results and export — no AI API calls.'
+                  ? 'Generates your pack: AI images when configured, with demo fallback for videos, copy, and any failed stills.'
                   : campaign.status === 'generating'
                     ? 'Building studio, lifestyle, and promo-style previews…'
                     : campaign.status === 'ready'
-                      ? 'Preview each asset, then export the demo pack to your device.'
-                      : 'Your demo pack was exported. You can generate again anytime.'}
+                      ? 'Preview each asset, then export the pack to your device.'
+                      : 'Your pack was exported. You can generate again anytime.'}
               </p>
 
               {campaign.status === 'generating' && progress > 0 ? (
@@ -821,7 +891,16 @@ export default function CampaignDetailPage() {
                           onClick={() => setPreviewId(item.id)}
                         >
                           <span className="results-card-media">
-                            {item.imageUrl ? (
+                            {item.kind === 'video' && item.videoUrl ? (
+                              <video
+                                src={item.videoUrl}
+                                poster={item.imageUrl}
+                                muted
+                                loop
+                                playsInline
+                                preload="metadata"
+                              />
+                            ) : item.imageUrl ? (
                               <img src={item.imageUrl} alt="" />
                             ) : (
                               <span className="results-card-fallback">
@@ -880,7 +959,20 @@ export default function CampaignDetailPage() {
                           {preview.label}
                           {(preview.version || 1) > 1 ? ` · v${preview.version}` : ''}
                         </p>
-                        {preview.imageUrl ? (
+                        {preview.kind === 'video' && preview.videoUrl ? (
+                          <div className="results-preview-media results-preview-video">
+                            <video
+                              key={preview.id}
+                              src={preview.videoUrl}
+                              poster={preview.imageUrl}
+                              controls
+                              autoPlay
+                              muted
+                              loop
+                              playsInline
+                            />
+                          </div>
+                        ) : preview.imageUrl ? (
                           <div className="results-preview-media">
                             <img src={preview.imageUrl} alt={preview.label} />
                           </div>
@@ -890,7 +982,7 @@ export default function CampaignDetailPage() {
                         ) : (
                           <p className="dash-muted">
                             {preview.kind === 'video'
-                              ? 'Video still preview — recreate for another look.'
+                              ? 'Playing your selected video format — recreate for another look.'
                               : 'Image preview for review before export.'}
                           </p>
                         )}

@@ -33,8 +33,8 @@ export const PLAN_OPTIONS: PlanOption[] = [
     yearly: 23,
     perks: [
       '5 campaigns / month',
-      'Studio + lifestyle photos',
-      '3 UGC videos / campaign',
+      'Up to 5 image formats / campaign',
+      'Up to 3 video formats / campaign',
       'Social captions & hooks',
       'ZIP export, no watermark',
     ],
@@ -48,10 +48,10 @@ export const PLAN_OPTIONS: PlanOption[] = [
     featured: true,
     perks: [
       '20 campaigns / month',
-      'Full image + video studios',
+      'Up to 8 image formats / campaign',
+      'Up to 5 video formats / campaign',
       'Ads & social creatives',
       'Priority generation queue',
-      'Brand workspace settings',
     ],
   },
   {
@@ -62,10 +62,10 @@ export const PLAN_OPTIONS: PlanOption[] = [
     yearly: 119,
     perks: [
       'Unlimited campaigns',
-      'All studios unlocked',
+      'Up to 12 image formats / campaign',
+      'Up to 8 video formats / campaign',
       'Team seats ready',
       'Priority support',
-      'Advanced brand controls',
     ],
   },
 ]

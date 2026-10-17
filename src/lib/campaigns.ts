@@ -19,6 +19,7 @@ import {
 } from './creativeDirection'
 import {
   resolveAdStyles,
+  resolveCampaignFromFormats,
   resolveDeliverables,
   resolvePhotoStyles,
   resolveVideoStyles,
@@ -79,8 +80,13 @@ export type CreateCampaignInput = {
   price?: string
   category?: string
   imageFile?: File | null
-  /** Empty / omitted = full default pack */
+  /** Legacy pack checkboxes — prefer photoStyles / videoStyles */
   deliverables?: DeliverableId[]
+  photoStyles?: PhotoStyleId[]
+  videoStyles?: VideoStyleId[]
+  includeSocial?: boolean
+  includeAds?: boolean
+  includeStrategy?: boolean
   creativeDirection?: CreativeDirection
 }
 
@@ -225,7 +231,16 @@ export async function createCampaignWithProduct(input: CreateCampaignInput) {
     assertImageFile(input.imageFile, false)
   }
 
-  const resolved = resolveDeliverables(input.deliverables ?? [])
+  const resolved =
+    input.photoStyles !== undefined || input.videoStyles !== undefined
+      ? resolveCampaignFromFormats({
+          photoStyles: input.photoStyles ?? [],
+          videoStyles: input.videoStyles ?? [],
+          includeSocial: input.includeSocial,
+          includeAds: input.includeAds,
+          includeStrategy: input.includeStrategy,
+        })
+      : resolveDeliverables(input.deliverables ?? [])
 
   const { productRef, imagePaths, imageUrls, storageWarning } = await createProductRecord({
     userId: input.userId,

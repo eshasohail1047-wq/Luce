@@ -162,6 +162,85 @@ function localApiRoutes(): Plugin {
           return
         }
 
+        if (url === '/api/generate-images') {
+          if (req.method !== 'POST') {
+            res.statusCode = 405
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Method not allowed' }))
+            return
+          }
+          try {
+            const body = await readJsonBody(req)
+            const { verifyBearerToken } = await import('./api/_lib/firebaseAdmin.ts')
+            const {
+              generateCampaignImages,
+              IMAGE_ASSET_KINDS,
+            } = await import('./api/_lib/generateImages.ts')
+            const decoded = await verifyBearerToken(req.headers.authorization)
+            if (!decoded?.uid) {
+              res.statusCode = 401
+              res.setHeader('Content-Type', 'application/json')
+              res.end(
+                JSON.stringify({
+                  error: 'Sign in required to generate images.',
+                }),
+              )
+              return
+            }
+            const assetsRaw = Array.isArray(body.assets) ? body.assets : []
+            const assets = assetsRaw
+              .map((a) => String(a))
+              .filter((a): a is (typeof IMAGE_ASSET_KINDS)[number] =>
+                (IMAGE_ASSET_KINDS as string[]).includes(a),
+              )
+            const cd =
+              body.creativeDirection && typeof body.creativeDirection === 'object'
+                ? (body.creativeDirection as Record<string, unknown>)
+                : undefined
+            const result = await generateCampaignImages({
+              productName: String(body.productName ?? ''),
+              productImage:
+                typeof body.productImage === 'string'
+                  ? body.productImage
+                  : undefined,
+              creativeDirection: cd
+                ? {
+                    prompt: typeof cd.prompt === 'string' ? cd.prompt : undefined,
+                    lighting:
+                      typeof cd.lighting === 'string' ? cd.lighting : undefined,
+                    background:
+                      typeof cd.background === 'string'
+                        ? cd.background
+                        : undefined,
+                    mood: typeof cd.mood === 'string' ? cd.mood : undefined,
+                    styleTheme:
+                      typeof cd.styleTheme === 'string'
+                        ? cd.styleTheme
+                        : undefined,
+                  }
+                : undefined,
+              assets,
+              recreateNote:
+                typeof body.recreateNote === 'string'
+                  ? body.recreateNote
+                  : undefined,
+            })
+            res.statusCode = result.status
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result.body))
+          } catch (err) {
+            console.error('[vite] generate-images failed', err)
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                error: 'Image generation failed on server. Try again.',
+              }),
+            )
+          }
+          return
+        }
+
         return next()
       })
     },

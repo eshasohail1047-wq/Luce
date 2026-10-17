@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'rea
 import { Navigate, useNavigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import CreativeDirectionFields from '../components/CreativeDirectionFields'
+import FormatPickGrid from '../components/FormatPickGrid'
 import { useAuth } from '../auth/AuthProvider'
 import { createCampaignWithProduct, type ProductSourceType } from '../lib/campaigns'
 import { canGenerate } from '../lib/planAccess'
+import { getPlanLimits } from '../lib/planLimits'
 import PaywallModal from '../components/PaywallModal'
 import type {
   BackgroundId,
@@ -13,9 +15,13 @@ import type {
   StyleThemeId,
 } from '../lib/creativeDirection'
 import {
-  CAMPAIGN_DELIVERABLES,
-  resolveDeliverables,
-  type DeliverableId,
+  DEFAULT_PHOTO_STYLES,
+  DEFAULT_VIDEO_STYLES,
+  PHOTO_STYLES,
+  VIDEO_STYLES,
+  resolveCampaignFromFormats,
+  type PhotoStyleId,
+  type VideoStyleId,
 } from '../lib/deliverables'
 import {
   fileToDataUrl,
@@ -41,7 +47,11 @@ export default function NewCampaignPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showDetails, setShowDetails] = useState(true)
-  const [selectedDeliverables, setSelectedDeliverables] = useState<DeliverableId[]>([])
+  const [photoStyles, setPhotoStyles] = useState<PhotoStyleId[]>([])
+  const [videoStyles, setVideoStyles] = useState<VideoStyleId[]>([])
+  const [includeSocial, setIncludeSocial] = useState(true)
+  const [includeAds, setIncludeAds] = useState(false)
+  const [includeStrategy, setIncludeStrategy] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [lighting, setLighting] = useState<LightingId | ''>('')
   const [background, setBackground] = useState<BackgroundId | ''>('')
@@ -52,6 +62,7 @@ export default function NewCampaignPage() {
   const [warning, setWarning] = useState<string | null>(null)
   const [paywallOpen, setPaywallOpen] = useState(false)
   const [paywallReason, setPaywallReason] = useState<string | undefined>()
+  const limits = getPlanLimits(plan)
 
   useEffect(() => {
     if (!imageFile) {
@@ -129,18 +140,18 @@ export default function NewCampaignPage() {
     pickFile(e.dataTransfer.files?.[0])
   }
 
-  function toggleDeliverable(id: DeliverableId) {
-    setSelectedDeliverables((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
-  }
-
   async function createLocalDemoAndGo(imageDataUrl?: string) {
     const displayName =
       productName.trim() ||
       (imageFile ? imageFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '') ||
       (productUrl.trim() ? 'Product from URL' : 'Untitled product')
-    const resolved = resolveDeliverables(selectedDeliverables)
+    const resolved = resolveCampaignFromFormats({
+      photoStyles: photoStyles.slice(0, limits.maxImages),
+      videoStyles: videoStyles.slice(0, limits.maxVideos),
+      includeSocial,
+      includeAds,
+      includeStrategy,
+    })
     const id = newLocalId('campaign')
     const imageUrl = imageDataUrl || previewUrl || undefined
     saveLocalCampaign({
@@ -197,7 +208,11 @@ export default function NewCampaignPage() {
           price: price.trim() || undefined,
           category: category.trim() || undefined,
           imageFile: sourceType === 'upload' ? imageFile : null,
-          deliverables: selectedDeliverables,
+          photoStyles: photoStyles.slice(0, limits.maxImages),
+          videoStyles: videoStyles.slice(0, limits.maxVideos),
+          includeSocial,
+          includeAds,
+          includeStrategy,
           creativeDirection: {
             prompt,
             lighting: lighting || undefined,
@@ -227,7 +242,8 @@ export default function NewCampaignPage() {
     }
   }
 
-  const usingDefaults = selectedDeliverables.length === 0
+  const photoCount = photoStyles.length || DEFAULT_PHOTO_STYLES.length
+  const videoCount = videoStyles.length || DEFAULT_VIDEO_STYLES.length
 
   return (
     <AppLayout>
@@ -248,17 +264,20 @@ export default function NewCampaignPage() {
             <p className="studio-hero-kicker">Full Campaign</p>
             <h1>Build a complete campaign pack</h1>
             <p className="studio-hero-lead">
-              Start from a product photo or URL. LUCE creates research-backed images, video, and ads
-              that stay true to your packaging.
+              Pick exact image and video formats for one product. Packaging stays true across every
+              look.
             </p>
             <ol className="studio-hero-steps" aria-label="How it works">
               <li>Add product</li>
-              <li>Choose deliverables</li>
+              <li>Pick formats</li>
               <li>Generate pack</li>
             </ol>
+            <p className="studio-limit-chip" role="status">
+              {limits.label}
+            </p>
           </div>
           <div className="studio-hero-media" aria-hidden="true">
-            <img src="/images/campaign-beauty-flatlay.jpg" alt="" />
+            <img src="/images/fidelity-studio.jpg" alt="" />
             <div className="studio-hero-glow" />
           </div>
         </header>
@@ -458,41 +477,101 @@ export default function NewCampaignPage() {
             styleTheme={styleTheme}
             onStyleThemeChange={setStyleTheme}
             disabled={busy}
-            promptPlaceholder="e.g. Luxury perfume campaign — soft lavender light, keep bottle exact, quiet premium mood…"
+            compact
+            promptPlaceholder="e.g. Soft morning light, keep packaging exact, quiet premium mood…"
           />
 
           <section className="form-section">
             <div className="form-section-head">
-              <h2>Include in campaign</h2>
+              <h2>Image formats</h2>
               <p>
-                {usingDefaults
-                  ? 'Nothing selected — full campaign will be created.'
-                  : `${selectedDeliverables.length} selected`}
+                {photoStyles.length === 0
+                  ? `Pick looks — blank uses ${Math.min(DEFAULT_PHOTO_STYLES.length, limits.maxImages)} starter formats · max ${limits.maxImages}`
+                  : `${photoStyles.length} / ${limits.maxImages} selected`}
               </p>
             </div>
+            <FormatPickGrid
+              items={PHOTO_STYLES}
+              selected={photoStyles}
+              onChange={setPhotoStyles}
+              defaultIds={DEFAULT_PHOTO_STYLES}
+              max={limits.maxImages}
+              disabled={busy}
+              ariaLabel="Image formats"
+              onLimitHit={() =>
+                setWarning(`Your plan allows up to ${limits.maxImages} images per campaign.`)
+              }
+            />
+          </section>
 
-            <div className="check-grid" role="group" aria-label="Campaign deliverables">
-              {CAMPAIGN_DELIVERABLES.map((item) => {
-                const checked = selectedDeliverables.includes(item.id)
-                return (
-                  <label
-                    key={item.id}
-                    className={`check-card${checked ? ' is-checked' : ''}${usingDefaults ? ' is-default' : ''}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleDeliverable(item.id)}
-                      disabled={busy}
-                    />
-                    <span className="check-card-body">
-                      <strong>{item.label}</strong>
-                      <span>{item.description}</span>
-                    </span>
-                  </label>
-                )
-              })}
+          <section className="form-section">
+            <div className="form-section-head">
+              <h2>Video formats</h2>
+              <p>
+                {limits.maxVideos === 0
+                  ? 'Upgrade to unlock video formats'
+                  : videoStyles.length === 0
+                    ? `Hover a card to preview — blank uses ${Math.min(DEFAULT_VIDEO_STYLES.length, limits.maxVideos)} starter clips · max ${limits.maxVideos}`
+                    : `${videoStyles.length} / ${limits.maxVideos} selected`}
+              </p>
             </div>
+            <FormatPickGrid
+              items={VIDEO_STYLES}
+              selected={videoStyles}
+              onChange={setVideoStyles}
+              defaultIds={DEFAULT_VIDEO_STYLES}
+              max={limits.maxVideos}
+              disabled={busy || limits.maxVideos === 0}
+              videoAspect
+              ariaLabel="Video formats"
+              onLimitHit={() =>
+                setWarning(`Your plan allows up to ${limits.maxVideos} videos per campaign.`)
+              }
+            />
+          </section>
+
+          <section className="form-section">
+            <div className="form-section-head">
+              <h2>Extras</h2>
+              <p>Optional copy and ads alongside your formats</p>
+            </div>
+            <div className="campaign-extra-toggles" role="group" aria-label="Campaign extras">
+              <label className={`extra-toggle${includeSocial ? ' is-on' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={includeSocial}
+                  onChange={(e) => setIncludeSocial(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>Social copy</span>
+              </label>
+              <label className={`extra-toggle${includeAds ? ' is-on' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={includeAds}
+                  onChange={(e) => setIncludeAds(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>Ad creative + copy</span>
+              </label>
+              <label className={`extra-toggle${includeStrategy ? ' is-on' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={includeStrategy}
+                  onChange={(e) => setIncludeStrategy(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>Strategy notes</span>
+              </label>
+            </div>
+            <p className="dash-muted" style={{ marginTop: 10 }}>
+              Pack preview: ~{Math.min(photoCount, limits.maxImages)} images
+              {limits.maxVideos > 0
+                ? ` · ~${Math.min(videoCount, limits.maxVideos)} videos`
+                : ''}
+              {includeSocial ? ' · social copy' : ''}
+              {includeAds ? ' · ads' : ''}
+            </p>
           </section>
 
           {error && (

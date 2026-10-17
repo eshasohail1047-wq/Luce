@@ -1,5 +1,13 @@
-import type { AssetType, StudioKind } from './deliverables'
-import { PHOTO_STYLES, VIDEO_STYLES, AD_STYLES } from './deliverables'
+import type { StudioKind } from './deliverables'
+import {
+  AD_STYLES,
+  DEFAULT_PHOTO_STYLES,
+  DEFAULT_VIDEO_STYLES,
+  formatLabel,
+  PHOTO_STYLES,
+  VIDEO_STYLES,
+  videoUrlForAsset,
+} from './deliverables'
 
 export type MockOutput = {
   id: string
@@ -7,12 +15,45 @@ export type MockOutput = {
   label: string
   kind: 'image' | 'video' | 'copy'
   imageUrl?: string
+  /** Playable MP4 for video formats */
+  videoUrl?: string
   text?: string
   note?: string
   version?: number
 }
 
+/** Demo stills: one hero perfume, distinct scene per format. */
+const HERO = {
+  studio: '/images/fidelity-studio.jpg',
+  daylight: '/images/fidelity-daylight.jpg',
+  evening: '/images/fidelity-evening.jpg',
+  hand: '/images/format-perfume-in-hand.jpg',
+  flatlay: '/images/format-perfume-flatlay.jpg',
+  promo: '/images/format-perfume-promo.jpg',
+} as const
+
 const IMAGE_BY_ASSET: Record<string, string[]> = {
+  photo_studio_packshot: [HERO.studio],
+  photo_window_daylight: [HERO.daylight],
+  photo_moody_editorial: [HERO.evening],
+  photo_hand_model: [HERO.hand],
+  photo_flatlay: [HERO.flatlay],
+  photo_promo_offer: [HERO.promo],
+  photo_lifestyle_home: [HERO.daylight],
+  photo_shelf_context: [HERO.evening],
+  photo_detail_macro: [HERO.studio],
+  photo_social_feed: [HERO.flatlay],
+  video_table_talk: [HERO.daylight, HERO.studio],
+  video_ugc_selfie: [HERO.evening, HERO.daylight],
+  video_unboxing: [HERO.studio, HERO.daylight],
+  video_howto_demo: [HERO.hand, HERO.studio],
+  video_grwm: [HERO.evening, HERO.daylight],
+  video_product_spin: [HERO.daylight, HERO.studio],
+  video_testimonial: [HERO.daylight, HERO.evening],
+  video_asmr_detail: [HERO.studio, HERO.evening],
+  video_before_after: [HERO.daylight, HERO.evening],
+  video_street_stop: [HERO.daylight, HERO.studio],
+  // Legacy aliases
   product_image: [
     '/images/fidelity-studio.jpg',
     '/images/moisturizer-studio.jpg',
@@ -57,6 +98,7 @@ const IMAGE_BY_ASSET: Record<string, string[]> = {
 
 function labelFor(assetType: string) {
   return (
+    formatLabel(assetType) ||
     PHOTO_STYLES.find((s) => s.id === assetType)?.label ||
     VIDEO_STYLES.find((s) => s.id === assetType)?.label ||
     AD_STYLES.find((s) => s.id === assetType)?.label ||
@@ -102,7 +144,16 @@ function isCopyAsset(assetType: string) {
 }
 
 function isVideoAsset(assetType: string) {
-  return assetType.includes('video')
+  return assetType.startsWith('video_') || assetType.includes('video')
+}
+
+function isPackshotLike(assetType: string) {
+  return (
+    assetType === 'photo_studio_packshot' ||
+    assetType === 'photo_hand_model' ||
+    assetType === 'product_image' ||
+    assetType === 'ad_creative'
+  )
 }
 
 function pickImage(
@@ -111,15 +162,12 @@ function pickImage(
   productImageUrl?: string,
 ): string | undefined {
   const pool = [...(IMAGE_BY_ASSET[assetType] || ['/images/output-visuals.jpg'])]
-  // Always prefer the user's product photo as the first option for product shots,
-  // and include it in the recreate cycle for every visual/video asset.
   if (productImageUrl) {
-    if (assetType === 'product_image' || assetType === 'ad_creative') {
+    if (isPackshotLike(assetType)) {
       return version <= 1
         ? productImageUrl
         : pool[(version - 2) % pool.length] || productImageUrl
     }
-    // For other styles: v1 uses scene stock, recreate can land on product photo
     const withProduct = [...pool, productImageUrl]
     return withProduct[(version - 1) % withProduct.length]
   }
@@ -151,24 +199,27 @@ function buildOne(
 
   const imageUrl = pickImage(assetType, version, productImageUrl)
   const usingProduct = Boolean(productImageUrl && imageUrl === productImageUrl)
+  const video = isVideoAsset(assetType)
+  const videoUrl = video ? videoUrlForAsset(assetType) : undefined
 
   return {
     id,
     assetType,
     label,
-    kind: isVideoAsset(assetType) ? 'video' : 'image',
+    kind: video ? 'video' : 'image',
     imageUrl,
+    ...(videoUrl ? { videoUrl } : {}),
     note: usingProduct
       ? version > 1
         ? `Recreated with your product photo · v${version}`
         : 'Uses your uploaded product photo'
-      : isVideoAsset(assetType)
+      : video
         ? version > 1
-          ? `Recreated video still · v${version}`
-          : 'Demo video still — recreate for another look'
+          ? `Recreated format clip · v${version}`
+          : 'Playable format video — recreate for another look'
         : version > 1
           ? `Recreated visual · v${version}`
-          : 'Demo visual — recreate if you want another option',
+          : 'Format still — recreate if you want another option',
     version,
   }
 }
@@ -185,17 +236,17 @@ export function buildMockOutputs(input: {
 
   if (assets.length === 0) {
     if (input.studioKind === 'photos') {
-      assets = ['product_image', 'lifestyle_image', 'promo_creative']
+      assets = [...DEFAULT_PHOTO_STYLES]
     } else if (input.studioKind === 'videos') {
-      assets = ['ugc_video', 'reels_video', 'marketing_video']
+      assets = [...DEFAULT_VIDEO_STYLES]
     } else if (input.studioKind === 'ads') {
       assets = ['ad_creative', 'ad_copy']
     } else {
       assets = [
-        'product_image',
-        'lifestyle_image',
-        'promo_creative',
-        'ugc_video',
+        'photo_studio_packshot',
+        'photo_hand_model',
+        'photo_promo_offer',
+        'video_table_talk',
         'caption',
         'hook',
         'ad_creative',
@@ -220,125 +271,78 @@ export function recreateMockOutput(
   return buildOne(item.assetType, index, productName, productImageUrl, nextVersion)
 }
 
-function safeProductSlug(productName: string) {
-  return productName.replace(/[^\w\-]+/g, '_').slice(0, 40) || 'luce-pack'
-}
-
-function itemBaseName(item: MockOutput, productName: string) {
-  const safe = safeProductSlug(productName)
-  return `${safe}-${item.assetType}-v${item.version || 1}`
-}
-
-function triggerBrowserDownload(blobOrUrl: Blob | string, filename: string) {
-  const created = typeof blobOrUrl !== 'string'
-  const url = created ? URL.createObjectURL(blobOrUrl) : blobOrUrl
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  if (created) {
-    // Defer revoke so the browser can start the download
-    setTimeout(() => URL.revokeObjectURL(url), 1500)
-  }
-}
-
-function extFromMime(mime: string, fallback = 'jpg') {
-  if (mime.includes('png')) return 'png'
-  if (mime.includes('webp')) return 'webp'
-  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg'
-  if (mime.includes('gif')) return 'gif'
-  return fallback
-}
-
-/** Resolve image/video still to a Blob — works for data: URLs and same-origin /images/... */
-async function resolveAssetBlob(url: string): Promise<{ blob: Blob; ext: string }> {
-  if (url.startsWith('data:')) {
-    const match = /^data:([^;,]+)?(;base64)?,([\s\S]*)$/.exec(url)
-    if (!match) throw new Error('Invalid data URL')
-    const mime = match[1] || 'image/png'
-    const isBase64 = Boolean(match[2])
-    const data = match[3] || ''
-    let blob: Blob
-    if (isBase64) {
-      const binary = atob(data)
-      const bytes = new Uint8Array(binary.length)
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-      blob = new Blob([bytes], { type: mime })
-    } else {
-      blob = new Blob([decodeURIComponent(data)], { type: mime })
-    }
-    return { blob, ext: extFromMime(mime, 'png') }
-  }
-
-  // Absolute same-origin path or relative /images/...
-  const resolved =
-    url.startsWith('/') || url.startsWith('./')
-      ? new URL(url, window.location.origin).href
-      : url
-
-  const res = await fetch(resolved)
-  if (!res.ok) throw new Error(`Failed to fetch asset (${res.status})`)
-  const blob = await res.blob()
-  const mime = blob.type || res.headers.get('content-type') || 'image/jpeg'
-  return { blob, ext: extFromMime(mime) }
-}
-
-/** Download a single result asset (image/video still → file; copy → .txt). */
 export async function downloadMockOutput(item: MockOutput, productName: string) {
-  const base = itemBaseName(item, productName)
-
+  const safe = (productName || 'luce').replace(/[^\w.-]+/g, '_').slice(0, 40)
   if (item.kind === 'copy' && item.text) {
     const blob = new Blob([item.text], { type: 'text/plain;charset=utf-8' })
-    triggerBrowserDownload(blob, `${base}.txt`)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${safe}-${item.assetType}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
     return
   }
-
-  if (!item.imageUrl) throw new Error('No file available for this asset')
-  const { blob, ext } = await resolveAssetBlob(item.imageUrl)
-  triggerBrowserDownload(blob, `${base}.${ext}`)
+  const mediaUrl = item.kind === 'video' && item.videoUrl ? item.videoUrl : item.imageUrl
+  if (!mediaUrl) throw new Error('Nothing to download')
+  const res = await fetch(mediaUrl)
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const ext = blob.type.includes('mp4')
+    ? 'mp4'
+    : blob.type.includes('webm')
+      ? 'webm'
+      : blob.type.includes('png')
+        ? 'png'
+        : 'jpg'
+  a.download = `${safe}-${item.assetType}.${ext}`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
-/** Download the full pack as a single ZIP (avoids multi-download browser blocks). */
 export async function downloadMockPack(
   outputs: MockOutput[],
   productName: string,
-) {
+): Promise<void> {
   const JSZip = (await import('jszip')).default
   const zip = new JSZip()
-  const safe = safeProductSlug(productName)
-  const copyParts: string[] = [`LUCE demo export — ${productName}`, '']
-  let added = 0
+  const safe = (productName || 'luce').replace(/[^\w.-]+/g, '_').slice(0, 40)
+  const folder = zip.folder(`${safe}-pack`) || zip
 
-  for (const item of outputs) {
-    if (item.kind === 'copy' && item.text) {
-      const base = itemBaseName(item, productName)
-      zip.file(`${base}.txt`, item.text)
-      copyParts.push(`## ${item.label}`, item.text, '')
-      added += 1
-      continue
-    }
-    if (!item.imageUrl) continue
-    try {
-      const { blob, ext } = await resolveAssetBlob(item.imageUrl)
-      zip.file(`${itemBaseName(item, productName)}.${ext}`, blob)
-      added += 1
-    } catch (err) {
-      console.warn('Skipping asset in pack export:', item.id, err)
-    }
-  }
-
-  if (copyParts.length > 2) {
-    zip.file(`${safe}-copy.txt`, copyParts.join('\n'))
-  }
-
-  if (added === 0 && copyParts.length <= 2) {
-    throw new Error('Nothing to export')
-  }
+  await Promise.all(
+    outputs.map(async (item, i) => {
+      const base = `${String(i + 1).padStart(2, '0')}-${item.assetType}`
+      if (item.kind === 'copy' && item.text) {
+        folder.file(`${base}.txt`, item.text)
+        return
+      }
+      const mediaUrl =
+        item.kind === 'video' && item.videoUrl ? item.videoUrl : item.imageUrl
+      if (!mediaUrl) return
+      try {
+        const res = await fetch(mediaUrl)
+        const blob = await res.blob()
+        const ext = blob.type.includes('mp4')
+          ? 'mp4'
+          : blob.type.includes('webm')
+            ? 'webm'
+            : blob.type.includes('png')
+              ? 'png'
+              : 'jpg'
+        folder.file(`${base}.${ext}`, blob)
+      } catch {
+        /* skip failed fetch */
+      }
+    }),
+  )
 
   const zipBlob = await zip.generateAsync({ type: 'blob' })
-  triggerBrowserDownload(zipBlob, `${safe}-pack.zip`)
+  const url = URL.createObjectURL(zipBlob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${safe}-luce-pack.zip`
+  a.click()
+  URL.revokeObjectURL(url)
 }
-
-export type { AssetType }

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'rea
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import CreativeDirectionFields from '../components/CreativeDirectionFields'
+import FormatPickGrid from '../components/FormatPickGrid'
 import { useAuth } from '../auth/AuthProvider'
+import { getPlanLimits } from '../lib/planLimits'
 import { createStudioProject, type ProductSourceType } from '../lib/campaigns'
 import type {
   BackgroundId,
@@ -12,8 +14,12 @@ import type {
 } from '../lib/creativeDirection'
 import {
   AD_STYLES,
+  DEFAULT_PHOTO_STYLES,
+  DEFAULT_VIDEO_STYLES,
   PHOTO_STYLES,
   VIDEO_STYLES,
+  normalizePhotoStyleId,
+  normalizeVideoStyleId,
   resolveAdStyles,
   resolvePhotoStyles,
   resolveVideoStyles,
@@ -33,6 +39,10 @@ import {
   updateLocalCampaign,
   withTimeout,
 } from '../lib/localDemoCampaign'
+import {
+  isImageAssetKind,
+  requestGenerateImages,
+} from '../lib/generateImages'
 import { recreateMockOutput, type MockOutput } from '../lib/mockCampaign'
 import { consumePendingProduct } from '../lib/pendingProduct'
 import { canGenerate, type GenerateAction } from '../lib/planAccess'
@@ -83,6 +93,7 @@ export default function StudioPage() {
   const [paywallOpen, setPaywallOpen] = useState(false)
   const [paywallReason, setPaywallReason] = useState<string | undefined>()
   const isRecreate = Boolean(recreate) || searchParams.get('recreate') === '1'
+  const limits = getPlanLimits(plan)
 
   function generateActionForKind(): GenerateAction {
     if (isRecreate) {
@@ -145,10 +156,12 @@ export default function StudioPage() {
           if (!cancelled && file) setImageFile(file)
         }
         const asset = session.assetType
-        if (session.studioKind === 'photos' && PHOTO_STYLES.some((s) => s.id === asset)) {
-          setPhotoStyles([asset as PhotoStyleId])
-        } else if (session.studioKind === 'videos' && VIDEO_STYLES.some((s) => s.id === asset)) {
-          setVideoStyles([asset as VideoStyleId])
+        const photoId = normalizePhotoStyleId(asset)
+        const videoId = normalizeVideoStyleId(asset)
+        if (session.studioKind === 'photos' && photoId) {
+          setPhotoStyles([photoId])
+        } else if (session.studioKind === 'videos' && videoId) {
+          setVideoStyles([videoId])
         } else if (session.studioKind === 'ads' && AD_STYLES.some((s) => s.id === asset)) {
           setAdStyles([asset as AdStyleId])
         }
@@ -196,7 +209,7 @@ export default function StudioPage() {
 
     const style = searchParams.get('style')
     if (kind === 'videos' && style === 'ugc') {
-      setVideoStyles(['ugc_video'])
+      setVideoStyles(['video_table_talk', 'video_howto_demo'])
     }
   }, [kind, searchParams])
 
@@ -286,6 +299,59 @@ export default function StudioPage() {
             : next.text
           : next.text,
     }
+
+    if (isImageAssetKind(current.assetType) && next.kind === 'image') {
+      try {
+        let productImage: string | undefined
+        if (imageFile) {
+          try {
+            productImage = await fileToDataUrl(imageFile)
+          } catch {
+            /* fall through */
+          }
+        }
+        if (!productImage) {
+          const candidate = session.imageUrl || previewUrl || undefined
+          if (
+            candidate &&
+            (candidate.startsWith('data:') || candidate.startsWith('http'))
+          ) {
+            productImage = candidate
+          }
+        }
+
+        const ai = await requestGenerateImages({
+          productName: productName.trim() || session.productName,
+          productImage,
+          creativeDirection: {
+            prompt: directionNote || undefined,
+            lighting: lighting || undefined,
+            background: background || undefined,
+            mood: mood || undefined,
+            styleTheme: styleTheme || undefined,
+          },
+          assets: [current.assetType],
+          recreateNote: directionNote || undefined,
+        })
+        const generated = ai.assets[0]
+        if (generated?.imageDataUrl) {
+          next = {
+            ...next,
+            imageUrl: generated.imageDataUrl,
+            note: directionNote
+              ? `AI recreate · ${directionNote.slice(0, 120)}`
+              : 'AI recreate · packaging fidelity from your product photo',
+          }
+        }
+      } catch (err) {
+        console.warn('[Studio] AI recreate fallback to mock', err)
+        setWarning(
+          err instanceof Error
+            ? `${err.message} Showing a demo variant instead.`
+            : 'AI recreate unavailable — showing a demo variant instead.',
+        )
+      }
+    }
     const nextOutputs = outputs.map((o, i) => (i === index ? next : o))
     const nextStatus =
       session.campaignStatus === 'exported' ? 'ready' : session.campaignStatus || 'ready'
@@ -361,11 +427,13 @@ export default function StudioPage() {
       /* optional */
     }
 
+    const clampedPhotos = photoStyles.slice(0, limits.maxImages)
+    const clampedVideos = videoStyles.slice(0, limits.maxVideos)
     const selectedAssets =
       kind === 'photos'
-        ? resolvePhotoStyles(photoStyles)
+        ? resolvePhotoStyles(clampedPhotos).slice(0, limits.maxImages)
         : kind === 'videos'
-          ? resolveVideoStyles(videoStyles)
+          ? resolveVideoStyles(clampedVideos).slice(0, Math.max(limits.maxVideos, 1))
           : resolveAdStyles(adStyles)
     const displayName =
       productName.trim() ||
@@ -385,8 +453,8 @@ export default function StudioPage() {
           description: description.trim() || undefined,
           brand: brand.trim() || undefined,
           imageFile: sourceType === 'upload' ? imageFile : null,
-          photoStyles,
-          videoStyles,
+          photoStyles: clampedPhotos,
+          videoStyles: clampedVideos,
           adStyles,
           tryFree: isFreeTry,
           creativeDirection: {
@@ -456,30 +524,30 @@ export default function StudioPage() {
           image: '/images/audience-beauty.jpg',
           accent: 'photos' as const,
           cta: tryFree ? 'Generate free images' : 'Generate images',
-          stylesTitle: 'Choose photo styles',
-          stylesHint: 'Pick one or more — or leave blank for a full set.',
+          stylesTitle: 'Pick photo formats',
+          stylesHint: 'Same product, different themes — blank uses a starter set of 3.',
         }
       : kind === 'videos' && isUgcFocus
         ? {
             kicker: 'UGC Studio',
             title: 'Creator-style product videos',
-            lead: 'Start from your product photo. Build authentic shorts ready for Reels, TikTok, and social proof.',
-            image: '/images/ugc-makeup-lipstick.jpg',
+            lead: 'Pick formats like table talk, selfie UGC, or unboxing — each card is a different shoot style.',
+            image: '/images/fidelity-daylight.jpg',
             accent: 'videos' as const,
             cta: 'Generate UGC video',
-            stylesTitle: 'Choose video formats',
-            stylesHint: 'UGC is pre-selected. Add more formats if you want.',
+            stylesTitle: 'Pick video formats',
+            stylesHint: 'Same product in every format — table talk, how-to, and more.',
           }
         : kind === 'videos'
           ? {
               kicker: 'Video Studio',
               title: 'Bring the product to life',
-              lead: 'Upload a product photo, then choose UGC, Reels, or polished marketing clips.',
-              image: '/images/campaign-home-lifestyle.jpg',
+              lead: 'One product across formats — table talk, how to use, product spin, vanity ritual, and more.',
+              image: '/images/fidelity-studio.jpg',
               accent: 'videos' as const,
               cta: 'Generate videos',
-              stylesTitle: 'Choose video formats',
-              stylesHint: 'Pick formats — or leave blank for all video types.',
+              stylesTitle: 'Pick video formats',
+              stylesHint: 'Hover to preview the same bottle in each format.',
             }
           : {
               kicker: 'Ads & Social',
@@ -505,17 +573,6 @@ export default function StudioPage() {
           stylesHint: 'Pre-selected from your campaign. Change it if needed.',
         }
       : baseMeta
-
-  const styleVisuals: Record<string, string> = {
-    product_image: '/images/fidelity-studio.jpg',
-    lifestyle_image: '/images/campaign-home-lifestyle.jpg',
-    promo_creative: '/images/campaign-beauty-flatlay.jpg',
-    ugc_video: '/images/campaign-ugc-serum.jpg',
-    reels_video: '/images/ugc-makeup-lipstick.jpg',
-    marketing_video: '/images/campaign-ad-handbag.jpg',
-    ad_creative: '/images/output-ads.jpg',
-    ad_copy: '/images/output-social.jpg',
-  }
 
   return (
     <AppLayout>
@@ -763,6 +820,7 @@ export default function StudioPage() {
               styleTheme={styleTheme}
               onStyleThemeChange={setStyleTheme}
               disabled={busy}
+              compact={!isRecreate}
               promptPlaceholder={
                 isRecreate
                   ? 'e.g. Brighter lighting, white background, less glitter, keep packaging sharp…'
@@ -779,112 +837,59 @@ export default function StudioPage() {
             <div className="form-section-head">
               <h2>3. {studioMeta.stylesTitle}</h2>
               <p>
-                {usingDefaults
-                  ? studioMeta.stylesHint
-                  : `${selectionCount()} selected`}
+                {kind === 'photos'
+                  ? usingDefaults
+                    ? `Blank uses starter set · max ${limits.maxImages} images`
+                    : `${photoStyles.length} / ${limits.maxImages} selected`
+                  : kind === 'videos'
+                    ? usingDefaults
+                      ? `Hover to preview · max ${limits.maxVideos} videos`
+                      : `${videoStyles.length} / ${limits.maxVideos} selected`
+                    : usingDefaults
+                      ? studioMeta.stylesHint
+                      : `${selectionCount()} selected`}
               </p>
             </div>
 
             {kind === 'photos' && (
-              <div className="style-pick-grid" role="group" aria-label="Photo styles">
-                {PHOTO_STYLES.map((item) => {
-                  const checked = photoStyles.includes(item.id)
-                  return (
-                    <label
-                      key={item.id}
-                      className={`style-pick${checked ? ' is-checked' : ''}${usingDefaults ? ' is-default' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setPhotoStyles((prev) =>
-                            prev.includes(item.id)
-                              ? prev.filter((x) => x !== item.id)
-                              : [...prev, item.id],
-                          )
-                        }
-                        disabled={busy}
-                      />
-                      <span className="style-pick-media">
-                        <img src={styleVisuals[item.id]} alt="" />
-                      </span>
-                      <span className="style-pick-body">
-                        <strong>{item.label}</strong>
-                        <span>{item.description}</span>
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
+              <FormatPickGrid
+                items={PHOTO_STYLES}
+                selected={photoStyles}
+                onChange={setPhotoStyles}
+                defaultIds={DEFAULT_PHOTO_STYLES}
+                max={limits.maxImages}
+                disabled={busy}
+                ariaLabel="Photo formats"
+                onLimitHit={() =>
+                  setWarning(`Your plan allows up to ${limits.maxImages} images per generate.`)
+                }
+              />
             )}
 
             {kind === 'videos' && (
-              <div className="style-pick-grid" role="group" aria-label="Video types">
-                {VIDEO_STYLES.map((item) => {
-                  const checked = videoStyles.includes(item.id)
-                  return (
-                    <label
-                      key={item.id}
-                      className={`style-pick${checked ? ' is-checked' : ''}${usingDefaults ? ' is-default' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setVideoStyles((prev) =>
-                            prev.includes(item.id)
-                              ? prev.filter((x) => x !== item.id)
-                              : [...prev, item.id],
-                          )
-                        }
-                        disabled={busy}
-                      />
-                      <span className="style-pick-media">
-                        <img src={styleVisuals[item.id]} alt="" />
-                      </span>
-                      <span className="style-pick-body">
-                        <strong>{item.label}</strong>
-                        <span>{item.description}</span>
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
+              <FormatPickGrid
+                items={VIDEO_STYLES}
+                selected={videoStyles}
+                onChange={setVideoStyles}
+                defaultIds={DEFAULT_VIDEO_STYLES}
+                max={Math.max(limits.maxVideos, 1)}
+                disabled={busy}
+                videoAspect
+                ariaLabel="Video formats"
+                onLimitHit={() =>
+                  setWarning(`Your plan allows up to ${limits.maxVideos} videos per generate.`)
+                }
+              />
             )}
 
             {kind === 'ads' && (
-              <div className="style-pick-grid style-pick-grid-2" role="group" aria-label="Ad outputs">
-                {AD_STYLES.map((item) => {
-                  const checked = adStyles.includes(item.id)
-                  return (
-                    <label
-                      key={item.id}
-                      className={`style-pick${checked ? ' is-checked' : ''}${usingDefaults ? ' is-default' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() =>
-                          setAdStyles((prev) =>
-                            prev.includes(item.id)
-                              ? prev.filter((x) => x !== item.id)
-                              : [...prev, item.id],
-                          )
-                        }
-                        disabled={busy}
-                      />
-                      <span className="style-pick-media">
-                        <img src={styleVisuals[item.id]} alt="" />
-                      </span>
-                      <span className="style-pick-body">
-                        <strong>{item.label}</strong>
-                        <span>{item.description}</span>
-                      </span>
-                    </label>
-                  )
-                })}
-              </div>
+              <FormatPickGrid
+                items={AD_STYLES}
+                selected={adStyles}
+                onChange={setAdStyles}
+                disabled={busy}
+                ariaLabel="Ad outputs"
+              />
             )}
           </section>
 

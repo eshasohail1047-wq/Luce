@@ -22,6 +22,8 @@ type CreativeDirectionFieldsProps = {
   onStyleThemeChange: (value: StyleThemeId | '') => void
   disabled?: boolean
   promptPlaceholder?: string
+  /** Prompt only — hide lighting/mood/theme selects */
+  compact?: boolean
 }
 
 export default function CreativeDirectionFields({
@@ -37,12 +39,17 @@ export default function CreativeDirectionFields({
   onStyleThemeChange,
   disabled,
   promptPlaceholder = 'Describe the look, scene, offer, or message you want…',
+  compact = false,
 }: CreativeDirectionFieldsProps) {
   return (
     <section className="form-section create-direction">
       <div className="form-section-head">
         <h2>Creative direction</h2>
-        <p>Optional — guide every asset with your prompt and theme choices</p>
+        <p>
+          {compact
+            ? 'Optional — one prompt applied across every selected format'
+            : 'Optional — guide every asset with your prompt and theme choices'}
+        </p>
       </div>
 
       <div className="auth-field">
@@ -56,6 +63,9 @@ export default function CreativeDirectionFields({
           disabled={disabled}
         />
       </div>
+
+      {compact ? null : (
+        <>
 
       <div className="create-direction-grid">
         <div className="auth-field">
@@ -126,6 +136,8 @@ export default function CreativeDirectionFields({
           </select>
         </div>
       </div>
+        </>
+      )}
     </section>
   )
 }
