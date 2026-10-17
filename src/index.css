@@ -1,7 +1,14 @@
 :root {
+  color-scheme: light;
   --bg: #f8f5fa;
   --bg-elevated: #fcfafc;
   --surface: rgba(255, 255, 255, 0.92);
+  --surface-solid: #ffffff;
+  --shell-bg: #f6f5f8;
+  --rail-bg: #f4f7fb;
+  --topbar-bg: #ffffff;
+  --panel-bg: #ffffff;
+  --panel-muted: #f3f5f8;
   --ink: #121218;
   --ink-soft: #2c2c35;
   --muted: #656570;
@@ -25,6 +32,63 @@
   --font-logo: 'Outfit', system-ui, sans-serif;
   --font-body: 'Outfit', system-ui, sans-serif;
   --max: 1140px;
+  --backdrop:
+    radial-gradient(ellipse 55% 70% at -4% 40%, rgba(124, 58, 237, 0.16), transparent 58%),
+    radial-gradient(ellipse 55% 70% at 104% 45%, rgba(232, 121, 192, 0.14), transparent 58%),
+    radial-gradient(ellipse 75% 48% at 10% -6%, rgba(124, 58, 237, 0.12), transparent 55%),
+    radial-gradient(ellipse 50% 38% at 92% 12%, rgba(232, 121, 192, 0.1), transparent 52%),
+    radial-gradient(ellipse 50% 38% at 50% 58%, rgba(192, 132, 252, 0.07), transparent 60%),
+    linear-gradient(180deg, #f8f5fa 0%, #f5f1f8 45%, #f1ecf6 100%);
+  --input-bg: #ffffff;
+  --hover-fill: rgba(20, 18, 28, 0.04);
+  --rail-link: #2f3540;
+  --rail-icon: #6b7380;
+  --rail-active-bg: #3d4a5c;
+  --danger: #b42318;
+  --danger-soft: rgba(180, 35, 24, 0.08);
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #12131a;
+  --bg-elevated: #181922;
+  --surface: rgba(28, 29, 38, 0.92);
+  --surface-solid: #1c1d26;
+  --shell-bg: #12131a;
+  --rail-bg: #16171f;
+  --topbar-bg: #1a1b24;
+  --panel-bg: #1c1d26;
+  --panel-muted: #22232e;
+  --ink: #f2f1f6;
+  --ink-soft: #d8d7e0;
+  --muted: #9b9aab;
+  --muted-soft: #7c7b8c;
+  --line: rgba(196, 181, 220, 0.12);
+  --line-strong: rgba(196, 181, 220, 0.2);
+  --accent: #a78bfa;
+  --accent-deep: #8b5cf6;
+  --accent-soft: rgba(139, 92, 246, 0.18);
+  --pink: #4a3548;
+  --lavender: #2e2640;
+  --sky: #1a1b24;
+  --mint: #c4b5fd;
+  --mint-soft: rgba(196, 181, 253, 0.14);
+  --grad: linear-gradient(115deg, #6d28d9 0%, #7c3aed 48%, #a78bfa 88%, #e879c0 100%);
+  --shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 10px 28px rgba(0, 0, 0, 0.35);
+  --backdrop:
+    radial-gradient(ellipse 55% 70% at -4% 40%, rgba(124, 58, 237, 0.22), transparent 58%),
+    radial-gradient(ellipse 55% 70% at 104% 45%, rgba(232, 121, 192, 0.12), transparent 58%),
+    radial-gradient(ellipse 75% 48% at 10% -6%, rgba(124, 58, 237, 0.16), transparent 55%),
+    radial-gradient(ellipse 50% 38% at 92% 12%, rgba(167, 139, 250, 0.1), transparent 52%),
+    linear-gradient(180deg, #12131a 0%, #151620 45%, #181922 100%);
+  --input-bg: #22232e;
+  --hover-fill: rgba(255, 255, 255, 0.06);
+  --rail-link: #d5d4de;
+  --rail-icon: #9b9aab;
+  --rail-active-bg: #5b35d6;
+  --danger: #f97066;
+  --danger-soft: rgba(249, 112, 102, 0.12);
 }
 
 *,
@@ -35,6 +99,7 @@
 
 html {
   scroll-behavior: smooth;
+  background: var(--bg);
 }
 
 body {
@@ -51,6 +116,7 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow-x: clip;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 h1,

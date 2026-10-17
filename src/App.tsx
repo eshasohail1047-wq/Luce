@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import Logo from './Logo'
+import ThemeToggle from './components/ThemeToggle'
 import UgcReel from './UgcReel'
 import { stashPendingProduct } from './lib/pendingProduct'
 import { setPostLoginPath, type PostLoginPath } from './lib/postLogin'
@@ -658,6 +659,7 @@ export default function App() {
           </nav>
 
           <div className="nav-actions">
+            <ThemeToggle />
             <a
               className="login"
               href="/login"

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import Logo from '../Logo'
+import ThemeToggle from '../components/ThemeToggle'
 import { useAuth } from '../auth/AuthProvider'
 import { resolvePostLoginPath } from '../lib/postLogin'
 
@@ -257,6 +258,9 @@ export default function LoginPage() {
 
         <section className="auth-panel" aria-labelledby="login-title">
           <div className="auth-panel-inner">
+            <div className="auth-theme-row">
+              <ThemeToggle />
+            </div>
             {isForgotGoogle ? (
               <>
                 <div className="auth-card-head">

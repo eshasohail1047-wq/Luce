@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import Logo from '../Logo'
+import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../auth/AuthProvider'
 import { listUserCampaigns, listUserProducts, type CampaignDoc, type ProductSummary } from '../lib/campaigns'
 import { isPaidPlan, planLabel as formatPlanLabel } from '../lib/plans'
@@ -419,6 +420,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </div>
 
           <div className="studio-topbar-actions">
+            <ThemeToggle />
             <div className="studio-topbar-notif" ref={notifRef}>
               <button
                 type="button"

@@ -17,6 +17,21 @@
     />
   </head>
   <body>
+    <script>
+      (function () {
+        try {
+          var key = 'luce.theme'
+          var pref = localStorage.getItem(key) || 'system'
+          var dark =
+            pref === 'dark' ||
+            (pref !== 'light' &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          var theme = dark ? 'dark' : 'light'
+          document.documentElement.setAttribute('data-theme', theme)
+          document.documentElement.style.colorScheme = theme
+        } catch (e) {}
+      })()
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

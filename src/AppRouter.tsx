@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthProvider'
+import { ThemeProvider } from './theme/ThemeProvider'
 import LandingPage from './App'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -14,25 +15,27 @@ import LegalPage from './pages/LegalPage'
 
 export default function AppRouter() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/privacy" element={<LegalPage />} />
-          <Route path="/terms" element={<LegalPage />} />
-          <Route path="/cookies" element={<LegalPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/app" element={<DashboardPage />} />
-          <Route path="/app/products" element={<ProductsPage />} />
-          <Route path="/app/library" element={<LibraryPage />} />
-          <Route path="/app/settings" element={<SettingsPage />} />
-          <Route path="/app/campaigns/new" element={<NewCampaignPage />} />
-          <Route path="/app/campaigns/:campaignId" element={<CampaignDetailPage />} />
-          <Route path="/app/campaigns" element={<CampaignsPage />} />
-          <Route path="/app/studio/:kind" element={<StudioPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/privacy" element={<LegalPage />} />
+            <Route path="/terms" element={<LegalPage />} />
+            <Route path="/cookies" element={<LegalPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/app" element={<DashboardPage />} />
+            <Route path="/app/products" element={<ProductsPage />} />
+            <Route path="/app/library" element={<LibraryPage />} />
+            <Route path="/app/settings" element={<SettingsPage />} />
+            <Route path="/app/campaigns/new" element={<NewCampaignPage />} />
+            <Route path="/app/campaigns/:campaignId" element={<CampaignDetailPage />} />
+            <Route path="/app/campaigns" element={<CampaignsPage />} />
+            <Route path="/app/studio/:kind" element={<StudioPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }

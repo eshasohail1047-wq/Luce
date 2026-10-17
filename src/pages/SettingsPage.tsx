@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import ThemeToggle from '../components/ThemeToggle'
 import { useAuth } from '../auth/AuthProvider'
 import {
   PLAN_OPTIONS,
@@ -210,6 +211,16 @@ export default function SettingsPage() {
               </p>
             )}
           </form>
+        </section>
+
+        <section className="settings-card" id="appearance" aria-labelledby="settings-appearance-title">
+          <div className="settings-card-head">
+            <h2 id="settings-appearance-title">Appearance</h2>
+          </div>
+          <p className="settings-copy">
+            Choose light or dark mode, or follow your system setting.
+          </p>
+          <ThemeToggle variant="segmented" />
         </section>
 
         <section className="settings-card" id="plan" aria-labelledby="settings-plan-title">
