@@ -55,6 +55,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     productName: String(body.productName ?? ''),
     productImage:
       typeof body.productImage === 'string' ? body.productImage : undefined,
+    referenceImage:
+      typeof body.referenceImage === 'string' ? body.referenceImage : undefined,
     creativeDirection,
     assets,
     recreateNote:

@@ -8002,6 +8002,80 @@
   border: 0;
 }
 
+.ref-upload-block {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.ref-upload-head strong {
+  display: block;
+  font-size: 0.92rem;
+  color: var(--text, #17171f);
+}
+
+.ref-upload-head p {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted, #8a8a96);
+  line-height: 1.4;
+}
+
+.ref-upload-empty {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 18px 16px;
+  border-radius: 14px;
+  border: 1px dashed rgba(20, 18, 28, 0.18);
+  background: rgba(20, 18, 28, 0.02);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ref-upload-empty:hover {
+  border-color: rgba(91, 53, 214, 0.4);
+  background: rgba(91, 53, 214, 0.04);
+}
+
+.ref-upload-empty-title {
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--text, #17171f);
+}
+
+.ref-upload-empty-copy {
+  font-size: 0.78rem;
+  color: var(--muted, #8a8a96);
+}
+
+.ref-upload-preview {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(20, 18, 28, 0.1);
+  background: var(--panel, #fff);
+}
+
+.ref-upload-preview img,
+.ref-upload-preview video {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #0c0a12;
+}
+
+.ref-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .studio-panel .create-direction > .form-section-head {
   display: none;
 }
@@ -8180,6 +8254,28 @@
 .format-pick.is-checked .format-pick-check {
   opacity: 1;
   transform: scale(1);
+}
+
+.format-pick-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  color: #fff;
+  background: rgba(12, 10, 18, 0.55);
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.format-pick:hover .format-pick-play {
+  opacity: 0;
 }
 
 .format-pick-body {

@@ -37,7 +37,7 @@ export const CAMPAIGN_DELIVERABLES: DeliverableOption[] = [
     id: 'videos',
     label: 'Videos',
     description: 'Talking-head, UGC, demo, and product clips',
-    assets: ['video_table_talk', 'video_howto_demo', 'video_product_spin'],
+    assets: ['video_table_talk', 'video_howto_demo', 'video_unboxing', 'video_ugc_selfie'],
   },
   {
     id: 'social',
@@ -152,8 +152,8 @@ export const PHOTO_STYLES: FormatOption<PhotoStyleId>[] = [
   },
   {
     id: 'photo_promo_offer',
-    label: 'Promo offer',
-    description: 'Ad-ready frame with room for a price, badge, or Shop CTA',
+    label: 'Promo / ad frame',
+    description: 'Like a Meta ad: product on one side, blank space for “20% off” or Shop',
     thumb: HERO_PRODUCT.promo,
     tag: 'Promo',
   },
@@ -170,115 +170,80 @@ export function resolvePhotoStyles(selected: PhotoStyleId[]): PhotoStyleId[] {
   return selected.length === 0 ? [...DEFAULT_PHOTO_STYLES] : [...new Set(selected)]
 }
 
-/** Studio: ~10 video formats */
+/** Studio: 6 useful video formats — one product, clear shoot styles. */
 export type VideoStyleId =
   | 'video_table_talk'
-  | 'video_ugc_selfie'
-  | 'video_unboxing'
   | 'video_howto_demo'
-  | 'video_grwm'
+  | 'video_unboxing'
+  | 'video_ugc_selfie'
   | 'video_product_spin'
   | 'video_testimonial'
-  | 'video_asmr_detail'
-  | 'video_before_after'
-  | 'video_street_stop'
 
-/** Same hero perfume SKU for every video format sample (perfume-1…5). */
+/** Format demos built from the same hero perfume product. */
 const HERO_VIDEO = {
-  a: '/videos/perfume-1.mp4',
-  b: '/videos/perfume-2.mp4',
-  c: '/videos/perfume-3.mp4',
-  d: '/videos/perfume-4.mp4',
-  e: '/videos/perfume-5.mp4',
+  talk: '/videos/formats/table-talk.mp4',
+  howto: '/videos/formats/howto.mp4',
+  unbox: '/videos/formats/unboxing.mp4',
+  ugc: '/videos/formats/ugc.mp4',
+  spin: '/videos/formats/spin.mp4',
+  proof: '/videos/formats/testimonial.mp4',
 } as const
 
 export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_table_talk',
     label: 'Table talk',
-    description: 'Creator at a table reviewing this bottle',
-    thumb: HERO_PRODUCT.daylight,
+    description: 'Person at a table talking about the product',
+    thumb: '/images/video-poster-table-talk.jpg',
     tag: 'Talk',
-    videoUrl: HERO_VIDEO.a,
+    videoUrl: HERO_VIDEO.talk,
   },
   {
     id: 'video_howto_demo',
     label: 'How to use',
-    description: 'Spray / pulse-point demo with this bottle',
-    thumb: HERO_PRODUCT.studio,
+    description: 'Person spraying / applying the product',
+    thumb: '/images/video-poster-howto.jpg',
     tag: 'How-to',
-    videoUrl: HERO_VIDEO.b,
-  },
-  {
-    id: 'video_ugc_selfie',
-    label: 'UGC selfie',
-    description: 'Handheld vertical clip featuring the bottle',
-    thumb: HERO_PRODUCT.evening,
-    tag: 'UGC',
-    videoUrl: HERO_VIDEO.c,
+    videoUrl: HERO_VIDEO.howto,
   },
   {
     id: 'video_unboxing',
     label: 'Unboxing',
-    description: 'First reveal of the same bottle',
-    thumb: HERO_PRODUCT.studio,
+    description: 'Person opening packaging and revealing the product',
+    thumb: '/images/video-poster-unbox.jpg',
     tag: 'Unbox',
-    videoUrl: HERO_VIDEO.d,
+    videoUrl: HERO_VIDEO.unbox,
+  },
+  {
+    id: 'video_ugc_selfie',
+    label: 'UGC use',
+    description: 'Creator-style clip of someone using it',
+    thumb: '/images/video-poster-ugc.jpg',
+    tag: 'UGC',
+    videoUrl: HERO_VIDEO.ugc,
   },
   {
     id: 'video_product_spin',
     label: 'Product spin',
-    description: 'Slow hero turn of the bottle',
-    thumb: HERO_PRODUCT.daylight,
+    description: 'Hero turntable angles of the bottle',
+    thumb: '/images/video-poster-spin.jpg',
     tag: '360°',
-    videoUrl: HERO_VIDEO.e,
-  },
-  {
-    id: 'video_grwm',
-    label: 'Vanity ritual',
-    description: 'Getting-ready moment with this scent',
-    thumb: HERO_PRODUCT.evening,
-    tag: 'Ritual',
-    videoUrl: HERO_VIDEO.a,
+    videoUrl: HERO_VIDEO.spin,
   },
   {
     id: 'video_testimonial',
     label: 'Testimonial',
-    description: 'Talking-head review holding the bottle',
-    thumb: HERO_PRODUCT.daylight,
+    description: 'Person holding the product while reviewing it',
+    thumb: '/images/video-poster-testimonial.jpg',
     tag: 'Proof',
-    videoUrl: HERO_VIDEO.c,
-  },
-  {
-    id: 'video_asmr_detail',
-    label: 'ASMR detail',
-    description: 'Close-up glass, cap, and mist',
-    thumb: HERO_PRODUCT.studio,
-    tag: 'ASMR',
-    videoUrl: HERO_VIDEO.b,
-  },
-  {
-    id: 'video_before_after',
-    label: 'Day to night',
-    description: 'Same bottle across day → evening energy',
-    thumb: HERO_PRODUCT.evening,
-    tag: 'Day/Night',
-    videoUrl: HERO_VIDEO.d,
-  },
-  {
-    id: 'video_street_stop',
-    label: 'On the go',
-    description: 'Pocket / bag moment with this bottle',
-    thumb: HERO_PRODUCT.daylight,
-    tag: 'Go',
-    videoUrl: HERO_VIDEO.e,
+    videoUrl: HERO_VIDEO.proof,
   },
 ]
 
 export const DEFAULT_VIDEO_STYLES: VideoStyleId[] = [
   'video_table_talk',
   'video_howto_demo',
-  'video_product_spin',
+  'video_unboxing',
 ]
 
 export function resolveVideoStyles(selected: VideoStyleId[]): VideoStyleId[] {
@@ -288,12 +253,7 @@ export function resolveVideoStyles(selected: VideoStyleId[]): VideoStyleId[] {
 export function videoUrlForAsset(assetType: string): string | undefined {
   const direct = VIDEO_STYLES.find((s) => s.id === assetType)?.videoUrl
   if (direct) return direct
-  const legacy: Record<string, VideoStyleId> = {
-    ugc_video: 'video_ugc_selfie',
-    reels_video: 'video_grwm',
-    marketing_video: 'video_product_spin',
-  }
-  const mapped = legacy[assetType]
+  const mapped = LEGACY_VIDEO[assetType]
   return mapped ? VIDEO_STYLES.find((s) => s.id === mapped)?.videoUrl : undefined
 }
 
@@ -389,8 +349,12 @@ const LEGACY_PHOTO: Record<string, PhotoStyleId> = {
 
 const LEGACY_VIDEO: Record<string, VideoStyleId> = {
   ugc_video: 'video_ugc_selfie',
-  reels_video: 'video_grwm',
-  marketing_video: 'video_product_spin',
+  reels_video: 'video_ugc_selfie',
+  marketing_video: 'video_howto_demo',
+  video_grwm: 'video_howto_demo',
+  video_asmr_detail: 'video_howto_demo',
+  video_before_after: 'video_table_talk',
+  video_street_stop: 'video_ugc_selfie',
 }
 
 export function normalizePhotoStyleId(id: string): PhotoStyleId | null {

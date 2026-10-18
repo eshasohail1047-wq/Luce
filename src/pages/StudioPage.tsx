@@ -36,6 +36,7 @@ import {
   saveLocalCampaign,
   stashCampaignImage,
   stashCampaignOutputs,
+  stashCampaignRefImage,
   updateLocalCampaign,
   withTimeout,
 } from '../lib/localDemoCampaign'
@@ -75,6 +76,11 @@ export default function StudioPage() {
   const [brand, setBrand] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [referenceFile, setReferenceFile] = useState<File | null>(null)
+  const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(
+    null,
+  )
+  const [referenceError, setReferenceError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showDetails, setShowDetails] = useState(true)
   const [photoStyles, setPhotoStyles] = useState<PhotoStyleId[]>([])
@@ -127,6 +133,45 @@ export default function StudioPage() {
     setPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [imageFile])
+
+  useEffect(() => {
+    if (!referenceFile) {
+      setReferencePreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(referenceFile)
+    setReferencePreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [referenceFile])
+
+  function pickReferenceFile(file: File | null) {
+    setReferenceError(null)
+    if (!file) {
+      setReferenceFile(null)
+      return
+    }
+    const wantsVideo = kind === 'videos'
+    if (wantsVideo) {
+      if (!file.type.startsWith('video/')) {
+        setReferenceError('Reference must be a video (MP4, WebM, or MOV).')
+        return
+      }
+      if (file.size > 40 * 1024 * 1024) {
+        setReferenceError('Reference video must be under 40MB.')
+        return
+      }
+    } else {
+      if (!file.type.startsWith('image/')) {
+        setReferenceError('Reference must be an image (JPG, PNG, or WebP).')
+        return
+      }
+      if (file.size > 12 * 1024 * 1024) {
+        setReferenceError('Reference image must be under 12MB.')
+        return
+      }
+    }
+    setReferenceFile(file)
+  }
 
   useEffect(() => {
     if (!user) return
@@ -203,13 +248,15 @@ export default function StudioPage() {
     setBackground('')
     setMood('')
     setStyleTheme('')
+    setReferenceFile(null)
+    setReferenceError(null)
     setError(null)
     setWarning(null)
     setRecreate(null)
 
     const style = searchParams.get('style')
     if (kind === 'videos' && style === 'ugc') {
-      setVideoStyles(['video_table_talk', 'video_howto_demo'])
+      setVideoStyles(['video_ugc_selfie', 'video_howto_demo'])
     }
   }, [kind, searchParams])
 
@@ -320,9 +367,19 @@ export default function StudioPage() {
           }
         }
 
+        let referenceImage: string | undefined
+        if (referenceFile) {
+          try {
+            referenceImage = await fileToDataUrl(referenceFile)
+          } catch {
+            /* optional */
+          }
+        }
+
         const ai = await requestGenerateImages({
           productName: productName.trim() || session.productName,
           productImage,
+          referenceImage,
           creativeDirection: {
             prompt: directionNote || undefined,
             lighting: lighting || undefined,
@@ -469,6 +526,13 @@ export default function StudioPage() {
         'create-studio',
       )
       if (imageDataUrl) stashCampaignImage(result.campaignId, imageDataUrl)
+      if (referenceFile) {
+        try {
+          stashCampaignRefImage(result.campaignId, await fileToDataUrl(referenceFile))
+        } catch {
+          /* optional */
+        }
+      }
       // Reserve the free image try when the project is started
       if (isFreeTry) await markFreeImageUsed()
       navigate(`/app/campaigns/${result.campaignId}`, { replace: true })
@@ -496,6 +560,13 @@ export default function StudioPage() {
           createdAt: Date.now(),
         })
         if (imageUrl) stashCampaignImage(id, imageUrl)
+        if (referenceFile) {
+          try {
+            stashCampaignRefImage(id, await fileToDataUrl(referenceFile))
+          } catch {
+            /* optional */
+          }
+        }
         if (isFreeTry) await markFreeImageUsed()
         navigate(`/app/campaigns/${id}`, { replace: true })
       } catch (localErr) {
@@ -532,22 +603,22 @@ export default function StudioPage() {
             kicker: 'UGC Studio',
             title: 'Creator-style product videos',
             lead: 'Pick formats like table talk, selfie UGC, or unboxing — each card is a different shoot style.',
-            image: '/images/fidelity-daylight.jpg',
+            image: '/images/video-poster-ugc.jpg',
             accent: 'videos' as const,
             cta: 'Generate UGC video',
             stylesTitle: 'Pick video formats',
-            stylesHint: 'Same product in every format — table talk, how-to, and more.',
+            stylesHint: 'Hover a card to preview — table talk, how-to, UGC, and more.',
           }
         : kind === 'videos'
           ? {
               kicker: 'Video Studio',
               title: 'Bring the product to life',
-              lead: 'One product across formats — table talk, how to use, product spin, vanity ritual, and more.',
-              image: '/images/fidelity-studio.jpg',
+              lead: 'Six live-action formats — real creators talking, using, unboxing, and reviewing the product.',
+              image: '/images/video-poster-table-talk.jpg',
               accent: 'videos' as const,
               cta: 'Generate videos',
               stylesTitle: 'Pick video formats',
-              stylesHint: 'Hover to preview the same bottle in each format.',
+              stylesHint: 'Hover to preview · each clip shows a person using that format.',
             }
           : {
               kicker: 'Ads & Social',
@@ -821,13 +892,17 @@ export default function StudioPage() {
               onStyleThemeChange={setStyleTheme}
               disabled={busy}
               compact={!isRecreate}
+              referencePreviewUrl={referencePreviewUrl}
+              onReferenceFile={pickReferenceFile}
+              referenceError={referenceError}
+              referenceKind={kind === 'videos' ? 'video' : 'image'}
               promptPlaceholder={
                 isRecreate
                   ? 'e.g. Brighter lighting, white background, less glitter, keep packaging sharp…'
                   : kind === 'photos'
                     ? 'e.g. Soft morning light on marble, keep bottle label sharp…'
                     : kind === 'videos'
-                      ? 'e.g. Slow 360 reveal, soft voiceover energy, keep packaging true…'
+                      ? 'e.g. Natural talking pace, keep packaging true, soft vanity light…'
                       : 'e.g. Bold offer creative for Meta ads, clean white space for CTA…'
               }
             />

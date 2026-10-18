@@ -28,6 +28,7 @@ import {
   newLocalId,
   saveLocalCampaign,
   stashCampaignImage,
+  stashCampaignRefImage,
   withTimeout,
 } from '../lib/localDemoCampaign'
 
@@ -45,6 +46,11 @@ export default function NewCampaignPage() {
   const [category, setCategory] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [referenceFile, setReferenceFile] = useState<File | null>(null)
+  const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(
+    null,
+  )
+  const [referenceError, setReferenceError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showDetails, setShowDetails] = useState(true)
   const [photoStyles, setPhotoStyles] = useState<PhotoStyleId[]>([])
@@ -73,6 +79,33 @@ export default function NewCampaignPage() {
     setPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [imageFile])
+
+  useEffect(() => {
+    if (!referenceFile) {
+      setReferencePreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(referenceFile)
+    setReferencePreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [referenceFile])
+
+  function pickReferenceFile(file: File | null) {
+    setReferenceError(null)
+    if (!file) {
+      setReferenceFile(null)
+      return
+    }
+    if (!file.type.startsWith('image/')) {
+      setReferenceError('Reference must be an image (JPG, PNG, or WebP).')
+      return
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      setReferenceError('Reference image must be under 12MB.')
+      return
+    }
+    setReferenceFile(file)
+  }
 
   useEffect(() => {
     // Try-free flow lands in Image Studio; only hydrate here if something is left over.
@@ -170,6 +203,13 @@ export default function NewCampaignPage() {
       createdAt: Date.now(),
     })
     if (imageUrl) stashCampaignImage(id, imageUrl)
+    if (referenceFile) {
+      try {
+        stashCampaignRefImage(id, await fileToDataUrl(referenceFile))
+      } catch {
+        /* optional */
+      }
+    }
     navigate(`/app/campaigns/${id}`, { replace: true })
   }
 
@@ -225,6 +265,16 @@ export default function NewCampaignPage() {
         'create-campaign',
       )
       if (imageDataUrl) stashCampaignImage(result.campaignId, imageDataUrl)
+      if (referenceFile) {
+        try {
+          stashCampaignRefImage(
+            result.campaignId,
+            await fileToDataUrl(referenceFile),
+          )
+        } catch {
+          /* optional */
+        }
+      }
       navigate(`/app/campaigns/${result.campaignId}`, { replace: true })
     } catch (err) {
       console.warn('[NewCampaign] falling back to local demo campaign', err)
@@ -478,6 +528,9 @@ export default function NewCampaignPage() {
             onStyleThemeChange={setStyleTheme}
             disabled={busy}
             compact
+            referencePreviewUrl={referencePreviewUrl}
+            onReferenceFile={pickReferenceFile}
+            referenceError={referenceError}
             promptPlaceholder="e.g. Soft morning light, keep packaging exact, quiet premium mood…"
           />
 

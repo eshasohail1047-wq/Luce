@@ -82,12 +82,18 @@ export default function FormatPickGrid<T extends string>({
                 <img src={item.thumb} alt="" />
               )}
               {item.tag ? <span className="format-pick-tag">{item.tag}</span> : null}
+              {videoAspect ? (
+                <span className="format-pick-play" aria-hidden="true">
+                  ▶
+                </span>
+              ) : null}
               <span className="format-pick-check" aria-hidden="true">
                 ✓
               </span>
             </span>
             <span className="format-pick-body">
               <strong>{item.label}</strong>
+              <span>{item.description}</span>
             </span>
           </label>
         )

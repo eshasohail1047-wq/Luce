@@ -45,6 +45,8 @@ export type CreativeDirectionSummary = {
 export type GenerateImagesInput = {
   productName: string
   productImage?: string
+  /** Style/mood reference — not packaging source of truth */
+  referenceImage?: string
   creativeDirection?: CreativeDirectionSummary
   assets: ImageAssetKind[]
   recreateNote?: string
@@ -87,7 +89,8 @@ const LABELS: Record<ImageAssetKind, string> = {
 
 const FIDELITY_RULES = `
 CRITICAL PRODUCT FIDELITY (LUCE brand promise):
-- Keep the product packaging EXACTLY true to the reference photo: same label artwork, logo, typography, colors, bottle/jar shape, materials, and proportions.
+- The FIRST attached image is the product packaging ground truth. Keep packaging EXACTLY true: same label artwork, logo, typography, colors, bottle/jar shape, materials, and proportions.
+- If a SECOND image is attached, it is a STYLE / MOOD / SCENE reference only. Copy lighting, composition, atmosphere, and props vibe from it — NEVER replace or blend the product packaging from that second image.
 - Do NOT invent, redraw, blur, or restyle the brand mark or label text.
 - Only change scene, lighting, camera angle, composition, and supporting props — never the product identity itself.
 - Photorealistic commercial photography. No text overlays unless the style explicitly needs promo space (leave clean negative space).
@@ -204,7 +207,10 @@ export async function generateCampaignImages(
   }
 
   const productImage = input.productImage?.trim() || undefined
-  const refs = productImage ? [productImage] : undefined
+  const referenceImage = input.referenceImage?.trim() || undefined
+  const inputReferences = [productImage, referenceImage].filter(
+    (v): v is string => Boolean(v),
+  )
 
   type Settled =
     | { ok: true; asset: GeneratedAsset }
@@ -220,7 +226,7 @@ export async function generateCampaignImages(
     try {
       const result = await generateImage({
         prompt: promptUsed,
-        inputReferences: refs,
+        inputReferences: inputReferences.length ? inputReferences : undefined,
       })
       return {
         ok: true as const,

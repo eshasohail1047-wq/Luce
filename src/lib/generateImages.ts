@@ -20,6 +20,8 @@ export function isImageAssetKind(value: string): value is ImageAssetKind {
 export type GenerateImagesRequest = {
   productName: string
   productImage?: string
+  /** Style/mood reference photo (optional) */
+  referenceImage?: string
   creativeDirection?: CreativeDirection
   assets: ImageAssetKind[]
   recreateNote?: string
@@ -60,6 +62,7 @@ export async function requestGenerateImages(
     body: JSON.stringify({
       productName: input.productName,
       productImage: input.productImage,
+      referenceImage: input.referenceImage,
       creativeDirection: input.creativeDirection,
       assets: input.assets,
       recreateNote: input.recreateNote,

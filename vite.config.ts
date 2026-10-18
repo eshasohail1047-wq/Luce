@@ -203,6 +203,10 @@ function localApiRoutes(): Plugin {
                 typeof body.productImage === 'string'
                   ? body.productImage
                   : undefined,
+              referenceImage:
+                typeof body.referenceImage === 'string'
+                  ? body.referenceImage
+                  : undefined,
               creativeDirection: cd
                 ? {
                     prompt: typeof cd.prompt === 'string' ? cd.prompt : undefined,
@@ -253,8 +257,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), localApiRoutes()],
     server: {
-      host: 'localhost',
+      host: '127.0.0.1',
       port: 5176,
+      strictPort: true,
     },
   }
 })

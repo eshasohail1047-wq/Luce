@@ -56,6 +56,7 @@ export function isLocalCampaignId(id: string | undefined) {
 }
 
 const IMAGE_KEY = 'luce.campaignImage.'
+const REF_KEY = 'luce.campaignRefImage.'
 const OUTPUTS_KEY = 'luce.campaignOutputs.'
 
 /** Keep uploaded product photo available on review even if Storage is slow. */
@@ -70,6 +71,23 @@ export function stashCampaignImage(campaignId: string, dataUrl: string) {
 export function loadStashedCampaignImage(campaignId: string): string | undefined {
   try {
     return sessionStorage.getItem(IMAGE_KEY + campaignId) || undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Optional shoot/style reference photo (not the product itself). */
+export function stashCampaignRefImage(campaignId: string, dataUrl: string) {
+  try {
+    sessionStorage.setItem(REF_KEY + campaignId, dataUrl)
+  } catch (err) {
+    console.error('[localDemo] ref image stash failed', err)
+  }
+}
+
+export function loadStashedCampaignRefImage(campaignId: string): string | undefined {
+  try {
+    return sessionStorage.getItem(REF_KEY + campaignId) || undefined
   } catch {
     return undefined
   }
@@ -96,6 +114,7 @@ export function loadStashedCampaignOutputs<T>(campaignId: string): T | undefined
 export function clearCampaignStash(campaignId: string) {
   try {
     sessionStorage.removeItem(IMAGE_KEY + campaignId)
+    sessionStorage.removeItem(REF_KEY + campaignId)
     sessionStorage.removeItem(OUTPUTS_KEY + campaignId)
   } catch {
     /* ignore */

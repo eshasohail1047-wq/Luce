@@ -20,6 +20,7 @@ import {
   loadLocalCampaign,
   loadStashedCampaignImage,
   loadStashedCampaignOutputs,
+  loadStashedCampaignRefImage,
   stashCampaignImage,
   updateLocalCampaign,
 } from '../lib/localDemoCampaign'
@@ -315,9 +316,13 @@ export default function CampaignDetailPage() {
         setProgress(82)
         setActionMsg('Generating AI product images…')
         try {
+          const referenceImage =
+            (campaignId ? loadStashedCampaignRefImage(campaignId) : undefined) ||
+            undefined
           const ai = await requestGenerateImages({
             productName: campaign.productName,
             productImage: campaign.imageUrl,
+            referenceImage,
             creativeDirection: campaign.creativeDirection,
             assets: imageKinds,
           })
