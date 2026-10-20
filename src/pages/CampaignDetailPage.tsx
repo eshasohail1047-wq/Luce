@@ -78,7 +78,7 @@ function mergeAiImages(
     return {
       ...item,
       imageUrl: ai.imageDataUrl,
-      note: 'AI-generated · packaging fidelity from your product photo',
+      note: 'AI-generated (Muse / OpenRouter) · packaging fidelity from your product photo',
     }
   })
 }
@@ -96,7 +96,7 @@ function mergeAiVideos(
       ...item,
       videoUrl: ai.videoDataUrl,
       kind: 'video' as const,
-      note: 'AI-generated · reference video preferred, then your prompt',
+      note: 'AI-generated (HeyGen / OpenRouter) · reference preferred, then your prompt',
     }
   })
 }

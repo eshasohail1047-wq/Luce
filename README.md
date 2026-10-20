@@ -11,15 +11,20 @@ npm run dev
 
 Copy `.env.example` to `.env.local` and fill in values. Never commit secrets.
 
-### Image + video generation (OpenRouter)
+### Image + video generation
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENROUTER_API_KEY` | Bearer for images + videos |
-| `OPENROUTER_IMAGE_MODEL` | Default `google/gemini-2.5-flash-image` → `POST /api/generate-images` |
-| `OPENROUTER_VIDEO_MODEL` | Default `heygen/heygen-video-1` → `POST /api/generate-videos` |
+| `MUSE_API_KEY` (or `MODEL_API_KEY`) | **Preferred images** — Meta Muse Image (~$0.01/image) |
+| `MUSE_IMAGE_MODEL` | Default `muse-image-1.0` |
+| `HEYGEN_API_KEY` | **Preferred videos** — HeyGen `heygen-video-1` (image/text → video) |
+| `OPENROUTER_API_KEY` | Fallback for images + videos if Muse/HeyGen fail or are unset |
+| `OPENROUTER_IMAGE_MODEL` | Default `google/gemini-2.5-flash-image` |
+| `OPENROUTER_VIDEO_MODEL` | Default `heygen/heygen-video-1` via OpenRouter |
 
-Photo Studio / campaign image assets use the images API. Video Studio / video assets use the async videos API (reference still + prompt preferred). If the key is missing or a call fails, LUCE keeps demo stills / format clips so generate still works.
+Photo Studio → Muse (edit with product photo when present), else OpenRouter.  
+Video Studio → HeyGen direct (`image_to_video` / `reference_to_video`), else OpenRouter.  
+Missing keys or failed calls keep demo stills / format clips.
 
 ## Build
 

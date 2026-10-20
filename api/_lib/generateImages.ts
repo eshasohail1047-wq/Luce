@@ -1,4 +1,40 @@
+import { generateMuseImage, getMuseApiKey } from './muse'
 import { generateImage, getOpenRouterApiKey } from './openRouter'
+
+async function generateImageWithProviders(input: {
+  prompt: string
+  inputReferences?: string[]
+}): Promise<{ imageDataUrl: string; provider: string }> {
+  const refs = input.inputReferences
+  // Prefer Meta Muse ($0.01/image) when configured
+  if (getMuseApiKey()) {
+    try {
+      const result = await generateMuseImage({
+        prompt: input.prompt,
+        inputImages: refs,
+      })
+      return { imageDataUrl: result.imageDataUrl, provider: 'muse' }
+    } catch (err) {
+      console.warn(
+        '[generate-images] Muse failed, trying OpenRouter',
+        err instanceof Error ? err.message : err,
+      )
+      if (!getOpenRouterApiKey()) throw err
+    }
+  }
+
+  if (!getOpenRouterApiKey()) {
+    throw new Error(
+      'No image provider configured. Set MUSE_API_KEY (or MODEL_API_KEY) and/or OPENROUTER_API_KEY.',
+    )
+  }
+
+  const result = await generateImage({
+    prompt: input.prompt,
+    inputReferences: refs,
+  })
+  return { imageDataUrl: result.imageDataUrl, provider: 'openrouter' }
+}
 
 export type ImageAssetKind =
   | 'photo_studio_packshot'
@@ -180,12 +216,12 @@ async function mapWithConcurrency<T, R>(
 export async function generateCampaignImages(
   input: GenerateImagesInput,
 ): Promise<GenerateImagesResult> {
-  if (!getOpenRouterApiKey()) {
+  if (!getMuseApiKey() && !getOpenRouterApiKey()) {
     return {
       status: 503,
       body: {
         error:
-          'OpenRouter is not configured. Set OPENROUTER_API_KEY (and optionally OPENROUTER_IMAGE_MODEL).',
+          'Image AI is not configured. Set MUSE_API_KEY (Meta Muse) and/or OPENROUTER_API_KEY.',
       },
     }
   }
@@ -224,7 +260,7 @@ export async function generateCampaignImages(
       input.recreateNote,
     )
     try {
-      const result = await generateImage({
+      const result = await generateImageWithProviders({
         prompt: promptUsed,
         inputReferences: inputReferences.length ? inputReferences : undefined,
       })
@@ -258,7 +294,7 @@ export async function generateCampaignImages(
       body: {
         error:
           partialErrors[0]?.error ||
-          'All image generations failed. Check OpenRouter model and key.',
+          'All image generations failed. Check Muse / OpenRouter keys and models.',
       },
     }
   }

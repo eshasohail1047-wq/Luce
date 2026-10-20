@@ -1,4 +1,55 @@
+import { generateHeyGenVideo, getHeyGenApiKey } from './heygen'
 import { generateVideo, getOpenRouterApiKey } from './openRouter'
+
+async function generateVideoWithProviders(input: {
+  prompt: string
+  frameImages?: { url: string; frameType: 'first_frame' }[]
+  inputReferences?: string[]
+  duration?: number
+  aspectRatio?: '9:16'
+  resolution?: '768p'
+  generateAudio?: boolean
+}): Promise<{ videoDataUrl: string; provider: string }> {
+  const firstFrame = input.frameImages?.[0]?.url
+  const refs = input.inputReferences
+
+  if (getHeyGenApiKey()) {
+    try {
+      const result = await generateHeyGenVideo({
+        prompt: input.prompt,
+        imageUrl: firstFrame,
+        referenceImages: refs,
+        duration: input.duration ?? 5,
+        aspectRatio: input.aspectRatio ?? '9:16',
+        resolution: input.resolution ?? '768p',
+      })
+      return { videoDataUrl: result.videoDataUrl, provider: 'heygen' }
+    } catch (err) {
+      console.warn(
+        '[generate-videos] HeyGen failed, trying OpenRouter',
+        err instanceof Error ? err.message : err,
+      )
+      if (!getOpenRouterApiKey()) throw err
+    }
+  }
+
+  if (!getOpenRouterApiKey()) {
+    throw new Error(
+      'No video provider configured. Set HEYGEN_API_KEY and/or OPENROUTER_API_KEY.',
+    )
+  }
+
+  const result = await generateVideo({
+    prompt: input.prompt,
+    frameImages: input.frameImages,
+    inputReferences: refs,
+    duration: input.duration,
+    aspectRatio: input.aspectRatio,
+    resolution: input.resolution,
+    generateAudio: input.generateAudio,
+  })
+  return { videoDataUrl: result.videoDataUrl, provider: 'openrouter' }
+}
 
 export type VideoAssetKind =
   | 'video_table_talk'
@@ -156,12 +207,12 @@ function buildPrompt(
 export async function generateCampaignVideos(
   input: GenerateVideosInput,
 ): Promise<GenerateVideosResult> {
-  if (!getOpenRouterApiKey()) {
+  if (!getHeyGenApiKey() && !getOpenRouterApiKey()) {
     return {
       status: 503,
       body: {
         error:
-          'OpenRouter is not configured. Set OPENROUTER_API_KEY (and optionally OPENROUTER_VIDEO_MODEL).',
+          'Video AI is not configured. Set HEYGEN_API_KEY and/or OPENROUTER_API_KEY.',
       },
     }
   }
@@ -213,7 +264,7 @@ export async function generateCampaignVideos(
           ? [productImage]
           : undefined
 
-      const result = await generateVideo({
+      const result = await generateVideoWithProviders({
         prompt: promptUsed,
         frameImages: frameImages.length ? frameImages : undefined,
         inputReferences,
@@ -242,7 +293,7 @@ export async function generateCampaignVideos(
       body: {
         error:
           partialErrors[0]?.error ||
-          'All video generations failed. Check OpenRouter video model and key.',
+          'All video generations failed. Check HeyGen / OpenRouter keys and models.',
       },
     }
   }
