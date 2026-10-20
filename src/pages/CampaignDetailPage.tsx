@@ -972,7 +972,6 @@ export default function CampaignDetailPage() {
                               poster={preview.imageUrl}
                               controls
                               autoPlay
-                              muted
                               loop
                               playsInline
                             />

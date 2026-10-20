@@ -564,7 +564,7 @@ export default function NewCampaignPage() {
                 {limits.maxVideos === 0
                   ? 'Upgrade to unlock video formats'
                   : videoStyles.length === 0
-                    ? `Hover a card to preview — blank uses ${Math.min(DEFAULT_VIDEO_STYLES.length, limits.maxVideos)} starter clips · max ${limits.maxVideos}`
+                    ? `Winning formats — hover to preview · blank uses ${Math.min(DEFAULT_VIDEO_STYLES.length, limits.maxVideos)} · max ${limits.maxVideos}`
                     : `${videoStyles.length} / ${limits.maxVideos} selected`}
               </p>
             </div>

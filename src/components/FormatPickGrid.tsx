@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { FormatOption } from '../lib/deliverables'
 
 type FormatPickGridProps<T extends string> = {
@@ -9,9 +10,75 @@ type FormatPickGridProps<T extends string> = {
   defaultIds?: T[]
   max?: number
   ariaLabel: string
-  /** Prefer taller cards for video formats */
+  /** Prefer taller cards for video formats (Fastlane-style gallery) */
   videoAspect?: boolean
   onLimitHit?: () => void
+}
+
+function FormatVideoCard({
+  src,
+  poster,
+  label,
+}: {
+  src: string
+  poster: string
+  label: string
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const wrapRef = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    const video = videoRef.current
+    const wrap = wrapRef.current
+    if (!video || !wrap) return
+
+    video.muted = true
+    video.defaultMuted = true
+    video.playsInline = true
+    video.loop = true
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.25) {
+            void video.play().catch(() => {})
+          } else {
+            video.pause()
+          }
+        }
+      },
+      { threshold: [0, 0.25, 0.5], rootMargin: '80px 0px' },
+    )
+    io.observe(wrap)
+    return () => io.disconnect()
+  }, [src])
+
+  return (
+    <span className="format-pick-media format-pick-media-video" ref={wrapRef}>
+      <video
+        ref={videoRef}
+        src={src}
+        poster={poster}
+        muted
+        loop
+        playsInline
+        autoPlay
+        preload="auto"
+        title="Autoplaying · click for sound"
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          const v = e.currentTarget
+          v.muted = !v.muted
+          void v.play().catch(() => {})
+        }}
+      />
+      <span className="format-pick-name">{label}</span>
+      <span className="format-pick-check" aria-hidden="true">
+        ✓
+      </span>
+    </span>
+  )
 }
 
 export default function FormatPickGrid<T extends string>({
@@ -41,7 +108,7 @@ export default function FormatPickGrid<T extends string>({
 
   return (
     <div
-      className={`format-pick-grid${videoAspect ? ' format-pick-grid-video' : ''}`}
+      className={`format-pick-grid${videoAspect ? ' format-pick-grid-video format-pick-grid-fastlane' : ''}`}
       role="group"
       aria-label={ariaLabel}
     >
@@ -51,7 +118,8 @@ export default function FormatPickGrid<T extends string>({
         return (
           <label
             key={item.id}
-            className={`format-pick${checked ? ' is-checked' : ''}${softDefault ? ' is-default' : ''}`}
+            className={`format-pick${videoAspect ? ' format-pick-fastlane' : ''}${checked ? ' is-checked' : ''}${softDefault ? ' is-default' : ''}`}
+            title={item.description}
           >
             <input
               type="checkbox"
@@ -59,42 +127,23 @@ export default function FormatPickGrid<T extends string>({
               onChange={() => toggle(item.id)}
               disabled={disabled}
             />
-            <span
-              className={`format-pick-media${videoAspect ? ' format-pick-media-video' : ''}`}
-            >
-              {videoAspect && item.videoUrl ? (
-                <video
-                  src={item.videoUrl}
-                  poster={item.thumb}
-                  muted
-                  loop
-                  playsInline
-                  preload="metadata"
-                  onMouseEnter={(e) => {
-                    void e.currentTarget.play().catch(() => {})
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.pause()
-                    e.currentTarget.currentTime = 0
-                  }}
-                />
-              ) : (
-                <img src={item.thumb} alt="" />
-              )}
-              {item.tag ? <span className="format-pick-tag">{item.tag}</span> : null}
-              {videoAspect ? (
-                <span className="format-pick-play" aria-hidden="true">
-                  ▶
+            {videoAspect && item.videoUrl ? (
+              <FormatVideoCard src={item.videoUrl} poster={item.thumb} label={item.label} />
+            ) : (
+              <>
+                <span className="format-pick-media">
+                  <img src={item.thumb} alt="" />
+                  {item.tag ? <span className="format-pick-tag">{item.tag}</span> : null}
+                  <span className="format-pick-check" aria-hidden="true">
+                    ✓
+                  </span>
                 </span>
-              ) : null}
-              <span className="format-pick-check" aria-hidden="true">
-                ✓
-              </span>
-            </span>
-            <span className="format-pick-body">
-              <strong>{item.label}</strong>
-              <span>{item.description}</span>
-            </span>
+                <span className="format-pick-body">
+                  <strong>{item.label}</strong>
+                  <span>{item.description}</span>
+                </span>
+              </>
+            )}
           </label>
         )
       })}

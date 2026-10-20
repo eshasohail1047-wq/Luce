@@ -602,23 +602,23 @@ export default function StudioPage() {
         ? {
             kicker: 'UGC Studio',
             title: 'Creator-style product videos',
-            lead: 'Pick formats like table talk, selfie UGC, or unboxing — each card is a different shoot style.',
+            lead: 'Pick winning formats — table talk, UGC, GRWM, mirror selfie, and more — same product every time.',
             image: '/images/video-poster-ugc.jpg',
             accent: 'videos' as const,
             cta: 'Generate UGC video',
-            stylesTitle: 'Pick video formats',
-            stylesHint: 'Hover a card to preview — table talk, how-to, UGC, and more.',
+            stylesTitle: 'Winning formats',
+            stylesHint: 'Hover to preview · click a card to select · click again for sound.',
           }
         : kind === 'videos'
           ? {
               kicker: 'Video Studio',
-              title: 'Bring the product to life',
-              lead: 'Six live-action formats — real creators talking, using, unboxing, and reviewing the product.',
+              title: 'Create endless content from winning formats',
+              lead: 'Same perfume across winning formats — your HeyGen-quality table talk and cinematic clips lead the set.',
               image: '/images/video-poster-table-talk.jpg',
               accent: 'videos' as const,
               cta: 'Generate videos',
-              stylesTitle: 'Pick video formats',
-              stylesHint: 'Hover to preview · each clip shows a person using that format.',
+              stylesTitle: 'Winning formats',
+              stylesHint: 'Videos autoplay muted · click a card to select · click the clip for sound.',
             }
           : {
               kicker: 'Ads & Social',
@@ -918,7 +918,7 @@ export default function StudioPage() {
                     : `${photoStyles.length} / ${limits.maxImages} selected`
                   : kind === 'videos'
                     ? usingDefaults
-                      ? `Hover to preview · max ${limits.maxVideos} videos`
+                      ? `Clips autoplay · blank uses ${Math.min(DEFAULT_VIDEO_STYLES.length, limits.maxVideos)} · max ${limits.maxVideos}`
                       : `${videoStyles.length} / ${limits.maxVideos} selected`
                     : usingDefaults
                       ? studioMeta.stylesHint

@@ -170,33 +170,47 @@ export function resolvePhotoStyles(selected: PhotoStyleId[]): PhotoStyleId[] {
   return selected.length === 0 ? [...DEFAULT_PHOTO_STYLES] : [...new Set(selected)]
 }
 
-/** Studio: 6 useful video formats — one product, clear shoot styles. */
+/**
+ * Video Studio formats — HeyGen-quality demos for the same rose-gold perfume.
+ * Your two uploaded clips power table talk + cinematic; others are matching AI format videos.
+ */
 export type VideoStyleId =
   | 'video_table_talk'
+  | 'video_cinematic'
   | 'video_howto_demo'
   | 'video_unboxing'
   | 'video_ugc_selfie'
-  | 'video_product_spin'
   | 'video_testimonial'
+  | 'video_grwm'
+  | 'video_asmr_spray'
 
-/** Format demos built from the same hero perfume product. */
 const HERO_VIDEO = {
   talk: '/videos/formats/table-talk.mp4',
+  cinematic: '/videos/formats/cinematic.mp4',
   howto: '/videos/formats/howto.mp4',
   unbox: '/videos/formats/unboxing.mp4',
   ugc: '/videos/formats/ugc.mp4',
-  spin: '/videos/formats/spin.mp4',
   proof: '/videos/formats/testimonial.mp4',
+  grwm: '/videos/formats/grwm.mp4',
+  asmr: '/videos/formats/asmr.mp4',
 } as const
 
 export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_table_talk',
     label: 'Table talk',
-    description: 'Person at a table talking about the product',
+    description: 'Creator at a table talking about the perfume',
     thumb: '/images/video-poster-table-talk.jpg',
     tag: 'Talk',
     videoUrl: HERO_VIDEO.talk,
+  },
+  {
+    id: 'video_cinematic',
+    label: 'Cinematic',
+    description: 'Premium product spot with mist and motion',
+    thumb: '/images/video-poster-spin.jpg',
+    tag: 'Hero',
+    videoUrl: HERO_VIDEO.cinematic,
   },
   {
     id: 'video_howto_demo',
@@ -209,41 +223,50 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_unboxing',
     label: 'Unboxing',
-    description: 'Person opening packaging and revealing the product',
+    description: 'Opening packaging and revealing the bottle',
     thumb: '/images/video-poster-unbox.jpg',
     tag: 'Unbox',
     videoUrl: HERO_VIDEO.unbox,
   },
   {
     id: 'video_ugc_selfie',
-    label: 'UGC use',
+    label: 'UGC selfie',
     description: 'Creator-style clip of someone using it',
     thumb: '/images/video-poster-ugc.jpg',
     tag: 'UGC',
     videoUrl: HERO_VIDEO.ugc,
   },
   {
-    id: 'video_product_spin',
-    label: 'Product spin',
-    description: 'Hero turntable angles of the bottle',
-    thumb: '/images/video-poster-spin.jpg',
-    tag: '360°',
-    videoUrl: HERO_VIDEO.spin,
-  },
-  {
     id: 'video_testimonial',
     label: 'Testimonial',
-    description: 'Person holding the product while reviewing it',
+    description: 'Holding the product while reviewing it',
     thumb: '/images/video-poster-testimonial.jpg',
     tag: 'Proof',
     videoUrl: HERO_VIDEO.proof,
+  },
+  {
+    id: 'video_grwm',
+    label: 'GRWM',
+    description: 'Get-ready-with-me morning scent routine',
+    thumb: '/images/video-poster-grwm.jpg',
+    tag: 'GRWM',
+    videoUrl: HERO_VIDEO.grwm,
+  },
+  {
+    id: 'video_asmr_spray',
+    label: 'Spray ASMR',
+    description: 'Close-up nozzle press and mist detail',
+    thumb: '/images/video-poster-asmr.jpg',
+    tag: 'ASMR',
+    videoUrl: HERO_VIDEO.asmr,
   },
 ]
 
 export const DEFAULT_VIDEO_STYLES: VideoStyleId[] = [
   'video_table_talk',
+  'video_cinematic',
   'video_howto_demo',
-  'video_unboxing',
+  'video_ugc_selfie',
 ]
 
 export function resolveVideoStyles(selected: VideoStyleId[]): VideoStyleId[] {
@@ -351,10 +374,14 @@ const LEGACY_VIDEO: Record<string, VideoStyleId> = {
   ugc_video: 'video_ugc_selfie',
   reels_video: 'video_ugc_selfie',
   marketing_video: 'video_howto_demo',
-  video_grwm: 'video_howto_demo',
-  video_asmr_detail: 'video_howto_demo',
+  video_asmr_detail: 'video_asmr_spray',
   video_before_after: 'video_table_talk',
   video_street_stop: 'video_ugc_selfie',
+  video_product_spin: 'video_cinematic',
+  video_hook_caption: 'video_ugc_selfie',
+  video_mirror_selfie: 'video_ugc_selfie',
+  video_flatlay_reveal: 'video_unboxing',
+  video_winner_cut: 'video_testimonial',
 }
 
 export function normalizePhotoStyleId(id: string): PhotoStyleId | null {

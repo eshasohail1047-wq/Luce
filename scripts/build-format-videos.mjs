@@ -1,6 +1,6 @@
 /**
- * Copy real live-action creator clips into vertical format demos.
- * No Ken Burns / photo slideshows — source files are camera footage only.
+ * Build unique vertical demo clips for every Video Studio format.
+ * Free local assets only — paid video gen is reserved for users.
  */
 import ffmpegPath from 'ffmpeg-static'
 import { spawnSync } from 'node:child_process'
@@ -10,7 +10,6 @@ import path from 'node:path'
 const root = process.cwd()
 const srcDir = path.join(root, 'public/videos')
 const outDir = path.join(root, 'public/videos/formats')
-const posterDir = path.join(root, 'public/images')
 fs.mkdirSync(outDir, { recursive: true })
 
 if (!ffmpegPath) {
@@ -21,33 +20,27 @@ if (!ffmpegPath) {
 function run(args) {
   const r = spawnSync(ffmpegPath, args, { encoding: 'utf8' })
   if (r.status !== 0) {
-    console.error(r.stderr?.slice(-2000))
-    throw new Error('ffmpeg failed')
+    console.error(r.stderr?.slice(-1800))
+    throw new Error(`ffmpeg failed: ${args.slice(0, 6).join(' ')}`)
   }
 }
 
-/**
- * Normalize to muted vertical 720x1280 H.264, trim to ~7s from a useful start.
- */
-function makeClip({ name, source, start = 0, duration = 7, posterAt = 0.6, poster }) {
+function makeClip({ name, source, start = 0.3, duration = 6 }) {
   const input = path.join(srcDir, source)
   if (!fs.existsSync(input)) throw new Error(`missing ${input}`)
-
   const out = path.join(outDir, `${name}.mp4`)
   const vf =
     `scale=720:1280:force_original_aspect_ratio=increase,` +
-    `crop=720:1280,` +
-    `setsar=1,` +
-    `format=yuv420p`
+    `crop=720:1280,setsar=1,fps=24,format=yuv420p`
 
   run([
     '-y',
     '-ss',
     String(start),
-    '-i',
-    input,
     '-t',
     String(duration),
+    '-i',
+    input,
     '-vf',
     vf,
     '-an',
@@ -56,81 +49,74 @@ function makeClip({ name, source, start = 0, duration = 7, posterAt = 0.6, poste
     '-preset',
     'fast',
     '-crf',
-    '22',
+    '20',
     '-movflags',
     '+faststart',
     out,
   ])
-
-  const posterPath = path.join(posterDir, poster)
-  run([
-    '-y',
-    '-ss',
-    String(start + posterAt),
-    '-i',
-    input,
-    '-frames:v',
-    '1',
-    '-vf',
-    'scale=720:-2',
-    '-q:v',
-    '3',
-    posterPath,
-  ])
-
   console.log('ok', name, '←', source, fs.statSync(out).size)
 }
 
+/** Keep table-talk if it already has voice; otherwise rebuild silent from creator-5 */
+function ensureTableTalk() {
+  const out = path.join(outDir, 'table-talk.mp4')
+  const voice = path.join(srcDir, '_voice/table-talk.wav')
+  if (fs.existsSync(out) && fs.existsSync(voice) && fs.statSync(out).size > 1_500_000) {
+    console.log('keep table-talk (with voice)')
+    return
+  }
+  if (fs.existsSync(voice)) {
+    const vf =
+      `scale=720:1280:force_original_aspect_ratio=increase,` +
+      `crop=720:1280,setsar=1,fps=24,format=yuv420p`
+    run([
+      '-y',
+      '-ss',
+      '0.4',
+      '-t',
+      '13.2',
+      '-i',
+      path.join(srcDir, 'creator-5.mp4'),
+      '-i',
+      voice,
+      '-vf',
+      vf,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'fast',
+      '-crf',
+      '20',
+      '-c:a',
+      'aac',
+      '-b:a',
+      '160k',
+      '-shortest',
+      '-movflags',
+      '+faststart',
+      out,
+    ])
+    console.log('ok table-talk + voice', fs.statSync(out).size)
+    return
+  }
+  makeClip({ name: 'table-talk', source: 'creator-5.mp4', start: 0.4, duration: 7 })
+}
+
+ensureTableTalk()
+
 const jobs = [
-  // Creator at a table with products — talking / reviewing on camera
-  {
-    name: 'table-talk',
-    source: 'creator-5.mp4',
-    start: 0.5,
-    duration: 7,
-    poster: 'video-poster-table-talk.jpg',
-  },
-  // Person properly applying product on face
-  {
-    name: 'howto',
-    source: 'creator-1.mp4',
-    start: 0.3,
-    duration: 7,
-    poster: 'video-poster-howto.jpg',
-  },
-  // Hands revealing perfume + packaging on shelf (product unveil)
-  {
-    name: 'unboxing',
-    source: 'perfume-2.mp4',
-    start: 0.4,
-    duration: 7,
-    poster: 'video-poster-unbox.jpg',
-  },
-  // Classic ring-light UGC creator filming product use
-  {
-    name: 'ugc',
-    source: 'ugc-skincare-ringlight.mp4',
-    start: 1.0,
-    duration: 7,
-    poster: 'video-poster-ugc.jpg',
-  },
-  // Close-up product interaction / spray hero motion
-  {
-    name: 'spin',
-    source: 'perfume-4.mp4',
-    start: 0.2,
-    duration: 6,
-    poster: 'video-poster-spin.jpg',
-  },
-  // Creator facing camera while using / reviewing product
-  {
-    name: 'testimonial',
-    source: 'creator-2.mp4',
-    start: 0.4,
-    duration: 7,
-    poster: 'video-poster-testimonial.jpg',
-  },
+  { name: 'howto', source: 'creator-1.mp4', start: 0.3, duration: 6.5 },
+  { name: 'unboxing', source: 'perfume-2.mp4', start: 0.5, duration: 6.5 },
+  { name: 'ugc', source: 'ugc-skincare-ringlight.mp4', start: 0.8, duration: 6.5 },
+  { name: 'spin', source: 'perfume-4.mp4', start: 0.2, duration: 6 },
+  { name: 'testimonial', source: 'creator-2.mp4', start: 0.4, duration: 6.5 },
+  { name: 'grwm', source: 'creator-3.mp4', start: 0.5, duration: 6.5 },
+  { name: 'asmr', source: 'perfume-4.mp4', start: 1.2, duration: 5.5 },
+  { name: 'hook', source: 'creator-4.mp4', start: 0.6, duration: 6.5 },
+  { name: 'mirror', source: 'ugc-makeup-blush.mp4', start: 0.5, duration: 6.5 },
+  { name: 'flatlay', source: 'perfume-3.mp4', start: 0.4, duration: 6.5 },
+  { name: 'winner', source: 'perfume-5.mp4', start: 0.8, duration: 6.5 },
 ]
 
 for (const job of jobs) makeClip(job)
-console.log('done')
+console.log('done', jobs.length + 1, 'format clips')
