@@ -451,16 +451,59 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
   })
 }
 
+/** Strip undefined / nested-array-unsafe values so Firestore accepts the payload. */
+export function stripUndefinedDeep<T>(value: T): T {
+  if (value === undefined) return value
+  if (value === null || typeof value !== 'object') return value
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as T
+  }
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (v === undefined) continue
+    out[k] = stripUndefinedDeep(v)
+  }
+  return out as T
+}
+
+/**
+ * Firestore-safe campaign outputs: no undefined fields, no giant data:/blob: media.
+ * Full AI assets stay in sessionStorage via stashCampaignOutputs.
+ */
+export function firestoreSafeOutputs(
+  outputs: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return outputs.map((raw) => {
+    const row: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(raw)) {
+      if (v === undefined || v === null) continue
+      if (typeof v === 'string' && (v.startsWith('data:') || v.startsWith('blob:'))) {
+        if (k === 'imageUrl') row.imageUrlStoredLocally = true
+        else if (k === 'videoUrl') row.videoUrlStoredLocally = true
+        continue
+      }
+      if (Array.isArray(v)) {
+        // Firestore forbids nested arrays; flatten to strings only
+        row[k] = v.map(String)
+        continue
+      }
+      row[k] = v
+    }
+    return row
+  })
+}
+
 export async function updateCampaignStatus(
   campaignId: string,
   status: CampaignStatus,
   extra: Record<string, unknown> = {},
 ) {
+  const safeExtra = stripUndefinedDeep(extra)
   await updateDoc(doc(requireDb(), 'campaigns', campaignId), {
     status,
     progressStep: status,
     updatedAt: serverTimestamp(),
-    ...extra,
+    ...safeExtra,
   })
 }
 

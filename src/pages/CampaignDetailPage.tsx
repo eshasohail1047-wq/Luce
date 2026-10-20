@@ -3,7 +3,11 @@ import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
-import { deleteUserCampaign, updateCampaignStatus } from '../lib/campaigns'
+import {
+  deleteUserCampaign,
+  firestoreSafeOutputs,
+  updateCampaignStatus,
+} from '../lib/campaigns'
 import { requireDb } from '../lib/firebase'
 import { canGenerate, type GenerateAction } from '../lib/planAccess'
 import { sendTransactionalEmail } from '../lib/transactionalEmail'
@@ -22,6 +26,7 @@ import {
   loadStashedCampaignOutputs,
   loadStashedCampaignRefImage,
   stashCampaignImage,
+  stashCampaignOutputs,
   updateLocalCampaign,
 } from '../lib/localDemoCampaign'
 import type { CreativeDirection } from '../lib/creativeDirection'
@@ -163,8 +168,17 @@ export default function CampaignDetailPage() {
   }
 
   useEffect(() => {
-    if (!user || !campaignId) return
+    if (!campaignId) {
+      setFetching(false)
+      return
+    }
+    if (!user) {
+      // Auth still resolving, or signed out — don't leave the page stuck on Loading
+      if (!loading) setFetching(false)
+      return
+    }
     let cancelled = false
+    setFetching(true)
 
     ;(async () => {
       try {
@@ -269,7 +283,7 @@ export default function CampaignDetailPage() {
     return () => {
       cancelled = true
     }
-  }, [user, campaignId])
+  }, [user, campaignId, loading])
 
   const outputs = useMemo(() => {
     if (!campaign) return []
@@ -300,10 +314,22 @@ export default function CampaignDetailPage() {
     if (!campaignId) return
     if (isLocalCampaignId(campaignId)) {
       updateLocalCampaign(campaignId, { status, ...extra })
+      if (extra.outputs) stashCampaignOutputs(campaignId, extra.outputs)
       return
     }
+    // Keep full AI assets (data URLs) in sessionStorage; Firestore only gets light metadata.
+    if (extra.outputs) {
+      stashCampaignOutputs(campaignId, extra.outputs)
+    }
     await updateCampaignStatus(campaignId, status as 'generating' | 'ready' | 'exported', {
-      ...(extra.outputs ? { outputs: extra.outputs, demoPack: true } : {}),
+      ...(extra.outputs
+        ? {
+            outputs: firestoreSafeOutputs(
+              extra.outputs as unknown as Array<Record<string, unknown>>,
+            ),
+            demoPack: true,
+          }
+        : {}),
     })
   }
 

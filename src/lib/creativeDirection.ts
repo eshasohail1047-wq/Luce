@@ -90,5 +90,12 @@ export function sanitizeCreativeDirection(input: {
     : undefined
 
   if (!prompt && !lighting && !background && !mood && !styleTheme) return undefined
-  return { prompt, lighting, background, mood, styleTheme }
+  // Omit undefined keys — Firestore rejects them (and nested arrays of maps with undefined).
+  const out: CreativeDirection = {}
+  if (prompt) out.prompt = prompt
+  if (lighting) out.lighting = lighting
+  if (background) out.background = background
+  if (mood) out.mood = mood
+  if (styleTheme) out.styleTheme = styleTheme
+  return out
 }
