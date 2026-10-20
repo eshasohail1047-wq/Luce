@@ -31,7 +31,7 @@ type CreativeDirectionFieldsProps = {
   referenceError?: string | null
   /** Image studio uses photo refs; video studio uses video refs */
   referenceKind?: 'image' | 'video'
-  /** Video Studio: reference first, then prompt; both required */
+  /** Video Studio: product image drives generation; prompt + ref video optional */
   videoStudioMode?: boolean
   sectionTitle?: string
   sectionHint?: string
@@ -65,7 +65,7 @@ export default function CreativeDirectionFields({
 }: CreativeDirectionFieldsProps) {
   const refInput = useRef<HTMLInputElement>(null)
   const isVideoRef = referenceKind === 'video'
-  const refFirst = videoStudioMode && isVideoRef
+  const refFirst = false
 
   function onPickRef(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] || null
@@ -74,16 +74,16 @@ export default function CreativeDirectionFields({
   }
 
   const referenceBlock = onReferenceFile ? (
-    <div className={`ref-upload-block${videoStudioMode ? ' is-required' : ''}`}>
+    <div className="ref-upload-block">
       <div className="ref-upload-head">
         <div>
           <strong>
             {isVideoRef ? 'Reference video' : 'Reference photo'}
-            {videoStudioMode ? ' · required' : ''}
+            {' · optional'}
           </strong>
           <p>
             {videoStudioMode
-              ? 'Primary guide — we match this clip’s pace, framing, and energy first. Your product photo stays packaging-true.'
+              ? 'Optional vibe clip — your product photo is the main input. We animate that product into each format you pick.'
               : isVideoRef
                 ? 'Optional — a short clip of the vibe you want (pace, framing, energy). Your product photo stays the packaging source of truth.'
                 : 'Optional — a mood or style pic for the shoot (lighting, scene, vibe). Your product photo stays the packaging source of truth.'}
@@ -156,7 +156,7 @@ export default function CreativeDirectionFields({
   const promptBlock = (
     <div className="auth-field">
       <label htmlFor="creative-prompt">
-        Your prompt{videoStudioMode ? ' · required' : ''}
+        Your prompt{videoStudioMode ? ' · optional' : ''}
       </label>
       <textarea
         id="creative-prompt"
@@ -165,10 +165,11 @@ export default function CreativeDirectionFields({
         onChange={(e) => onPromptChange(e.target.value)}
         placeholder={promptPlaceholder}
         disabled={disabled}
-        required={videoStudioMode}
       />
       {videoStudioMode ? (
-        <p className="field-hint">Used after the reference video to refine scene, dialogue, and offer.</p>
+        <p className="field-hint">
+          Optional — refine scene, dialogue, or offer. Your product photo + chosen formats lead.
+        </p>
       ) : null}
     </div>
   )

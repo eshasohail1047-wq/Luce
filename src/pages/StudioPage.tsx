@@ -17,7 +17,7 @@ import {
   DEFAULT_PHOTO_STYLES,
   DEFAULT_VIDEO_STYLES,
   PHOTO_STYLES,
-  VIDEO_STUDIO_OUTPUT_COUNT,
+  VIDEO_STUDIO_FORMAT_COUNT,
   VIDEO_STYLES,
   normalizePhotoStyleId,
   normalizeVideoStyleId,
@@ -101,6 +101,10 @@ export default function StudioPage() {
   const [paywallReason, setPaywallReason] = useState<string | undefined>()
   const isRecreate = Boolean(recreate) || searchParams.get('recreate') === '1'
   const limits = getPlanLimits(plan)
+  const videoPickMax =
+    limits.maxVideos > 0
+      ? Math.min(VIDEO_STUDIO_FORMAT_COUNT, limits.maxVideos)
+      : VIDEO_STUDIO_FORMAT_COUNT
 
   function generateActionForKind(): GenerateAction {
     if (isRecreate) {
@@ -465,23 +469,26 @@ export default function StudioPage() {
       return
     }
 
-    if (sourceType === 'upload' && !imageFile) {
+    if (kind === 'videos') {
+      if (!imageFile && !previewUrl) {
+        setError('Add a product photo — we turn it into the video formats you pick.')
+        return
+      }
+      if (videoStyles.length === 0) {
+        setError('Pick at least one video format from the 8 options.')
+        return
+      }
+    } else if (sourceType === 'upload' && !imageFile) {
       setError('Add a product photo to continue.')
       return
     }
-    if (sourceType === 'url' && !productUrl.trim()) {
+    if (sourceType === 'url' && !productUrl.trim() && kind !== 'videos') {
       setError('Add a product URL to continue.')
       return
     }
-    if (kind === 'videos') {
-      if (!referenceFile) {
-        setError('Add a reference video first — we match that clip before your prompt.')
-        return
-      }
-      if (!prompt.trim()) {
-        setError('Add a prompt describing the videos you want.')
-        return
-      }
+    if (sourceType === 'url' && !productUrl.trim() && kind === 'videos' && !imageFile) {
+      setError('Add a product photo (required for video) or a product URL with a photo.')
+      return
     }
     if (!assertCanGenerate()) return
     setBusy(true)
@@ -498,7 +505,7 @@ export default function StudioPage() {
     const clampedPhotos = photoStyles.slice(0, limits.maxImages)
     const clampedVideos =
       kind === 'videos'
-        ? resolveVideoStudioStyles(videoStyles)
+        ? resolveVideoStudioStyles(videoStyles, videoPickMax)
         : videoStyles.slice(0, limits.maxVideos)
     const selectedAssets =
       kind === 'photos'
@@ -616,23 +623,29 @@ export default function StudioPage() {
         ? {
             kicker: 'UGC Studio',
             title: 'Creator-style product videos',
-            lead: 'Add a reference video and prompt, then pick 3 formats. We match your reference first.',
+            lead: 'Upload your product photo, pick any of the 8 formats, then generate. HeyGen animates your product into each clip.',
             image: '/images/video-poster-ugc.jpg',
             accent: 'videos' as const,
-            cta: `Generate ${VIDEO_STUDIO_OUTPUT_COUNT} videos`,
-            stylesTitle: 'Pick 3 formats',
-            stylesHint: 'Reference video leads · prompt refines · choose exactly 3 formats.',
+            cta:
+              videoStyles.length > 0
+                ? `Generate ${videoStyles.length} video${videoStyles.length === 1 ? '' : 's'}`
+                : 'Generate videos',
+            stylesTitle: 'Pick formats',
+            stylesHint: 'All 8 formats available — select any you want.',
           }
         : kind === 'videos'
           ? {
               kicker: 'Video Studio',
-              title: 'Reference video → prompt → 3 formats',
-              lead: 'Upload a reference clip and write your prompt, then pick the formats you want. We prioritize your reference video, then your prompt.',
+              title: 'Product photo → pick formats → videos',
+              lead: 'Upload your product image, choose any of the 8 formats, then generate. Optional prompt and reference clip refine the look.',
               image: '/images/video-poster-table-talk.jpg',
               accent: 'videos' as const,
-              cta: `Generate ${VIDEO_STUDIO_OUTPUT_COUNT} videos`,
-              stylesTitle: 'Pick 3 formats',
-              stylesHint: 'Clips autoplay · select exactly 3 · blank uses the starter trio.',
+              cta:
+                videoStyles.length > 0
+                  ? `Generate ${videoStyles.length} video${videoStyles.length === 1 ? '' : 's'}`
+                  : 'Generate videos',
+              stylesTitle: 'Pick formats',
+              stylesHint: '8 formats — select one or many, then generate.',
             }
           : {
               kicker: 'Ads & Social',
@@ -698,10 +711,10 @@ export default function StudioPage() {
             <ol className="studio-hero-steps" aria-label="How it works">
               {kind === 'videos' && !isRecreate ? (
                 <>
-                  <li>Add product</li>
-                  <li>Reference video + prompt</li>
-                  <li>Pick 3 formats</li>
-                  <li>Generate</li>
+                  <li>Upload product photo</li>
+                  <li>Optional prompt</li>
+                  <li>Pick any formats</li>
+                  <li>Generate videos</li>
                 </>
               ) : (
                 <>
@@ -744,7 +757,9 @@ export default function StudioPage() {
               <p>
                 {isRecreate
                   ? 'Your campaign product — change only if needed'
-                  : 'Photo or product page URL'}
+                  : kind === 'videos'
+                    ? 'Product photo required — we generate videos from this image'
+                    : 'Photo or product page URL'}
               </p>
             </div>
 
@@ -904,13 +919,13 @@ export default function StudioPage() {
           <section className="form-section">
             <div className="form-section-head">
               <h2>
-                {kind === 'videos' ? '2. Reference video + prompt' : '2. Creative direction'}
+                {kind === 'videos' ? '2. Creative direction' : '2. Creative direction'}
               </h2>
               <p>
                 {isRecreate
                   ? 'Required — write what you want changed'
                   : kind === 'videos'
-                    ? 'Reference clip first · then your prompt'
+                    ? 'Optional — prompt and vibe clip refine your product videos'
                     : 'Optional — shape lighting, mood, and scene'}
               </p>
             </div>
@@ -955,8 +970,8 @@ export default function StudioPage() {
                     : `${photoStyles.length} / ${limits.maxImages} selected`
                   : kind === 'videos'
                     ? usingDefaults
-                      ? `Blank → ${VIDEO_STUDIO_OUTPUT_COUNT} starter formats · pick up to ${VIDEO_STUDIO_OUTPUT_COUNT}`
-                      : `${videoStyles.length} / ${VIDEO_STUDIO_OUTPUT_COUNT} selected`
+                      ? `Select any of ${VIDEO_STUDIO_FORMAT_COUNT} formats · up to ${videoPickMax} on your plan`
+                      : `${videoStyles.length} / ${videoPickMax} selected`
                     : usingDefaults
                       ? studioMeta.stylesHint
                       : `${selectionCount()} selected`}
@@ -983,13 +998,15 @@ export default function StudioPage() {
                 items={VIDEO_STYLES}
                 selected={videoStyles}
                 onChange={setVideoStyles}
-                defaultIds={DEFAULT_VIDEO_STYLES}
-                max={VIDEO_STUDIO_OUTPUT_COUNT}
+                defaultIds={[]}
+                max={videoPickMax}
                 disabled={busy}
                 videoAspect
                 ariaLabel="Video formats"
                 onLimitHit={() =>
-                  setWarning(`Pick up to ${VIDEO_STUDIO_OUTPUT_COUNT} formats per generate.`)
+                  setWarning(
+                    `Your plan allows up to ${videoPickMax} videos per generate. Upgrade for more of the ${VIDEO_STUDIO_FORMAT_COUNT} formats.`,
+                  )
                 }
               />
             )}

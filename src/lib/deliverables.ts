@@ -262,8 +262,11 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   },
 ]
 
-/** Video Studio always generates this many format clips. */
-export const VIDEO_STUDIO_OUTPUT_COUNT = 3
+/** All Video Studio format cards (table talk → ASMR). */
+export const VIDEO_STUDIO_FORMAT_COUNT = VIDEO_STYLES.length
+
+/** @deprecated Use VIDEO_STUDIO_FORMAT_COUNT — kept for older imports */
+export const VIDEO_STUDIO_OUTPUT_COUNT = VIDEO_STUDIO_FORMAT_COUNT
 
 export const DEFAULT_VIDEO_STYLES: VideoStyleId[] = [
   'video_table_talk',
@@ -275,19 +278,16 @@ export function resolveVideoStyles(selected: VideoStyleId[]): VideoStyleId[] {
   return selected.length === 0 ? [...DEFAULT_VIDEO_STYLES] : [...new Set(selected)]
 }
 
-/** Exactly 3 formats for Video Studio generate (defaults / pad if blank or short). */
-export function resolveVideoStudioStyles(selected: VideoStyleId[]): VideoStyleId[] {
-  const out: VideoStyleId[] =
-    selected.length === 0 ? [...DEFAULT_VIDEO_STYLES] : [...new Set(selected)]
-  for (const id of DEFAULT_VIDEO_STYLES) {
-    if (out.length >= VIDEO_STUDIO_OUTPUT_COUNT) break
-    if (!out.includes(id)) out.push(id)
-  }
-  for (const style of VIDEO_STYLES) {
-    if (out.length >= VIDEO_STUDIO_OUTPUT_COUNT) break
-    if (!out.includes(style.id)) out.push(style.id)
-  }
-  return out.slice(0, VIDEO_STUDIO_OUTPUT_COUNT)
+/**
+ * Video Studio: generate only the formats the user picked (any of the 8).
+ * Does not auto-pad — caller should require at least one selection.
+ */
+export function resolveVideoStudioStyles(
+  selected: VideoStyleId[],
+  max = VIDEO_STUDIO_FORMAT_COUNT,
+): VideoStyleId[] {
+  const cap = Math.max(1, Math.min(max, VIDEO_STUDIO_FORMAT_COUNT))
+  return [...new Set(selected)].slice(0, cap)
 }
 
 export function videoUrlForAsset(assetType: string): string | undefined {

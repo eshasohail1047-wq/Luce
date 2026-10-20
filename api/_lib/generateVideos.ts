@@ -251,17 +251,17 @@ export async function generateCampaignVideos(
       input.recreateNote,
     )
     try {
-      // Prefer the user's reference video frame; keep product photo as packaging guide.
+      // Product photo is the primary first frame; optional ref still/video frame as style guide.
       const frameImages: { url: string; frameType: 'first_frame' }[] = []
-      if (referenceFrame) {
-        frameImages.push({ url: referenceFrame, frameType: 'first_frame' })
-      } else if (productImage) {
+      if (productImage) {
         frameImages.push({ url: productImage, frameType: 'first_frame' })
+      } else if (referenceFrame) {
+        frameImages.push({ url: referenceFrame, frameType: 'first_frame' })
       }
 
       const inputReferences =
         productImage && referenceFrame && productImage !== referenceFrame
-          ? [productImage]
+          ? [referenceFrame]
           : undefined
 
       const result = await generateVideoWithProviders({
