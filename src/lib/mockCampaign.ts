@@ -215,8 +215,8 @@ function buildOne(
         : 'Uses your uploaded product photo'
       : video
         ? version > 1
-          ? `Recreated format clip · v${version}`
-          : 'Playable format video — recreate for another look'
+          ? `Recreated · reference video first, then prompt · v${version}`
+          : 'Guided by your reference video first, then your prompt'
         : version > 1
           ? `Recreated visual · v${version}`
           : 'Format still — recreate if you want another option',

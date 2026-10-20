@@ -8008,6 +8008,22 @@
   gap: 10px;
 }
 
+.ref-upload-block.is-required {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(20, 18, 28, 0.1);
+  background: rgba(20, 18, 28, 0.02);
+}
+
+.create-direction-embedded {
+  display: grid;
+  gap: 14px;
+}
+
+.create-direction-embedded .ref-upload-block {
+  margin-top: 0;
+}
+
 .ref-upload-head strong {
   display: block;
   font-size: 0.92rem;

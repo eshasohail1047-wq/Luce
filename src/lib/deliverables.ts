@@ -262,15 +262,32 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   },
 ]
 
+/** Video Studio always generates this many format clips. */
+export const VIDEO_STUDIO_OUTPUT_COUNT = 3
+
 export const DEFAULT_VIDEO_STYLES: VideoStyleId[] = [
   'video_table_talk',
   'video_cinematic',
-  'video_howto_demo',
-  'video_ugc_selfie',
+  'video_unboxing',
 ]
 
 export function resolveVideoStyles(selected: VideoStyleId[]): VideoStyleId[] {
   return selected.length === 0 ? [...DEFAULT_VIDEO_STYLES] : [...new Set(selected)]
+}
+
+/** Exactly 3 formats for Video Studio generate (defaults / pad if blank or short). */
+export function resolveVideoStudioStyles(selected: VideoStyleId[]): VideoStyleId[] {
+  const out: VideoStyleId[] =
+    selected.length === 0 ? [...DEFAULT_VIDEO_STYLES] : [...new Set(selected)]
+  for (const id of DEFAULT_VIDEO_STYLES) {
+    if (out.length >= VIDEO_STUDIO_OUTPUT_COUNT) break
+    if (!out.includes(id)) out.push(id)
+  }
+  for (const style of VIDEO_STYLES) {
+    if (out.length >= VIDEO_STUDIO_OUTPUT_COUNT) break
+    if (!out.includes(style.id)) out.push(style.id)
+  }
+  return out.slice(0, VIDEO_STUDIO_OUTPUT_COUNT)
 }
 
 export function videoUrlForAsset(assetType: string): string | undefined {
