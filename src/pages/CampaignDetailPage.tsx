@@ -515,11 +515,42 @@ export default function CampaignDetailPage() {
       if (nextOutputs[0]) setPreviewId(nextOutputs[0].id)
     } catch (err) {
       console.error(err)
-      // Keep campaign UI visible — only show an inline action message.
-      setActionMsg(null)
-      setError(err instanceof Error ? err.message : 'Could not generate demo pack.')
-      // If we already have outputs in state from a partial run, don't blank the page.
-      setCampaign((prev) => (prev ? { ...prev, status: prev.status === 'generating' ? 'product_confirmed' : prev.status } : prev))
+      // Never leave the user stuck: always ship a local demo pack if cloud/AI fails.
+      try {
+        const fallback = buildMockOutputs({
+          productName: campaign.productName,
+          productImageUrl: campaign.imageUrl,
+          selectedAssets: campaign.selectedAssets,
+          studioKind: campaign.studioKind,
+          mode: campaign.mode,
+        })
+        stashCampaignOutputs(campaignId, fallback)
+        setCampaign((prev) =>
+          prev ? { ...prev, status: 'ready', outputs: fallback } : prev,
+        )
+        if (fallback[0]) setPreviewId(fallback[0].id)
+        setError(null)
+        setActionMsg(
+          'Demo pack ready in this browser. Cloud sync had a problem — your previews still work here.',
+        )
+        void persistStatus('ready', { outputs: fallback })
+      } catch (fallbackErr) {
+        console.error(fallbackErr)
+        setError(
+          err instanceof Error ? err.message : 'Could not generate demo pack.',
+        )
+        setCampaign((prev) =>
+          prev
+            ? {
+                ...prev,
+                status:
+                  prev.status === 'generating'
+                    ? 'product_confirmed'
+                    : prev.status,
+              }
+            : prev,
+        )
+      }
     } finally {
       setActionBusy(false)
       setTimeout(() => setProgress(0), 600)
