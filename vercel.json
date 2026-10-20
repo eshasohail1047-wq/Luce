@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "api/generate-images.ts": { "maxDuration": 120 },
+    "api/generate-videos.ts": { "maxDuration": 300 }
+  },
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]

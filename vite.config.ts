@@ -162,6 +162,91 @@ function localApiRoutes(): Plugin {
           return
         }
 
+        if (url === '/api/generate-videos') {
+          if (req.method !== 'POST') {
+            res.statusCode = 405
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Method not allowed' }))
+            return
+          }
+          try {
+            const body = await readJsonBody(req)
+            const { verifyBearerToken } = await import('./api/_lib/firebaseAdmin.ts')
+            const {
+              generateCampaignVideos,
+              VIDEO_ASSET_KINDS,
+            } = await import('./api/_lib/generateVideos.ts')
+            const decoded = await verifyBearerToken(req.headers.authorization)
+            if (!decoded?.uid) {
+              res.statusCode = 401
+              res.setHeader('Content-Type', 'application/json')
+              res.end(
+                JSON.stringify({
+                  error: 'Sign in required to generate videos.',
+                }),
+              )
+              return
+            }
+            const assetsRaw = Array.isArray(body.assets) ? body.assets : []
+            const assets = assetsRaw
+              .map((a) => String(a))
+              .filter((a): a is (typeof VIDEO_ASSET_KINDS)[number] =>
+                (VIDEO_ASSET_KINDS as string[]).includes(a),
+              )
+            const cd =
+              body.creativeDirection && typeof body.creativeDirection === 'object'
+                ? (body.creativeDirection as Record<string, unknown>)
+                : undefined
+            const result = await generateCampaignVideos({
+              productName: String(body.productName ?? ''),
+              productImage:
+                typeof body.productImage === 'string'
+                  ? body.productImage
+                  : undefined,
+              referenceFrameImage:
+                typeof body.referenceFrameImage === 'string'
+                  ? body.referenceFrameImage
+                  : typeof body.referenceImage === 'string'
+                    ? body.referenceImage
+                    : undefined,
+              creativeDirection: cd
+                ? {
+                    prompt: typeof cd.prompt === 'string' ? cd.prompt : undefined,
+                    lighting:
+                      typeof cd.lighting === 'string' ? cd.lighting : undefined,
+                    background:
+                      typeof cd.background === 'string'
+                        ? cd.background
+                        : undefined,
+                    mood: typeof cd.mood === 'string' ? cd.mood : undefined,
+                    styleTheme:
+                      typeof cd.styleTheme === 'string'
+                        ? cd.styleTheme
+                        : undefined,
+                  }
+                : undefined,
+              assets,
+              recreateNote:
+                typeof body.recreateNote === 'string'
+                  ? body.recreateNote
+                  : undefined,
+            })
+            res.statusCode = result.status
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result.body))
+          } catch (err) {
+            console.error('[vite] generate-videos failed', err)
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                error: 'Video generation failed on server. Try again.',
+              }),
+            )
+          }
+          return
+        }
+
         if (url === '/api/generate-images') {
           if (req.method !== 'POST') {
             res.statusCode = 405

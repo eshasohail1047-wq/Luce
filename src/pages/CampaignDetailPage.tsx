@@ -32,6 +32,12 @@ import {
   type ImageAssetKind,
 } from '../lib/generateImages'
 import {
+  extractVideoFrameDataUrl,
+  isVideoAssetKind,
+  requestGenerateVideos,
+  type VideoAssetKind,
+} from '../lib/generateVideos'
+import {
   buildMockOutputs,
   downloadMockOutput,
   downloadMockPack,
@@ -73,6 +79,24 @@ function mergeAiImages(
       ...item,
       imageUrl: ai.imageDataUrl,
       note: 'AI-generated · packaging fidelity from your product photo',
+    }
+  })
+}
+
+function mergeAiVideos(
+  outputs: MockOutput[],
+  aiAssets: { type: VideoAssetKind; videoDataUrl: string; label?: string }[],
+): MockOutput[] {
+  const byType = new Map(aiAssets.map((a) => [a.type, a]))
+  return outputs.map((item) => {
+    if (!isVideoAssetKind(item.assetType)) return item
+    const ai = byType.get(item.assetType as VideoAssetKind)
+    if (!ai) return item
+    return {
+      ...item,
+      videoUrl: ai.videoDataUrl,
+      kind: 'video' as const,
+      note: 'AI-generated · reference video preferred, then your prompt',
     }
   })
 }
@@ -311,14 +335,23 @@ export default function CampaignDetailPage() {
         .map((o) => o.assetType)
         .filter(isImageAssetKind)
 
+      const videoKinds = nextOutputs
+        .map((o) => o.assetType)
+        .filter(isVideoAssetKind) as VideoAssetKind[]
+
       let aiWarning: string | null = null
+      const stashedRef =
+        (campaignId ? loadStashedCampaignRefImage(campaignId) : undefined) ||
+        undefined
+
       if (imageKinds.length > 0) {
-        setProgress(82)
+        setProgress(78)
         setActionMsg('Generating AI product images…')
         try {
           const referenceImage =
-            (campaignId ? loadStashedCampaignRefImage(campaignId) : undefined) ||
-            undefined
+            stashedRef && stashedRef.startsWith('data:image/')
+              ? stashedRef
+              : undefined
           const ai = await requestGenerateImages({
             productName: campaign.productName,
             productImage: campaign.imageUrl,
@@ -331,13 +364,75 @@ export default function CampaignDetailPage() {
             aiWarning = `Some AI images failed (${ai.partialErrors.length}); demo visuals kept for those.`
           }
         } catch (err) {
-          console.warn('[generate] OpenRouter fallback to mock', err)
+          console.warn('[generate] OpenRouter image fallback to mock', err)
           aiWarning =
             err instanceof Error
               ? err.message
               : 'AI images unavailable — using demo visuals.'
         }
-      } else {
+      }
+
+      if (videoKinds.length > 0) {
+        setProgress(84)
+        setActionMsg('Generating AI videos (reference first, then prompt)…')
+        try {
+          let referenceFrameImage: string | undefined
+          if (stashedRef?.startsWith('data:image/')) {
+            referenceFrameImage = stashedRef
+          } else if (stashedRef?.startsWith('data:video/')) {
+            referenceFrameImage = await extractVideoFrameDataUrl(stashedRef)
+          }
+
+          const aiVideos: {
+            type: VideoAssetKind
+            videoDataUrl: string
+            label?: string
+          }[] = []
+          const videoErrors: { type: VideoAssetKind; error: string }[] = []
+
+          for (let i = 0; i < videoKinds.length; i++) {
+            const kind = videoKinds[i]!
+            setProgress(84 + Math.round(((i + 1) / videoKinds.length) * 12))
+            setActionMsg(
+              `Generating video ${i + 1} of ${videoKinds.length}: ${formatLabel(kind) || kind}…`,
+            )
+            try {
+              const ai = await requestGenerateVideos({
+                productName: campaign.productName,
+                productImage: campaign.imageUrl,
+                referenceFrameImage,
+                creativeDirection: campaign.creativeDirection,
+                assets: [kind],
+              })
+              aiVideos.push(...ai.assets)
+              if (ai.partialErrors?.length) videoErrors.push(...ai.partialErrors)
+            } catch (err) {
+              videoErrors.push({
+                type: kind,
+                error:
+                  err instanceof Error ? err.message : 'Video generation failed',
+              })
+            }
+          }
+
+          if (aiVideos.length) {
+            nextOutputs = mergeAiVideos(nextOutputs, aiVideos)
+          }
+          if (videoErrors.length) {
+            const videoMsg = `Some AI videos failed (${videoErrors.length}); demo format clips kept for those.`
+            aiWarning = aiWarning ? `${aiWarning} ${videoMsg}` : videoMsg
+          }
+        } catch (err) {
+          console.warn('[generate] OpenRouter video fallback to mock', err)
+          const videoMsg =
+            err instanceof Error
+              ? err.message
+              : 'AI videos unavailable — using demo format clips.'
+          aiWarning = aiWarning ? `${aiWarning} ${videoMsg}` : videoMsg
+        }
+      }
+
+      if (imageKinds.length === 0 && videoKinds.length === 0) {
         setProgress(90)
         await new Promise((r) => setTimeout(r, 200))
       }
@@ -361,17 +456,27 @@ export default function CampaignDetailPage() {
           campaignUrl: `${window.location.origin}/app/campaigns/${campaignId}`,
         })
       }
-      const usedAi = nextOutputs.some(
+      const usedAiImages = nextOutputs.some(
         (o) =>
           isImageAssetKind(o.assetType) &&
           o.imageUrl?.startsWith('data:image/') &&
           o.note?.includes('AI-generated'),
       )
+      const usedAiVideos = nextOutputs.some(
+        (o) =>
+          isVideoAssetKind(o.assetType) &&
+          o.videoUrl?.startsWith('data:video/') &&
+          o.note?.includes('AI-generated'),
+      )
       setActionMsg(
-        usedAi
+        usedAiImages || usedAiVideos
           ? aiWarning
-            ? `Pack ready with AI images. ${aiWarning}`
-            : 'Pack ready — AI product images generated. Videos and copy stay demo.'
+            ? `Pack ready with AI. ${aiWarning}`
+            : usedAiImages && usedAiVideos
+              ? 'Pack ready — AI images and videos generated.'
+              : usedAiVideos
+                ? 'Pack ready — AI videos generated (reference preferred, then prompt).'
+                : 'Pack ready — AI product images generated.'
           : aiWarning
             ? `Demo pack ready. ${aiWarning}`
             : 'Demo campaign pack ready — preview below.',
@@ -766,7 +871,7 @@ export default function CampaignDetailPage() {
               </h2>
               <p>
                 {readyToGenerate
-                  ? 'Generates your pack: AI images when configured, with demo fallback for videos, copy, and any failed stills.'
+                  ? 'Generates your pack: AI images + videos via OpenRouter when configured, with demo fallback for anything that fails.'
                   : campaign.status === 'generating'
                     ? 'Building studio, lifestyle, and promo-style previews…'
                     : campaign.status === 'ready'

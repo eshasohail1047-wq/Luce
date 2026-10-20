@@ -11,16 +11,15 @@ npm run dev
 
 Copy `.env.example` to `.env.local` and fill in values. Never commit secrets.
 
-### Image generation (OpenRouter)
-
-Photo / promo / ad **image** assets call OpenRouter when configured:
+### Image + video generation (OpenRouter)
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENROUTER_API_KEY` | Bearer token for `POST https://openrouter.ai/api/v1/images` |
-| `OPENROUTER_IMAGE_MODEL` | Image model (default `google/gemini-2.5-flash-image`) |
+| `OPENROUTER_API_KEY` | Bearer for images + videos |
+| `OPENROUTER_IMAGE_MODEL` | Default `google/gemini-2.5-flash-image` → `POST /api/generate-images` |
+| `OPENROUTER_VIDEO_MODEL` | Default `heygen/heygen-video-1` → `POST /api/generate-videos` |
 
-If the key is missing or the API fails, LUCE keeps existing demo stills so generate still works. Videos and copy stay mock.
+Photo Studio / campaign image assets use the images API. Video Studio / video assets use the async videos API (reference still + prompt preferred). If the key is missing or a call fails, LUCE keeps demo stills / format clips so generate still works.
 
 ## Build
 
