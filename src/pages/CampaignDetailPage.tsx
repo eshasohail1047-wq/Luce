@@ -4,8 +4,11 @@ import { doc, getDoc } from 'firebase/firestore'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
 import {
+  asFlatStringArray,
   deleteUserCampaign,
   firestoreOutputSummary,
+  friendlyFirestoreError,
+  purgeCorruptCampaignOutputs,
   updateCampaignStatus,
 } from '../lib/campaigns'
 import { requireDb } from '../lib/firebase'
@@ -130,6 +133,9 @@ export default function CampaignDetailPage() {
     useAuth()
   const navigate = useNavigate()
   const [campaign, setCampaign] = useState<CampaignView | null>(null)
+  /** Load failures only — blank empty-state when campaign is missing. */
+  const [loadError, setLoadError] = useState<string | null>(null)
+  /** Inline action failures (generate/export) — never blank the campaign UI. */
   const [error, setError] = useState<string | null>(null)
   const [fetching, setFetching] = useState(true)
   const [actionBusy, setActionBusy] = useState(false)
@@ -170,6 +176,7 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     if (!campaignId) {
       setFetching(false)
+      setLoadError('Campaign not found.')
       return
     }
     if (!user) {
@@ -179,6 +186,8 @@ export default function CampaignDetailPage() {
     }
     let cancelled = false
     setFetching(true)
+    setLoadError(null)
+    setError(null)
 
     ;(async () => {
       try {
@@ -187,10 +196,14 @@ export default function CampaignDetailPage() {
         if (isLocalCampaignId(campaignId)) {
           const local = loadLocalCampaign(campaignId)
           if (!local) {
-            if (!cancelled) setError('Demo campaign not found. Create a new one.')
+            if (!cancelled) {
+              setCampaign(null)
+              setLoadError('Demo campaign not found. Create a new one.')
+            }
             return
           }
           if (!cancelled) {
+            setLoadError(null)
             setCampaign({
               title: local.title,
               status: local.status,
@@ -200,7 +213,7 @@ export default function CampaignDetailPage() {
               mode: local.mode,
               studioKind: local.studioKind,
               deliverables: local.deliverables,
-              selectedAssets: local.selectedAssets,
+              selectedAssets: asFlatStringArray(local.selectedAssets),
               includeStrategy: local.includeStrategy,
               tryFree: local.tryFree,
               imageUrl: local.imageUrl || stashed,
@@ -215,12 +228,18 @@ export default function CampaignDetailPage() {
 
         const snap = await getDoc(doc(requireDb(), 'campaigns', campaignId))
         if (!snap.exists()) {
-          if (!cancelled) setError('Campaign not found.')
+          if (!cancelled) {
+            setCampaign(null)
+            setLoadError('Campaign not found.')
+          }
           return
         }
         const data = snap.data()
         if (data.userId !== user.uid) {
-          if (!cancelled) setError('You do not have access to this campaign.')
+          if (!cancelled) {
+            setCampaign(null)
+            setLoadError('You do not have access to this campaign.')
+          }
           return
         }
 
@@ -230,10 +249,8 @@ export default function CampaignDetailPage() {
           try {
             const productSnap = await getDoc(doc(requireDb(), 'products', productId))
             if (productSnap.exists()) {
-              const urls = Array.isArray(productSnap.data().imageUrls)
-                ? productSnap.data().imageUrls
-                : []
-              if (typeof urls[0] === 'string') imageUrl = urls[0]
+              const urls = asFlatStringArray(productSnap.data().imageUrls)
+              if (urls[0]) imageUrl = urls[0]
             }
           } catch {
             /* optional */
@@ -241,12 +258,12 @@ export default function CampaignDetailPage() {
         }
         if (!imageUrl) imageUrl = stashed
 
+        // Never trust legacy Firestore `outputs` arrays — they caused nested-entity
+        // write failures and may still be corrupt on old docs. Prefer session stash.
         const stashedOutputs = loadStashedCampaignOutputs<MockOutput[]>(campaignId)
-        const savedOutputs = Array.isArray(data.outputs)
-          ? (data.outputs as MockOutput[])
-          : undefined
 
         if (!cancelled) {
+          setLoadError(null)
           setCampaign({
             title: String(data.title ?? 'Campaign'),
             status: String(data.status ?? 'draft'),
@@ -255,16 +272,12 @@ export default function CampaignDetailPage() {
             productUrl: data.productUrl ? String(data.productUrl) : undefined,
             mode: data.mode === 'studio' ? 'studio' : 'campaign',
             studioKind: data.studioKind as StudioKind | undefined,
-            deliverables: Array.isArray(data.deliverables)
-              ? (data.deliverables as DeliverableId[])
-              : [],
-            selectedAssets: Array.isArray(data.selectedAssets)
-              ? data.selectedAssets.map(String)
-              : [],
+            deliverables: asFlatStringArray(data.deliverables) as DeliverableId[],
+            selectedAssets: asFlatStringArray(data.selectedAssets),
             includeStrategy: Boolean(data.includeStrategy),
             tryFree: Boolean(data.tryFree),
             imageUrl,
-            outputs: stashedOutputs?.length ? stashedOutputs : savedOutputs,
+            outputs: stashedOutputs?.length ? stashedOutputs : undefined,
             creativeDirection: data.creativeDirection
               ? sanitizeCreativeDirection(
                   data.creativeDirection as CreativeDirection,
@@ -272,9 +285,19 @@ export default function CampaignDetailPage() {
               : undefined,
           })
         }
+
+        // Best-effort: remove legacy corrupt outputs fields so future status syncs succeed.
+        if (data.outputs !== undefined || data.outputLabels !== undefined) {
+          void purgeCorruptCampaignOutputs(campaignId)
+        }
       } catch (err) {
         console.error(err)
-        if (!cancelled) setError('Could not load this campaign.')
+        if (!cancelled) {
+          setCampaign(null)
+          setLoadError(
+            friendlyFirestoreError(err, 'Could not load this campaign.'),
+          )
+        }
       } finally {
         if (!cancelled) setFetching(false)
       }
@@ -536,8 +559,9 @@ export default function CampaignDetailPage() {
         void persistStatus('ready', { outputs: fallback })
       } catch (fallbackErr) {
         console.error(fallbackErr)
+        // Keep campaign UI — never blank the page with a raw Firebase message.
         setError(
-          err instanceof Error ? err.message : 'Could not generate demo pack.',
+          friendlyFirestoreError(err, 'Could not generate demo pack. Try again.'),
         )
         setCampaign((prev) =>
           prev
@@ -576,7 +600,7 @@ export default function CampaignDetailPage() {
       setActionMsg('Pack ZIP downloaded to your device.')
     } catch (err) {
       console.error(err)
-      setError(err instanceof Error ? err.message : 'Could not export pack.')
+      setError(friendlyFirestoreError(err, 'Could not export pack.'))
     } finally {
       setActionBusy(false)
     }
@@ -591,7 +615,7 @@ export default function CampaignDetailPage() {
       setActionMsg(`Exported ${item.label}.`)
     } catch (err) {
       console.error(err)
-      setError(err instanceof Error ? err.message : 'Could not export asset.')
+      setError(friendlyFirestoreError(err, 'Could not export asset.'))
     }
   }
 
@@ -665,7 +689,7 @@ export default function CampaignDetailPage() {
       setActionMsg('Product photo updated — banner and product shots use your new image.')
     } catch (err) {
       console.error(err)
-      setError(err instanceof Error ? err.message : 'Could not update product photo.')
+      setError(friendlyFirestoreError(err, 'Could not update product photo.'))
     } finally {
       setReplacingPhoto(false)
       if (productFileRef.current) productFileRef.current.value = ''
@@ -704,7 +728,7 @@ export default function CampaignDetailPage() {
       navigate('/app/campaigns', { replace: true })
     } catch (err) {
       console.error(err)
-      setError(err instanceof Error ? err.message : 'Could not delete campaign.')
+      setError(friendlyFirestoreError(err, 'Could not delete campaign.'))
       setConfirmDelete(false)
       setDeleting(false)
     }
@@ -770,7 +794,9 @@ export default function CampaignDetailPage() {
       <main className="app-main campaign-create studio-page campaign-detail">
         {!campaign ? (
           <div className="dash-empty">
-            <p className="auth-error">{error || 'Something went wrong.'}</p>
+            <p className="auth-error">
+              {loadError || 'Campaign not found.'}
+            </p>
             <Link className="dash-create-btn dash-create-btn-sm" to="/app/campaigns">
               Back to campaigns
             </Link>

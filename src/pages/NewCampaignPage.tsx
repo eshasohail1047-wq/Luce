@@ -4,7 +4,11 @@ import AppLayout from '../components/AppLayout'
 import CreativeDirectionFields from '../components/CreativeDirectionFields'
 import FormatPickGrid from '../components/FormatPickGrid'
 import { useAuth } from '../auth/AuthProvider'
-import { createCampaignWithProduct, type ProductSourceType } from '../lib/campaigns'
+import {
+  createCampaignWithProduct,
+  friendlyFirestoreError,
+  type ProductSourceType,
+} from '../lib/campaigns'
 import { canGenerate } from '../lib/planAccess'
 import { getPlanLimits } from '../lib/planLimits'
 import PaywallModal from '../components/PaywallModal'
@@ -283,9 +287,10 @@ export default function NewCampaignPage() {
       } catch (localErr) {
         console.error(localErr)
         setError(
-          localErr instanceof Error
-            ? localErr.message
-            : 'Could not create campaign. Try again.',
+          friendlyFirestoreError(
+            localErr,
+            'Could not create campaign. Try again or use a smaller photo.',
+          ),
         )
         setBusy(false)
       }

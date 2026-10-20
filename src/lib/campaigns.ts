@@ -131,6 +131,45 @@ function extFromFile(file: File) {
   return 'jpg'
 }
 
+/** Flat string[] only — nested arrays / objects trigger Firestore nested-entity errors. */
+export function asFlatStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  const out: string[] = []
+  for (const item of value) {
+    if (item === undefined || item === null) continue
+    if (Array.isArray(item)) {
+      // Flatten one level of accidental nesting; never write array-in-array.
+      for (const nested of item) {
+        if (nested === undefined || nested === null) continue
+        const s = typeof nested === 'string' ? nested.trim() : String(nested).trim()
+        if (s) out.push(s)
+      }
+      continue
+    }
+    if (typeof item === 'object') continue
+    const s = typeof item === 'string' ? item.trim() : String(item).trim()
+    if (s) out.push(s)
+  }
+  return out
+}
+
+/** User-facing message — never surface raw Firebase nested-entity text. */
+export function friendlyFirestoreError(err: unknown, fallback: string): string {
+  const raw = err instanceof Error ? err.message : String(err ?? '')
+  const lower = raw.toLowerCase()
+  if (
+    lower.includes('invalid nested entity') ||
+    lower.includes('nested arrays') ||
+    lower.includes('unsupported field value') ||
+    lower.includes('custom objects') ||
+    lower.includes('firebase') ||
+    lower.includes('firestore')
+  ) {
+    return fallback
+  }
+  return raw.trim() || fallback
+}
+
 async function createProductRecord(input: {
   userId: string
   sourceType: ProductSourceType
@@ -143,18 +182,19 @@ async function createProductRecord(input: {
   imageFile?: File | null
 }) {
   const db = requireDb()
+  // Do NOT run this payload through stripUndefinedDeep — it corrupts serverTimestamp().
   const productRef = await addDoc(collection(db, 'products'), {
     userId: input.userId,
     sourceType: input.sourceType,
     sourceUrl: input.productUrl,
     name: input.displayName,
     description: input.description?.trim() || '',
-    features: [],
+    features: [] as string[],
     category: input.category?.trim() || '',
     price: input.price?.trim() || '',
     brand: input.brand?.trim() || '',
-    imagePaths: [],
-    imageUrls: [],
+    imagePaths: [] as string[],
+    imageUrls: [] as string[],
     confirmed: true,
     detailsProvided: Boolean(
       input.description?.trim() ||
@@ -213,155 +253,175 @@ function assertImageFile(file: File | null | undefined, required: boolean) {
 }
 
 export async function createCampaignWithProduct(input: CreateCampaignInput) {
-  const sourceType = input.sourceType
-  const productUrl = input.productUrl?.trim() || ''
-  const displayName =
-    input.productName?.trim() ||
-    (sourceType === 'url' && productUrl
-      ? guessNameFromUrl(productUrl)
-      : input.imageFile
-        ? guessNameFromFile(input.imageFile)
-        : 'Untitled product')
+  try {
+    const sourceType = input.sourceType
+    const productUrl = input.productUrl?.trim() || ''
+    const displayName =
+      input.productName?.trim() ||
+      (sourceType === 'url' && productUrl
+        ? guessNameFromUrl(productUrl)
+        : input.imageFile
+          ? guessNameFromFile(input.imageFile)
+          : 'Untitled product')
 
-  if (sourceType === 'url' && !productUrl) {
-    throw new Error('Enter a product URL, or switch to photo upload.')
-  }
-  if (sourceType === 'upload') {
-    assertImageFile(input.imageFile, true)
-  } else if (input.imageFile) {
-    assertImageFile(input.imageFile, false)
-  }
+    if (sourceType === 'url' && !productUrl) {
+      throw new Error('Enter a product URL, or switch to photo upload.')
+    }
+    if (sourceType === 'upload') {
+      assertImageFile(input.imageFile, true)
+    } else if (input.imageFile) {
+      assertImageFile(input.imageFile, false)
+    }
 
-  const resolved =
-    input.photoStyles !== undefined || input.videoStyles !== undefined
-      ? resolveCampaignFromFormats({
-          photoStyles: input.photoStyles ?? [],
-          videoStyles: input.videoStyles ?? [],
-          includeSocial: input.includeSocial,
-          includeAds: input.includeAds,
-          includeStrategy: input.includeStrategy,
-        })
-      : resolveDeliverables(input.deliverables ?? [])
+    const resolved =
+      input.photoStyles !== undefined || input.videoStyles !== undefined
+        ? resolveCampaignFromFormats({
+            photoStyles: input.photoStyles ?? [],
+            videoStyles: input.videoStyles ?? [],
+            includeSocial: input.includeSocial,
+            includeAds: input.includeAds,
+            includeStrategy: input.includeStrategy,
+          })
+        : resolveDeliverables(input.deliverables ?? [])
 
-  const { productRef, imagePaths, imageUrls, storageWarning } = await createProductRecord({
-    userId: input.userId,
-    sourceType,
-    productUrl,
-    displayName,
-    description: input.description,
-    brand: input.brand,
-    price: input.price,
-    category: input.category,
-    imageFile: sourceType === 'upload' ? input.imageFile : null,
-  })
+    const { productRef, imagePaths, imageUrls, storageWarning } = await createProductRecord({
+      userId: input.userId,
+      sourceType,
+      productUrl,
+      displayName,
+      description: input.description,
+      brand: input.brand,
+      price: input.price,
+      category: input.category,
+      imageFile: sourceType === 'upload' ? input.imageFile : null,
+    })
 
-  const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})
+    const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})
 
-  const campaignRef = await addDoc(collection(requireDb(), 'campaigns'), {
-    userId: input.userId,
-    productId: productRef.id,
-    title: `${displayName} campaign`,
-    productName: displayName,
-    productUrl,
-    sourceType,
-    mode: 'campaign' satisfies CampaignMode,
-    status: 'product_confirmed' satisfies CampaignStatus,
-    deliverables: resolved.deliverables.map(String),
-    selectedAssets: resolved.selectedAssets.map(String),
-    includeStrategy: resolved.includeStrategy,
-    progressStep: 'product_confirmed',
-    ...(creativeDirection ? { creativeDirection } : {}),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  })
+    // Never stripUndefinedDeep here — serverTimestamp() sentinels must stay intact.
+    const campaignRef = await addDoc(collection(requireDb(), 'campaigns'), {
+      userId: input.userId,
+      productId: productRef.id,
+      title: `${displayName} campaign`,
+      productName: displayName,
+      productUrl,
+      sourceType,
+      mode: 'campaign' satisfies CampaignMode,
+      status: 'product_confirmed' satisfies CampaignStatus,
+      deliverables: asFlatStringArray(resolved.deliverables),
+      selectedAssets: asFlatStringArray(resolved.selectedAssets),
+      includeStrategy: resolved.includeStrategy,
+      progressStep: 'product_confirmed',
+      ...(creativeDirection ? { creativeDirection } : {}),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
 
-  return {
-    productId: productRef.id,
-    campaignId: campaignRef.id,
-    imagePaths,
-    imageUrls,
-    storageWarning,
+    return {
+      productId: productRef.id,
+      campaignId: campaignRef.id,
+      imagePaths,
+      imageUrls,
+      storageWarning,
+    }
+  } catch (err) {
+    if (err instanceof Error && !/firebase|firestore|nested entity/i.test(err.message)) {
+      throw err
+    }
+    throw new Error(
+      friendlyFirestoreError(err, 'Could not create campaign in the cloud.'),
+    )
   }
 }
 
 export async function createStudioProject(input: CreateStudioInput) {
-  const sourceType: ProductSourceType =
-    input.sourceType === 'url' || (input.productUrl?.trim() && !input.imageFile)
-      ? 'url'
-      : 'upload'
-  const productUrl = input.productUrl?.trim() || ''
+  try {
+    const sourceType: ProductSourceType =
+      input.sourceType === 'url' || (input.productUrl?.trim() && !input.imageFile)
+        ? 'url'
+        : 'upload'
+    const productUrl = input.productUrl?.trim() || ''
 
-  if (sourceType === 'url') {
-    if (!productUrl) throw new Error('Add a product URL to continue.')
-    try {
-      const parsed = new URL(productUrl)
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        throw new Error('invalid')
+    if (sourceType === 'url') {
+      if (!productUrl) throw new Error('Add a product URL to continue.')
+      try {
+        const parsed = new URL(productUrl)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          throw new Error('invalid')
+        }
+      } catch {
+        throw new Error('Enter a valid product URL (including https://).')
       }
-    } catch {
-      throw new Error('Enter a valid product URL (including https://).')
+    } else {
+      assertImageFile(input.imageFile, true)
     }
-  } else {
-    assertImageFile(input.imageFile, true)
-  }
 
-  const displayName =
-    input.productName?.trim() ||
-    (sourceType === 'upload' && input.imageFile
-      ? guessNameFromFile(input.imageFile)
-      : guessNameFromUrl(productUrl))
+    const displayName =
+      input.productName?.trim() ||
+      (sourceType === 'upload' && input.imageFile
+        ? guessNameFromFile(input.imageFile)
+        : guessNameFromUrl(productUrl))
 
-  let selectedAssets: AssetType[]
-  let titleSuffix: string
+    let selectedAssets: AssetType[]
+    let titleSuffix: string
 
-  if (input.kind === 'photos') {
-    selectedAssets = resolvePhotoStyles(input.photoStyles ?? [])
-    titleSuffix = 'Photos'
-  } else if (input.kind === 'videos') {
-    selectedAssets = resolveVideoStyles(input.videoStyles ?? [])
-    titleSuffix = 'Videos'
-  } else {
-    selectedAssets = resolveAdStyles(input.adStyles ?? [])
-    titleSuffix = 'Ads'
-  }
+    if (input.kind === 'photos') {
+      selectedAssets = resolvePhotoStyles(input.photoStyles ?? [])
+      titleSuffix = 'Photos'
+    } else if (input.kind === 'videos') {
+      selectedAssets = resolveVideoStyles(input.videoStyles ?? [])
+      titleSuffix = 'Videos'
+    } else {
+      selectedAssets = resolveAdStyles(input.adStyles ?? [])
+      titleSuffix = 'Ads'
+    }
 
-  const { productRef, imagePaths, imageUrls, storageWarning } = await createProductRecord({
-    userId: input.userId,
-    sourceType,
-    productUrl,
-    displayName,
-    description: input.description,
-    brand: input.brand,
-    imageFile: sourceType === 'upload' ? input.imageFile : null,
-  })
+    const { productRef, imagePaths, imageUrls, storageWarning } = await createProductRecord({
+      userId: input.userId,
+      sourceType,
+      productUrl,
+      displayName,
+      description: input.description,
+      brand: input.brand,
+      imageFile: sourceType === 'upload' ? input.imageFile : null,
+    })
 
-  const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})
+    const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})
 
-  const campaignRef = await addDoc(collection(requireDb(), 'campaigns'), {
-    userId: input.userId,
-    productId: productRef.id,
-    title: `${displayName} — ${titleSuffix}`,
-    productName: displayName,
-    productUrl: productUrl || '',
-    sourceType,
-    mode: 'studio' satisfies CampaignMode,
-    studioKind: input.kind,
-    status: 'product_confirmed' satisfies CampaignStatus,
-    selectedAssets: selectedAssets.map(String),
-    includeStrategy: false,
-    progressStep: 'product_confirmed',
-    ...(input.tryFree ? { tryFree: true } : {}),
-    ...(creativeDirection ? { creativeDirection } : {}),
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  })
+    // Never stripUndefinedDeep here — serverTimestamp() sentinels must stay intact.
+    const campaignRef = await addDoc(collection(requireDb(), 'campaigns'), {
+      userId: input.userId,
+      productId: productRef.id,
+      title: `${displayName} — ${titleSuffix}`,
+      productName: displayName,
+      productUrl: productUrl || '',
+      sourceType,
+      mode: 'studio' satisfies CampaignMode,
+      studioKind: input.kind,
+      status: 'product_confirmed' satisfies CampaignStatus,
+      selectedAssets: asFlatStringArray(selectedAssets),
+      includeStrategy: false,
+      progressStep: 'product_confirmed',
+      ...(input.tryFree ? { tryFree: true } : {}),
+      ...(creativeDirection ? { creativeDirection } : {}),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
 
-  return {
-    productId: productRef.id,
-    campaignId: campaignRef.id,
-    imagePaths,
-    imageUrls,
-    storageWarning,
+    return {
+      productId: productRef.id,
+      campaignId: campaignRef.id,
+      imagePaths,
+      imageUrls,
+      storageWarning,
+    }
+  } catch (err) {
+    if (err instanceof Error && !/firebase|firestore|nested entity/i.test(err.message)) {
+      throw err
+    }
+    throw new Error(
+      friendlyFirestoreError(err, 'Could not create studio project in the cloud.'),
+    )
   }
 }
 
@@ -385,10 +445,10 @@ export async function listUserCampaigns(userId: string): Promise<CampaignDoc[]> 
       mode: (data.mode as CampaignMode) || 'campaign',
       studioKind: data.studioKind as StudioKind | undefined,
       deliverables: Array.isArray(data.deliverables)
-        ? (data.deliverables as DeliverableId[])
+        ? (asFlatStringArray(data.deliverables) as DeliverableId[])
         : undefined,
       selectedAssets: Array.isArray(data.selectedAssets)
-        ? (data.selectedAssets as AssetType[])
+        ? (asFlatStringArray(data.selectedAssets) as AssetType[])
         : undefined,
       creativeDirection: data.creativeDirection
         ? sanitizeCreativeDirection(data.creativeDirection as CreativeDirection)
@@ -462,28 +522,39 @@ function isFirestoreSpecial(value: object): boolean {
     ctor === 'GeoPoint' ||
     ctor === 'DocumentReference' ||
     ctor === 'Bytes' ||
-    ctor === 'VectorValue'
+    ctor === 'VectorValue' ||
+    /FieldValue|Timestamp|GeoPoint|DocumentReference|Bytes|Vector/i.test(ctor)
   ) {
     return true
   }
-  // Firebase v9+ FieldValue sentinel
+  // Firebase v9+ FieldValue sentinel (serverTimestamp, deleteField, …)
   if ('_methodName' in value) return true
   return false
 }
 
-/** Strip undefined so Firestore accepts the payload. Preserves FieldValue/Timestamp. */
+/**
+ * Strip undefined from plain JSON-like values only.
+ * NEVER pass objects that contain serverTimestamp()/deleteField() — use
+ * buildCampaignStatusUpdate instead. Walking FieldValue corrupts sentinels and
+ * can produce "Property array contains an invalid nested entity."
+ */
 export function stripUndefinedDeep<T>(value: T): T {
   if (value === undefined) return value
   if (value === null || typeof value !== 'object') return value
   if (isFirestoreSpecial(value)) return value
   if (Array.isArray(value)) {
-    // Firestore forbids nested arrays and undefined entries
+    // Firestore forbids nested arrays — keep only scalars / plain maps.
     return value
-      .filter((item) => item !== undefined)
+      .filter((item) => item !== undefined && item !== null)
       .map((item) => {
-        if (Array.isArray(item)) return JSON.stringify(item)
+        if (Array.isArray(item)) return String(item)
+        if (item && typeof item === 'object' && isFirestoreSpecial(item)) {
+          // FieldValue must never appear inside arrays
+          return null
+        }
         return stripUndefinedDeep(item)
-      }) as T
+      })
+      .filter((item) => item !== null) as T
   }
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
@@ -494,7 +565,8 @@ export function stripUndefinedDeep<T>(value: T): T {
 }
 
 /**
- * Cloud status only — never write output arrays (they cause nested-entity errors).
+ * Cloud status metadata only — never write output arrays / labels.
+ * Arrays of maps (even "safe" ones) have caused nested-entity write failures.
  */
 export function firestoreOutputSummary(outputs: unknown[]): {
   demoPack: true
@@ -508,16 +580,40 @@ export function firestoreOutputSummary(outputs: unknown[]): {
   }
 }
 
-/** @deprecated */
+/** @deprecated Never write output object arrays to Firestore. */
 export function firestoreSafeOutputs(
-  outputs: Array<Record<string, unknown>>,
+  _outputs: Array<Record<string, unknown>>,
 ): Array<Record<string, unknown>> {
-  return outputs.map((raw, i) => {
-    const label = typeof raw.label === 'string' ? raw.label : `Asset ${i + 1}`
-    const assetType = typeof raw.assetType === 'string' ? raw.assetType : 'unknown'
-    const kind = typeof raw.kind === 'string' ? raw.kind : 'image'
-    return { id: String(raw.id ?? `${assetType}-${i}`), label, assetType, kind }
-  })
+  void _outputs
+  return []
+}
+
+/** Scalars allowed on campaign status sync — no arrays of maps, no FieldValues. */
+function pickSafeStatusExtra(extra: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(extra)) {
+    if (
+      key === 'outputs' ||
+      key === 'outputLabels' ||
+      key === 'selectedAssets' ||
+      key === 'deliverables' ||
+      key === 'imageUrls' ||
+      key === 'imagePaths' ||
+      key === 'features' ||
+      key === 'createdAt' ||
+      key === 'updatedAt'
+    ) {
+      continue
+    }
+    if (value === undefined) continue
+    if (value === null) continue
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      out[key] = value
+      continue
+    }
+    // Ignore objects/arrays — status sync must stay scalar-only.
+  }
+  return out
 }
 
 export async function updateCampaignStatus(
@@ -525,23 +621,31 @@ export async function updateCampaignStatus(
   status: CampaignStatus,
   extra: Record<string, unknown> = {},
 ) {
-  // Never persist `outputs` / `outputLabels` arrays — delete corrupt leftovers.
-  const {
-    outputs: _o,
-    outputLabels: _l,
-    ...rest
-  } = extra
-  void _o
-  void _l
-  const safeExtra = stripUndefinedDeep(rest)
+  const safeExtra = pickSafeStatusExtra(extra)
+  // Build payload without stripUndefinedDeep so serverTimestamp/deleteField stay valid.
   await updateDoc(doc(requireDb(), 'campaigns', campaignId), {
     status,
     progressStep: status,
     updatedAt: serverTimestamp(),
+    // Remove any legacy corrupt outputs arrays from earlier buggy writes.
     outputs: deleteField(),
     outputLabels: deleteField(),
     ...safeExtra,
   })
+}
+
+/** Best-effort cleanup of legacy corrupt array fields on a campaign doc. */
+export async function purgeCorruptCampaignOutputs(campaignId: string): Promise<void> {
+  if (!campaignId || isLocalCampaignId(campaignId)) return
+  try {
+    await updateDoc(doc(requireDb(), 'campaigns', campaignId), {
+      outputs: deleteField(),
+      outputLabels: deleteField(),
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    console.warn('[campaigns] purge corrupt outputs skipped', err)
+  }
 }
 
 /** Deletes a campaign owned by `userId` (Firestore or local demo). Clears stashed media. */

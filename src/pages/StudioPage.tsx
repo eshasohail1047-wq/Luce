@@ -5,7 +5,11 @@ import CreativeDirectionFields from '../components/CreativeDirectionFields'
 import FormatPickGrid from '../components/FormatPickGrid'
 import { useAuth } from '../auth/AuthProvider'
 import { getPlanLimits } from '../lib/planLimits'
-import { createStudioProject, type ProductSourceType } from '../lib/campaigns'
+import {
+  createStudioProject,
+  friendlyFirestoreError,
+  type ProductSourceType,
+} from '../lib/campaigns'
 import type {
   BackgroundId,
   LightingId,
@@ -15,7 +19,6 @@ import type {
 import {
   AD_STYLES,
   DEFAULT_PHOTO_STYLES,
-  DEFAULT_VIDEO_STYLES,
   PHOTO_STYLES,
   VIDEO_STUDIO_FORMAT_COUNT,
   VIDEO_STYLES,
@@ -468,7 +471,9 @@ export default function StudioPage() {
         await applyRecreateAndReturn(session)
       } catch (err) {
         console.error(err)
-        setError(err instanceof Error ? err.message : 'Could not recreate this asset.')
+        setError(
+          friendlyFirestoreError(err, 'Could not recreate this asset. Try again.'),
+        )
         setBusy(false)
       }
       return
@@ -598,9 +603,10 @@ export default function StudioPage() {
       } catch (localErr) {
         console.error(localErr)
         setError(
-          localErr instanceof Error
-            ? localErr.message
-            : 'Could not start this project.',
+          friendlyFirestoreError(
+            localErr,
+            'Could not start this project. Try again or use a smaller photo.',
+          ),
         )
         setBusy(false)
       }
