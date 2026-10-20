@@ -312,15 +312,15 @@ export default function CampaignDetailPage() {
     extra: { outputs?: MockOutput[] } = {},
   ) {
     if (!campaignId) return
-    if (isLocalCampaignId(campaignId)) {
-      updateLocalCampaign(campaignId, { status, ...extra })
-      if (extra.outputs) stashCampaignOutputs(campaignId, extra.outputs)
-      return
-    }
-    // Full pack (incl. AI data URLs) stays in the browser; Firestore only gets counts/labels.
     if (extra.outputs) {
       stashCampaignOutputs(campaignId, extra.outputs)
     }
+    if (isLocalCampaignId(campaignId)) {
+      updateLocalCampaign(campaignId, { status, ...extra })
+      return
+    }
+    // Generate must never depend on Firestore. Pack lives in sessionStorage;
+    // cloud status sync is optional and must not surface errors to the UI.
     try {
       await updateCampaignStatus(
         campaignId,
@@ -328,8 +328,7 @@ export default function CampaignDetailPage() {
         extra.outputs ? firestoreOutputSummary(extra.outputs) : {},
       )
     } catch (err) {
-      // Cloud sync is best-effort — generation must still complete in the browser.
-      console.warn('[campaign] Firestore status sync failed', err)
+      console.warn('[campaign] Firestore status sync skipped', err)
     }
   }
 
@@ -475,14 +474,18 @@ export default function CampaignDetailPage() {
         plan === 'free' &&
         (campaign.tryFree || !freeImageUsed)
       ) {
-        await markFreeImageUsed()
+        try {
+          await markFreeImageUsed()
+        } catch (err) {
+          console.warn('[generate] markFreeImageUsed failed', err)
+        }
       }
       if (workspace.notifyExports) {
         void sendTransactionalEmail({
           type: 'pack_ready',
           productName: campaign.productName,
           campaignUrl: `${window.location.origin}/app/campaigns/${campaignId}`,
-        })
+        }).catch((err) => console.warn('[generate] notify email failed', err))
       }
       const usedAiImages = nextOutputs.some(
         (o) =>

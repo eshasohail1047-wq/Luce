@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -256,26 +257,23 @@ export async function createCampaignWithProduct(input: CreateCampaignInput) {
 
   const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})
 
-  const campaignRef = await addDoc(
-    collection(requireDb(), 'campaigns'),
-    stripUndefinedDeep({
-      userId: input.userId,
-      productId: productRef.id,
-      title: `${displayName} campaign`,
-      productName: displayName,
-      productUrl,
-      sourceType,
-      mode: 'campaign' satisfies CampaignMode,
-      status: 'product_confirmed' satisfies CampaignStatus,
-      deliverables: resolved.deliverables.map(String),
-      selectedAssets: resolved.selectedAssets.map(String),
-      includeStrategy: resolved.includeStrategy,
-      progressStep: 'product_confirmed',
-      ...(creativeDirection ? { creativeDirection } : {}),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }),
-  )
+  const campaignRef = await addDoc(collection(requireDb(), 'campaigns'), {
+    userId: input.userId,
+    productId: productRef.id,
+    title: `${displayName} campaign`,
+    productName: displayName,
+    productUrl,
+    sourceType,
+    mode: 'campaign' satisfies CampaignMode,
+    status: 'product_confirmed' satisfies CampaignStatus,
+    deliverables: resolved.deliverables.map(String),
+    selectedAssets: resolved.selectedAssets.map(String),
+    includeStrategy: resolved.includeStrategy,
+    progressStep: 'product_confirmed',
+    ...(creativeDirection ? { creativeDirection } : {}),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  })
 
   return {
     productId: productRef.id,
@@ -339,28 +337,24 @@ export async function createStudioProject(input: CreateStudioInput) {
 
   const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})
 
-  const campaignRef = await addDoc(
-    collection(requireDb(), 'campaigns'),
-    stripUndefinedDeep({
-      userId: input.userId,
-      productId: productRef.id,
-      title: `${displayName} — ${titleSuffix}`,
-      productName: displayName,
-      productUrl: productUrl || '',
-      sourceType,
-      mode: 'studio' satisfies CampaignMode,
-      studioKind: input.kind,
-      status: 'product_confirmed' satisfies CampaignStatus,
-      // Force a flat string[] — nested arrays cause Firestore "invalid nested entity"
-      selectedAssets: selectedAssets.map(String),
-      includeStrategy: false,
-      progressStep: 'product_confirmed',
-      ...(input.tryFree ? { tryFree: true } : {}),
-      ...(creativeDirection ? { creativeDirection } : {}),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }),
-  )
+  const campaignRef = await addDoc(collection(requireDb(), 'campaigns'), {
+    userId: input.userId,
+    productId: productRef.id,
+    title: `${displayName} — ${titleSuffix}`,
+    productName: displayName,
+    productUrl: productUrl || '',
+    sourceType,
+    mode: 'studio' satisfies CampaignMode,
+    studioKind: input.kind,
+    status: 'product_confirmed' satisfies CampaignStatus,
+    selectedAssets: selectedAssets.map(String),
+    includeStrategy: false,
+    progressStep: 'product_confirmed',
+    ...(input.tryFree ? { tryFree: true } : {}),
+    ...(creativeDirection ? { creativeDirection } : {}),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  })
 
   return {
     productId: productRef.id,
@@ -458,12 +452,38 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
   })
 }
 
-/** Strip undefined / nested-array-unsafe values so Firestore accepts the payload. */
+/** Firestore sentinels / special objects must not be walked with Object.entries. */
+function isFirestoreSpecial(value: object): boolean {
+  // FieldValue, Timestamp, GeoPoint, DocumentReference, Bytes, etc.
+  const ctor = value.constructor?.name || ''
+  if (
+    ctor === 'FieldValue' ||
+    ctor === 'Timestamp' ||
+    ctor === 'GeoPoint' ||
+    ctor === 'DocumentReference' ||
+    ctor === 'Bytes' ||
+    ctor === 'VectorValue'
+  ) {
+    return true
+  }
+  // Firebase v9+ FieldValue sentinel
+  if ('_methodName' in value) return true
+  return false
+}
+
+/** Strip undefined so Firestore accepts the payload. Preserves FieldValue/Timestamp. */
 export function stripUndefinedDeep<T>(value: T): T {
   if (value === undefined) return value
   if (value === null || typeof value !== 'object') return value
+  if (isFirestoreSpecial(value)) return value
   if (Array.isArray(value)) {
-    return value.map((item) => stripUndefinedDeep(item)) as T
+    // Firestore forbids nested arrays and undefined entries
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => {
+        if (Array.isArray(item)) return JSON.stringify(item)
+        return stripUndefinedDeep(item)
+      }) as T
   }
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
@@ -474,34 +494,21 @@ export function stripUndefinedDeep<T>(value: T): T {
 }
 
 /**
- * Metadata-only summary for Firestore. Never write full output objects —
- * arrays of maps with data-URLs / undefined fields trigger:
- * "Property array contains an invalid nested entity."
+ * Cloud status only — never write output arrays (they cause nested-entity errors).
  */
 export function firestoreOutputSummary(outputs: unknown[]): {
   demoPack: true
   outputsLocal: true
   outputCount: number
-  outputLabels: string[]
 } {
-  const labels = outputs
-    .map((item) => {
-      if (item && typeof item === 'object' && 'label' in item) {
-        return String((item as { label?: unknown }).label ?? '')
-      }
-      return ''
-    })
-    .filter(Boolean)
-    .slice(0, 24)
   return {
     demoPack: true,
     outputsLocal: true,
-    outputCount: outputs.length,
-    outputLabels: labels,
+    outputCount: Array.isArray(outputs) ? outputs.length : 0,
   }
 }
 
-/** @deprecated Use firestoreOutputSummary — kept so older imports keep compiling */
+/** @deprecated */
 export function firestoreSafeOutputs(
   outputs: Array<Record<string, unknown>>,
 ): Array<Record<string, unknown>> {
@@ -518,14 +525,21 @@ export async function updateCampaignStatus(
   status: CampaignStatus,
   extra: Record<string, unknown> = {},
 ) {
-  // Drop any accidental `outputs` array — never persist it to Firestore.
-  const { outputs: _omitOutputs, ...rest } = extra
-  void _omitOutputs
+  // Never persist `outputs` / `outputLabels` arrays — delete corrupt leftovers.
+  const {
+    outputs: _o,
+    outputLabels: _l,
+    ...rest
+  } = extra
+  void _o
+  void _l
   const safeExtra = stripUndefinedDeep(rest)
   await updateDoc(doc(requireDb(), 'campaigns', campaignId), {
     status,
     progressStep: status,
     updatedAt: serverTimestamp(),
+    outputs: deleteField(),
+    outputLabels: deleteField(),
     ...safeExtra,
   })
 }
