@@ -428,10 +428,15 @@ export default function StudioPage() {
       })
     } else {
       try {
-        await updateCampaignStatus(session.campaignId, nextStatus as 'ready' | 'generating' | 'exported', {
-          outputs: nextOutputs,
-          demoPack: true,
-        })
+        await updateCampaignStatus(
+          session.campaignId,
+          nextStatus as 'ready' | 'generating' | 'exported',
+          {
+            demoPack: true,
+            outputsLocal: true,
+            outputCount: nextOutputs.length,
+          },
+        )
       } catch (err) {
         console.warn('[Studio] Firestore recreate save failed — using local stash', err)
       }

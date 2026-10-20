@@ -5,7 +5,7 @@ import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
 import {
   deleteUserCampaign,
-  firestoreSafeOutputs,
+  firestoreOutputSummary,
   updateCampaignStatus,
 } from '../lib/campaigns'
 import { requireDb } from '../lib/firebase'
@@ -317,20 +317,20 @@ export default function CampaignDetailPage() {
       if (extra.outputs) stashCampaignOutputs(campaignId, extra.outputs)
       return
     }
-    // Keep full AI assets (data URLs) in sessionStorage; Firestore only gets light metadata.
+    // Full pack (incl. AI data URLs) stays in the browser; Firestore only gets counts/labels.
     if (extra.outputs) {
       stashCampaignOutputs(campaignId, extra.outputs)
     }
-    await updateCampaignStatus(campaignId, status as 'generating' | 'ready' | 'exported', {
-      ...(extra.outputs
-        ? {
-            outputs: firestoreSafeOutputs(
-              extra.outputs as unknown as Array<Record<string, unknown>>,
-            ),
-            demoPack: true,
-          }
-        : {}),
-    })
+    try {
+      await updateCampaignStatus(
+        campaignId,
+        status as 'generating' | 'ready' | 'exported',
+        extra.outputs ? firestoreOutputSummary(extra.outputs) : {},
+      )
+    } catch (err) {
+      // Cloud sync is best-effort — generation must still complete in the browser.
+      console.warn('[campaign] Firestore status sync failed', err)
+    }
   }
 
   async function runMockGenerate() {
@@ -463,11 +463,13 @@ export default function CampaignDetailPage() {
         await new Promise((r) => setTimeout(r, 200))
       }
 
-      await persistStatus('ready', { outputs: nextOutputs })
+      // Apply results locally first so a Firestore sync error cannot wipe the pack.
+      stashCampaignOutputs(campaignId, nextOutputs)
       setProgress(100)
       setCampaign((prev) =>
         prev ? { ...prev, status: 'ready', outputs: nextOutputs } : prev,
       )
+      await persistStatus('ready', { outputs: nextOutputs })
       if (
         generateActionForCampaign() === 'photos' &&
         plan === 'free' &&
@@ -510,7 +512,11 @@ export default function CampaignDetailPage() {
       if (nextOutputs[0]) setPreviewId(nextOutputs[0].id)
     } catch (err) {
       console.error(err)
+      // Keep campaign UI visible — only show an inline action message.
+      setActionMsg(null)
       setError(err instanceof Error ? err.message : 'Could not generate demo pack.')
+      // If we already have outputs in state from a partial run, don't blank the page.
+      setCampaign((prev) => (prev ? { ...prev, status: prev.status === 'generating' ? 'product_confirmed' : prev.status } : prev))
     } finally {
       setActionBusy(false)
       setTimeout(() => setProgress(0), 600)
@@ -728,7 +734,7 @@ export default function CampaignDetailPage() {
         onClose={() => setPaywallOpen(false)}
       />
       <main className="app-main campaign-create studio-page campaign-detail">
-        {error || !campaign ? (
+        {!campaign ? (
           <div className="dash-empty">
             <p className="auth-error">{error || 'Something went wrong.'}</p>
             <Link className="dash-create-btn dash-create-btn-sm" to="/app/campaigns">
@@ -914,6 +920,11 @@ export default function CampaignDetailPage() {
                 </div>
               ) : null}
 
+              {error ? (
+                <p className="auth-error" role="alert">
+                  {error}
+                </p>
+              ) : null}
               {actionMsg ? (
                 <p className="settings-success" role="status">
                   {actionMsg}
