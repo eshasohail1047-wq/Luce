@@ -230,6 +230,12 @@ function localApiRoutes(): Plugin {
                 typeof body.recreateNote === 'string'
                   ? body.recreateNote
                   : undefined,
+              durationSeconds:
+                typeof body.durationSeconds === 'number'
+                  ? body.durationSeconds
+                  : typeof body.durationSeconds === 'string'
+                    ? Number(body.durationSeconds)
+                    : undefined,
             })
             res.statusCode = result.status
             res.setHeader('Content-Type', 'application/json')

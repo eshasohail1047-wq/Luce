@@ -69,6 +69,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     assets,
     recreateNote:
       typeof body.recreateNote === 'string' ? body.recreateNote : undefined,
+    durationSeconds:
+      typeof body.durationSeconds === 'number'
+        ? body.durationSeconds
+        : typeof body.durationSeconds === 'string'
+          ? Number(body.durationSeconds)
+          : undefined,
   })
 
   return res.status(result.status).json(result.body)

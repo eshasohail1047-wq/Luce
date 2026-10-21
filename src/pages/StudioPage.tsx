@@ -6,6 +6,14 @@ import FormatPickGrid from '../components/FormatPickGrid'
 import { useAuth } from '../auth/AuthProvider'
 import { getPlanLimits } from '../lib/planLimits'
 import {
+  DEFAULT_VIDEO_DURATION,
+  expandFormatQuantities,
+  syncDurationsToQuantities,
+  totalQuantity,
+  type FormatDurations,
+  type FormatQuantities,
+} from '../lib/formatQuantities'
+import {
   createStudioProject,
   friendlyFirestoreError,
   type ProductSourceType,
@@ -41,6 +49,7 @@ import {
   stashCampaignImage,
   stashCampaignOutputs,
   stashCampaignRefImage,
+  stashCampaignVideoDurations,
   updateLocalCampaign,
   withTimeout,
 } from '../lib/localDemoCampaign'
@@ -48,6 +57,11 @@ import {
   isImageAssetKind,
   requestGenerateImages,
 } from '../lib/generateImages'
+import {
+  extractVideoFrameDataUrl,
+  isVideoAssetKind,
+  requestGenerateVideos,
+} from '../lib/generateVideos'
 import { recreateMockOutput, type MockOutput } from '../lib/mockCampaign'
 import { consumePendingProduct } from '../lib/pendingProduct'
 import { canGenerate, type GenerateAction } from '../lib/planAccess'
@@ -87,8 +101,9 @@ export default function StudioPage() {
   const [referenceError, setReferenceError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showDetails, setShowDetails] = useState(true)
-  const [photoStyles, setPhotoStyles] = useState<PhotoStyleId[]>([])
-  const [videoStyles, setVideoStyles] = useState<VideoStyleId[]>([])
+  const [photoQuantities, setPhotoQuantities] = useState<FormatQuantities>({})
+  const [videoQuantities, setVideoQuantities] = useState<FormatQuantities>({})
+  const [videoDurations, setVideoDurations] = useState<FormatDurations>({})
   const [adStyles, setAdStyles] = useState<AdStyleId[]>([])
   const [prompt, setPrompt] = useState('')
   const [lighting, setLighting] = useState<LightingId | ''>('')
@@ -104,10 +119,11 @@ export default function StudioPage() {
   const [paywallReason, setPaywallReason] = useState<string | undefined>()
   const isRecreate = Boolean(recreate) || searchParams.get('recreate') === '1'
   const limits = getPlanLimits(plan)
-  const videoPickMax =
-    limits.maxVideos > 0
-      ? Math.min(VIDEO_STUDIO_FORMAT_COUNT, limits.maxVideos)
-      : VIDEO_STUDIO_FORMAT_COUNT
+  const photoTotalMax = Math.max(1, limits.maxImages)
+  const videoTotalMax =
+    limits.maxVideos > 0 ? limits.maxVideos : VIDEO_STUDIO_FORMAT_COUNT
+  const photoOutputCount = totalQuantity(photoQuantities)
+  const videoOutputCount = totalQuantity(videoQuantities)
 
   function generateActionForKind(): GenerateAction {
     if (isRecreate) {
@@ -212,9 +228,10 @@ export default function StudioPage() {
         const photoId = normalizePhotoStyleId(asset)
         const videoId = normalizeVideoStyleId(asset)
         if (session.studioKind === 'photos' && photoId) {
-          setPhotoStyles([photoId])
+          setPhotoQuantities({ [photoId]: 1 })
         } else if (session.studioKind === 'videos' && videoId) {
-          setVideoStyles([videoId])
+          setVideoQuantities({ [videoId]: 1 })
+          setVideoDurations({ [videoId]: DEFAULT_VIDEO_DURATION })
         } else if (session.studioKind === 'ads' && AD_STYLES.some((s) => s.id === asset)) {
           setAdStyles([asset as AdStyleId])
         }
@@ -248,8 +265,9 @@ export default function StudioPage() {
 
   useEffect(() => {
     if (searchParams.get('recreate') === '1') return
-    setPhotoStyles([])
-    setVideoStyles([])
+    setPhotoQuantities({})
+    setVideoQuantities({})
+    setVideoDurations({})
     setAdStyles([])
     setPrompt('')
     setLighting('')
@@ -264,7 +282,9 @@ export default function StudioPage() {
 
     const style = searchParams.get('style')
     if (kind === 'videos' && style === 'ugc') {
-      setVideoStyles(['video_ugc_selfie', 'video_howto_demo'])
+      const qty = { video_ugc_selfie: 3 }
+      setVideoQuantities(qty)
+      setVideoDurations({ video_ugc_selfie: DEFAULT_VIDEO_DURATION })
     }
   }, [kind, searchParams])
 
@@ -310,8 +330,8 @@ export default function StudioPage() {
   }
 
   function selectionCount() {
-    if (kind === 'photos') return photoStyles.length
-    if (kind === 'videos') return videoStyles.length
+    if (kind === 'photos') return photoOutputCount
+    if (kind === 'videos') return videoOutputCount
     return adStyles.length
   }
 
@@ -335,15 +355,22 @@ export default function StudioPage() {
       outputs.findIndex((o) => o.id === session.assetId || o.assetType === session.assetType),
     )
     const current = outputs[index] || outputs[0]!
+    const productPhoto = previewUrl || session.imageUrl
     let next = recreateMockOutput(
       current,
       index,
       productName.trim() || session.productName,
-      previewUrl || session.imageUrl,
+      productPhoto,
     )
     const directionNote = prompt.trim()
     next = {
       ...next,
+      // Always keep the user's product as the frame until AI succeeds —
+      // never show stock demo perfume for another format.
+      imageUrl:
+        next.kind === 'image'
+          ? productPhoto || next.imageUrl
+          : next.imageUrl,
       note: directionNote
         ? `Recreated in studio · ${directionNote.slice(0, 120)}`
         : next.note,
@@ -373,6 +400,11 @@ export default function StudioPage() {
           ) {
             productImage = candidate
           }
+        }
+        if (!productImage) {
+          throw new Error(
+            'Upload your product photo first — formats must be based on your packaging.',
+          )
         }
 
         let referenceImage: string | undefined
@@ -407,13 +439,110 @@ export default function StudioPage() {
               ? `AI recreate · ${directionNote.slice(0, 120)}`
               : 'AI recreate · packaging fidelity from your product photo',
           }
+        } else {
+          throw new Error('Image model returned no image for this format.')
         }
       } catch (err) {
-        console.warn('[Studio] AI recreate fallback to mock', err)
+        console.warn('[Studio] AI recreate failed — keeping your product photo', err)
+        next = {
+          ...next,
+          imageUrl: productPhoto || next.imageUrl,
+          note: 'Kept your product photo — AI format restyle failed',
+        }
         setWarning(
           err instanceof Error
-            ? `${err.message} Showing a demo variant instead.`
-            : 'AI recreate unavailable — showing a demo variant instead.',
+            ? `${err.message} Your product photo was kept (no demo swap).`
+            : 'AI recreate unavailable — your product photo was kept.',
+        )
+      }
+    }
+
+    if (isVideoAssetKind(current.assetType) && next.kind === 'video') {
+      try {
+        let productImage: string | undefined
+        if (imageFile) {
+          try {
+            productImage = await fileToDataUrl(imageFile)
+          } catch {
+            /* fall through */
+          }
+        }
+        if (!productImage) {
+          const candidate = session.imageUrl || previewUrl || undefined
+          if (
+            candidate &&
+            (candidate.startsWith('data:') || candidate.startsWith('http'))
+          ) {
+            productImage = candidate
+          }
+        }
+        if (!productImage) {
+          throw new Error(
+            'Upload your product photo first — videos must start from your packaging.',
+          )
+        }
+
+        let referenceFrameImage: string | undefined
+        if (referenceFile) {
+          try {
+            const refData = await fileToDataUrl(referenceFile)
+            if (refData.startsWith('data:image/')) {
+              referenceFrameImage = refData
+            } else if (refData.startsWith('data:video/')) {
+              referenceFrameImage = await extractVideoFrameDataUrl(refData)
+            }
+          } catch {
+            /* optional */
+          }
+        }
+
+        const durationSeconds =
+          videoDurations[current.assetType] ||
+          current.durationSeconds ||
+          DEFAULT_VIDEO_DURATION
+        const ai = await requestGenerateVideos({
+          productName: productName.trim() || session.productName,
+          productImage,
+          referenceFrameImage,
+          creativeDirection: {
+            prompt: directionNote || undefined,
+            lighting: lighting || undefined,
+            background: background || undefined,
+            mood: mood || undefined,
+            styleTheme: styleTheme || undefined,
+          },
+          assets: [current.assetType],
+          recreateNote: directionNote || undefined,
+          durationSeconds,
+        })
+        const generated = ai.assets[0]
+        if (generated?.videoDataUrl) {
+          next = {
+            ...next,
+            kind: 'video',
+            videoUrl: generated.videoDataUrl,
+            imageUrl: productPhoto || next.imageUrl,
+            durationSeconds,
+            note: directionNote
+              ? `AI video recreate · ${durationSeconds}s · ${directionNote.slice(0, 100)}`
+              : `AI video · ${durationSeconds}s · packaging from your product photo`,
+          }
+        } else {
+          throw new Error('Video model returned no clip for this format.')
+        }
+      } catch (err) {
+        console.warn('[Studio] AI video recreate failed — keeping product still', err)
+        next = {
+          ...next,
+          kind: 'video',
+          videoUrl: undefined,
+          imageUrl: productPhoto || next.imageUrl,
+          note: 'Kept your product still — AI video failed (no demo clip)',
+        }
+        setWarning(
+          err instanceof Error
+            ? `${err.message} Your product still was kept (no demo clip).`
+            : 'AI video unavailable — your product still was kept.',
         )
       }
     }
@@ -484,8 +613,8 @@ export default function StudioPage() {
         setError('Add a product photo — we turn it into the video formats you pick.')
         return
       }
-      if (videoStyles.length === 0) {
-        setError('Pick at least one video format from the 8 options.')
+      if (videoOutputCount === 0) {
+        setError('Pick at least one video format (set how many variants you want on each card).')
         return
       }
     } else if (sourceType === 'upload' && !imageFile) {
@@ -512,14 +641,16 @@ export default function StudioPage() {
       /* optional */
     }
 
-    const clampedPhotos = photoStyles.slice(0, limits.maxImages)
-    const clampedVideos =
-      kind === 'videos'
-        ? resolveVideoStudioStyles(videoStyles, videoPickMax)
-        : videoStyles.slice(0, limits.maxVideos)
+    const clampedPhotos = resolvePhotoStyles(
+      expandFormatQuantities(photoQuantities, photoTotalMax) as PhotoStyleId[],
+    )
+    const clampedVideos = resolveVideoStudioStyles(
+      expandFormatQuantities(videoQuantities, videoTotalMax) as VideoStyleId[],
+      videoTotalMax,
+    )
     const selectedAssets =
       kind === 'photos'
-        ? resolvePhotoStyles(clampedPhotos).slice(0, limits.maxImages)
+        ? clampedPhotos
         : kind === 'videos'
           ? clampedVideos
           : resolveAdStyles(adStyles)
@@ -545,6 +676,10 @@ export default function StudioPage() {
           videoStyles: clampedVideos,
           adStyles,
           tryFree: isFreeTry,
+          videoDurations:
+            kind === 'videos'
+              ? syncDurationsToQuantities(videoQuantities, videoDurations)
+              : undefined,
           creativeDirection: {
             prompt,
             lighting: lighting || undefined,
@@ -557,6 +692,15 @@ export default function StudioPage() {
         'create-studio',
       )
       if (imageDataUrl) stashCampaignImage(result.campaignId, imageDataUrl)
+      if (kind === 'videos') {
+        stashCampaignVideoDurations(
+          result.campaignId,
+          syncDurationsToQuantities(videoQuantities, videoDurations) as Record<
+            string,
+            number
+          >,
+        )
+      }
       if (referenceFile) {
         try {
           stashCampaignRefImage(result.campaignId, await fileToDataUrl(referenceFile))
@@ -574,6 +718,13 @@ export default function StudioPage() {
         const titleSuffix =
           kind === 'photos' ? 'Photos' : kind === 'videos' ? 'Videos' : 'Ads'
         const imageUrl = imageDataUrl || previewUrl || undefined
+        const syncedDurations =
+          kind === 'videos'
+            ? (syncDurationsToQuantities(videoQuantities, videoDurations) as Record<
+                string,
+                number
+              >)
+            : undefined
         saveLocalCampaign({
           id,
           title: `${displayName} — ${titleSuffix}`,
@@ -588,9 +739,11 @@ export default function StudioPage() {
           includeStrategy: false,
           tryFree: isFreeTry,
           imageUrl,
+          ...(syncedDurations ? { videoDurations: syncedDurations } : {}),
           createdAt: Date.now(),
         })
         if (imageUrl) stashCampaignImage(id, imageUrl)
+        if (syncedDurations) stashCampaignVideoDurations(id, syncedDurations)
         if (referenceFile) {
           try {
             stashCampaignRefImage(id, await fileToDataUrl(referenceFile))
@@ -622,41 +775,46 @@ export default function StudioPage() {
           kicker: 'Image Studio',
           title: tryFree ? 'Your free product images' : 'Craft product images',
           lead: tryFree
-            ? 'Your product is ready — pick styles and generate your first free image pack. Packaging stays true across every still.'
-            : 'Add a product photo or URL. We’ll keep packaging true across studio, lifestyle, and promo stills.',
+            ? 'Add your product, optional reference + prompt, then pick formats — set how many variants you want on each card.'
+            : 'Product photo or URL → optional reference + prompt → pick formats and how many variants each. Results follow your reference when provided.',
           image: '/images/audience-beauty.jpg',
           accent: 'photos' as const,
-          cta: tryFree ? 'Generate free images' : 'Generate images',
-          stylesTitle: 'Pick photo formats',
-          stylesHint: 'Same product, different themes — blank uses a starter set of 3.',
+          cta:
+            photoOutputCount > 0
+              ? `Generate ${photoOutputCount} image${photoOutputCount === 1 ? '' : 's'}`
+              : tryFree
+                ? 'Generate free images'
+                : 'Generate images',
+          stylesTitle: 'Pick formats & variants',
+          stylesHint: `Tap a format, then use + / − for variants (e.g. 3 studio shoots). Plan max ${photoTotalMax}.`,
         }
       : kind === 'videos' && isUgcFocus
         ? {
             kicker: 'UGC Studio',
             title: 'Creator-style product videos',
-            lead: 'Upload your product photo, pick any of the 8 formats, then generate. HeyGen animates your product into each clip.',
+            lead: 'Product photo → optional prompt/ref → pick formats and how many of each (e.g. 3 UGC clips).',
             image: '/images/video-poster-ugc.jpg',
             accent: 'videos' as const,
             cta:
-              videoStyles.length > 0
-                ? `Generate ${videoStyles.length} video${videoStyles.length === 1 ? '' : 's'}`
+              videoOutputCount > 0
+                ? `Generate ${videoOutputCount} video${videoOutputCount === 1 ? '' : 's'}`
                 : 'Generate videos',
-            stylesTitle: 'Pick formats',
-            stylesHint: 'All 8 formats available — select any you want.',
+            stylesTitle: 'Pick formats & variants',
+            stylesHint: `Any formats · variants + length (5–15s) · up to ${videoTotalMax} on your plan.`,
           }
         : kind === 'videos'
           ? {
               kicker: 'Video Studio',
-              title: 'Product photo → pick formats → videos',
-              lead: 'Upload your product image, choose any of the 8 formats, then generate. Optional prompt and reference clip refine the look.',
+              title: 'Product photo → formats → videos',
+              lead: 'Upload your product, optionally add a prompt or reference clip, then choose any formats and how many variants each.',
               image: '/images/video-poster-table-talk.jpg',
               accent: 'videos' as const,
               cta:
-                videoStyles.length > 0
-                  ? `Generate ${videoStyles.length} video${videoStyles.length === 1 ? '' : 's'}`
+                videoOutputCount > 0
+                  ? `Generate ${videoOutputCount} video${videoOutputCount === 1 ? '' : 's'}`
                   : 'Generate videos',
-              stylesTitle: 'Pick formats',
-              stylesHint: '8 formats — select one or many, then generate.',
+              stylesTitle: 'Pick formats & variants',
+              stylesHint: `Pick formats, set variants + length (5–15s, presets or custom) · max ${videoTotalMax} total.`,
             }
           : {
               kicker: 'Ads & Social',
@@ -723,9 +881,16 @@ export default function StudioPage() {
               {kind === 'videos' && !isRecreate ? (
                 <>
                   <li>Upload product photo</li>
-                  <li>Optional prompt</li>
-                  <li>Pick any formats</li>
+                  <li>Optional ref + prompt</li>
+                  <li>Formats + variants</li>
                   <li>Generate videos</li>
+                </>
+              ) : kind === 'photos' && !isRecreate ? (
+                <>
+                  <li>Product photo or URL</li>
+                  <li>Optional ref + prompt</li>
+                  <li>Formats + variants</li>
+                  <li>Generate images</li>
                 </>
               ) : (
                 <>
@@ -977,12 +1142,12 @@ export default function StudioPage() {
               <p>
                 {kind === 'photos'
                   ? usingDefaults
-                    ? `Blank uses starter set · max ${limits.maxImages} images`
-                    : `${photoStyles.length} / ${limits.maxImages} selected`
+                    ? `Tap formats · set variants with + / − · max ${photoTotalMax} images`
+                    : `${photoOutputCount} / ${photoTotalMax} images`
                   : kind === 'videos'
                     ? usingDefaults
-                      ? `Select any of ${VIDEO_STUDIO_FORMAT_COUNT} formats · up to ${videoPickMax} on your plan`
-                      : `${videoStyles.length} / ${videoPickMax} selected`
+                      ? `Tap formats · set variants · max ${videoTotalMax} videos`
+                      : `${videoOutputCount} / ${videoTotalMax} videos`
                     : usingDefaults
                       ? studioMeta.stylesHint
                       : `${selectionCount()} selected`}
@@ -992,14 +1157,16 @@ export default function StudioPage() {
             {kind === 'photos' && (
               <FormatPickGrid
                 items={PHOTO_STYLES}
-                selected={photoStyles}
-                onChange={setPhotoStyles}
+                quantities={photoQuantities}
+                onQuantitiesChange={setPhotoQuantities}
                 defaultIds={DEFAULT_PHOTO_STYLES}
-                max={limits.maxImages}
+                max={photoTotalMax}
                 disabled={busy}
                 ariaLabel="Photo formats"
                 onLimitHit={() =>
-                  setWarning(`Your plan allows up to ${limits.maxImages} images per generate.`)
+                  setWarning(
+                    `Your plan allows up to ${photoTotalMax} images total (all formats combined).`,
+                  )
                 }
               />
             )}
@@ -1007,16 +1174,19 @@ export default function StudioPage() {
             {kind === 'videos' && (
               <FormatPickGrid
                 items={VIDEO_STYLES}
-                selected={videoStyles}
-                onChange={setVideoStyles}
+                quantities={videoQuantities}
+                onQuantitiesChange={setVideoQuantities}
+                durations={videoDurations}
+                onDurationsChange={setVideoDurations}
+                showDuration
                 defaultIds={[]}
-                max={videoPickMax}
+                max={videoTotalMax}
                 disabled={busy}
                 videoAspect
                 ariaLabel="Video formats"
                 onLimitHit={() =>
                   setWarning(
-                    `Your plan allows up to ${videoPickMax} videos per generate. Upgrade for more of the ${VIDEO_STUDIO_FORMAT_COUNT} formats.`,
+                    `Your plan allows up to ${videoTotalMax} videos total (all formats combined).`,
                   )
                 }
               />

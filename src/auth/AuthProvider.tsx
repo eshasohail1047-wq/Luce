@@ -241,7 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       window.clearTimeout(safety)
       setError(
-        'Firebase is not configured on this deployment. Add VITE_FIREBASE_* env vars in Vercel and redeploy.',
+        'Firebase is not configured. Add VITE_FIREBASE_* to .env.local for local, or Vercel Environment Variables for deploy, then restart.',
       )
       return () => {
         active = false

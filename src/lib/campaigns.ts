@@ -103,6 +103,8 @@ export type CreateStudioInput = {
   photoStyles?: PhotoStyleId[]
   videoStyles?: VideoStyleId[]
   adStyles?: AdStyleId[]
+  /** Per video format id → length in seconds (5–15) */
+  videoDurations?: Record<string, number>
   creativeDirection?: CreativeDirection
   /** Landing “Try free” path — first image pack on free plan */
   tryFree?: boolean
@@ -404,6 +406,11 @@ export async function createStudioProject(input: CreateStudioInput) {
       progressStep: 'product_confirmed',
       ...(input.tryFree ? { tryFree: true } : {}),
       ...(creativeDirection ? { creativeDirection } : {}),
+      ...(input.kind === 'videos' &&
+      input.videoDurations &&
+      Object.keys(input.videoDurations).length > 0
+        ? { videoDurations: input.videoDurations }
+        : {}),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })

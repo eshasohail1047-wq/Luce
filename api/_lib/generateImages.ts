@@ -1,7 +1,8 @@
 import { generateMuseImage, getMuseApiKey } from './muse'
 import { generateImage, getOpenRouterApiKey } from './openRouter'
 
-async function generateImageWithProviders(input: {
+/** Shared by Image Studio + Video Studio person-led keyframes. */
+export async function generateImageWithProviders(input: {
   prompt: string
   inputReferences?: string[]
 }): Promise<{ imageDataUrl: string; provider: string }> {
@@ -125,9 +126,10 @@ const LABELS: Record<ImageAssetKind, string> = {
 
 const FIDELITY_RULES = `
 CRITICAL PRODUCT FIDELITY (LUCE brand promise):
-- The FIRST attached image is the product packaging ground truth. Keep packaging EXACTLY true: same label artwork, logo, typography, colors, bottle/jar shape, materials, and proportions.
+- The FIRST attached image is the ONLY allowed product. Edit THAT photo into the requested scene — do not generate a different bottle, jar, box, or brand.
+- Keep packaging EXACTLY true: same label artwork, logo, typography, colors, bottle/jar shape, materials, and proportions. If you cannot read the label, keep the product pixels as-is and only change background/lighting.
 - If a SECOND image is attached, it is a STYLE / MOOD / SCENE reference only. Copy lighting, composition, atmosphere, and props vibe from it — NEVER replace or blend the product packaging from that second image.
-- Do NOT invent, redraw, blur, or restyle the brand mark or label text.
+- Do NOT invent a generic perfume, skincare bottle, or stock product. Do NOT redraw, blur, or restyle the brand mark or label text.
 - Only change scene, lighting, camera angle, composition, and supporting props — never the product identity itself.
 - Photorealistic commercial photography. No text overlays unless the style explicitly needs promo space (leave clean negative space).
 `.trim()
@@ -184,7 +186,7 @@ ${FIDELITY_RULES}
 Creative brief:
 ${direction}
 
-Use the attached reference image as the exact product. Reproduce packaging faithfully.`
+IMAGE 1 is your source product photo. Restyle the scene for this format while keeping that exact product in frame. Never substitute a different product.`
 }
 
 function isImageAssetKind(value: string): value is ImageAssetKind {
@@ -243,6 +245,15 @@ export async function generateCampaignImages(
   }
 
   const productImage = input.productImage?.trim() || undefined
+  if (!productImage) {
+    return {
+      status: 400,
+      body: {
+        error:
+          'productImage is required. Upload your product photo so formats keep packaging true.',
+      },
+    }
+  }
   const referenceImage = input.referenceImage?.trim() || undefined
   const inputReferences = [productImage, referenceImage].filter(
     (v): v is string => Boolean(v),

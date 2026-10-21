@@ -53,7 +53,7 @@ const chat = await req('CHAT', '/chat/completions', {
   max_tokens: 16,
 })
 const image = await req('IMAGE', '/chat/completions', {
-  model: 'google/gemini-2.5-flash-image',
+  model: 'google/gemini-3-pro-image',
   messages: [
     {
       role: 'user',

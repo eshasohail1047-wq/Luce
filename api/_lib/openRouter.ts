@@ -1,6 +1,7 @@
 const OPENROUTER_IMAGES_URL = 'https://openrouter.ai/api/v1/images'
 const OPENROUTER_VIDEOS_URL = 'https://openrouter.ai/api/v1/videos'
-const DEFAULT_MODEL = 'google/gemini-2.5-flash-image'
+/** Stronger product-ref fidelity than flash; OpenRouter image→image. */
+const DEFAULT_MODEL = 'google/gemini-3-pro-image'
 const DEFAULT_VIDEO_MODEL = 'heygen/heygen-video-1'
 const REQUEST_TIMEOUT_MS = 120_000
 const VIDEO_POLL_MS = 12_000

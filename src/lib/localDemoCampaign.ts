@@ -17,6 +17,8 @@ export type LocalCampaign = {
   includeStrategy: boolean
   tryFree: boolean
   imageUrl?: string
+  /** Per video format id → seconds */
+  videoDurations?: Record<string, number>
   outputs?: MockOutput[]
   createdAt: number
 }
@@ -58,6 +60,7 @@ export function isLocalCampaignId(id: string | undefined) {
 const IMAGE_KEY = 'luce.campaignImage.'
 const REF_KEY = 'luce.campaignRefImage.'
 const OUTPUTS_KEY = 'luce.campaignOutputs.'
+const DURATIONS_KEY = 'luce.campaignVideoDurations.'
 
 /** Keep uploaded product photo available on review even if Storage is slow. */
 export function stashCampaignImage(campaignId: string, dataUrl: string) {
@@ -88,6 +91,36 @@ export function stashCampaignRefImage(campaignId: string, dataUrl: string) {
 export function loadStashedCampaignRefImage(campaignId: string): string | undefined {
   try {
     return sessionStorage.getItem(REF_KEY + campaignId) || undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function stashCampaignVideoDurations(
+  campaignId: string,
+  durations: Record<string, number>,
+) {
+  try {
+    sessionStorage.setItem(DURATIONS_KEY + campaignId, JSON.stringify(durations))
+  } catch (err) {
+    console.error('[localDemo] video durations stash failed', err)
+  }
+}
+
+export function loadStashedCampaignVideoDurations(
+  campaignId: string,
+): Record<string, number> | undefined {
+  try {
+    const raw = sessionStorage.getItem(DURATIONS_KEY + campaignId)
+    if (!raw) return undefined
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+    const out: Record<string, number> = {}
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      const n = Number(v)
+      if (Number.isFinite(n) && n > 0) out[k] = n
+    }
+    return Object.keys(out).length ? out : undefined
   } catch {
     return undefined
   }

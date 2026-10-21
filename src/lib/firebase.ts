@@ -47,7 +47,7 @@ export { firebaseApp, auth, db, storage }
 export function requireAuth(): Auth {
   if (!auth) {
     throw new Error(
-      'Firebase Auth is not configured. Add VITE_FIREBASE_* env vars in Vercel and redeploy.',
+      'Firebase Auth is not configured. Add VITE_FIREBASE_* to .env.local (local) or Vercel env (deploy), then restart the app.',
     )
   }
   return auth

@@ -166,8 +166,11 @@ export const DEFAULT_PHOTO_STYLES: PhotoStyleId[] = [
   'photo_window_daylight',
 ]
 
+/** Keep duplicates so Studio can request multiple variants of one format. */
 export function resolvePhotoStyles(selected: PhotoStyleId[]): PhotoStyleId[] {
-  return selected.length === 0 ? [...DEFAULT_PHOTO_STYLES] : [...new Set(selected)]
+  if (selected.length === 0) return [...DEFAULT_PHOTO_STYLES]
+  const valid = new Set(PHOTO_STYLES.map((s) => s.id))
+  return selected.filter((id) => valid.has(id))
 }
 
 /**
@@ -199,7 +202,7 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_table_talk',
     label: 'Table talk',
-    description: 'Creator at a table talking about the perfume',
+    description: 'Creator at a table talking about your product',
     thumb: '/images/video-poster-table-talk.jpg',
     tag: 'Talk',
     videoUrl: HERO_VIDEO.talk,
@@ -207,7 +210,7 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_cinematic',
     label: 'Cinematic',
-    description: 'Premium product spot with mist and motion',
+    description: 'Premium hero spot of your product with mist and motion',
     thumb: '/images/video-poster-spin.jpg',
     tag: 'Hero',
     videoUrl: HERO_VIDEO.cinematic,
@@ -215,7 +218,7 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_howto_demo',
     label: 'How to use',
-    description: 'Person spraying / applying the product',
+    description: 'Tutorial video showing how to use your product',
     thumb: '/images/video-poster-howto.jpg',
     tag: 'How-to',
     videoUrl: HERO_VIDEO.howto,
@@ -223,7 +226,7 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_unboxing',
     label: 'Unboxing',
-    description: 'Opening packaging and revealing the bottle',
+    description: 'Opening packaging and revealing your product',
     thumb: '/images/video-poster-unbox.jpg',
     tag: 'Unbox',
     videoUrl: HERO_VIDEO.unbox,
@@ -231,7 +234,7 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_ugc_selfie',
     label: 'UGC selfie',
-    description: 'Creator-style clip of someone using it',
+    description: 'Creator talking on camera while holding your product',
     thumb: '/images/video-poster-ugc.jpg',
     tag: 'UGC',
     videoUrl: HERO_VIDEO.ugc,
@@ -239,7 +242,7 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_testimonial',
     label: 'Testimonial',
-    description: 'Holding the product while reviewing it',
+    description: 'Someone reviewing your product on camera',
     thumb: '/images/video-poster-testimonial.jpg',
     tag: 'Proof',
     videoUrl: HERO_VIDEO.proof,
@@ -247,7 +250,7 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_grwm',
     label: 'GRWM',
-    description: 'Get-ready-with-me morning scent routine',
+    description: 'Get-ready-with-me routine featuring your product',
     thumb: '/images/video-poster-grwm.jpg',
     tag: 'GRWM',
     videoUrl: HERO_VIDEO.grwm,
@@ -255,7 +258,7 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_asmr_spray',
     label: 'Spray ASMR',
-    description: 'Close-up nozzle press and mist detail',
+    description: 'Close-up of your product nozzle press and mist',
     thumb: '/images/video-poster-asmr.jpg',
     tag: 'ASMR',
     videoUrl: HERO_VIDEO.asmr,
@@ -274,20 +277,23 @@ export const DEFAULT_VIDEO_STYLES: VideoStyleId[] = [
   'video_unboxing',
 ]
 
+/** Keep duplicates so Studio can request multiple variants of one format. */
 export function resolveVideoStyles(selected: VideoStyleId[]): VideoStyleId[] {
-  return selected.length === 0 ? [...DEFAULT_VIDEO_STYLES] : [...new Set(selected)]
+  if (selected.length === 0) return [...DEFAULT_VIDEO_STYLES]
+  const valid = new Set(VIDEO_STYLES.map((s) => s.id))
+  return selected.filter((id) => valid.has(id))
 }
 
 /**
- * Video Studio: generate only the formats the user picked (any of the 8).
+ * Video Studio: formats the user picked (any count / duplicates for variants).
  * Does not auto-pad — caller should require at least one selection.
  */
 export function resolveVideoStudioStyles(
   selected: VideoStyleId[],
   max = VIDEO_STUDIO_FORMAT_COUNT,
 ): VideoStyleId[] {
-  const cap = Math.max(1, Math.min(max, VIDEO_STUDIO_FORMAT_COUNT))
-  return [...new Set(selected)].slice(0, cap)
+  const cap = Math.max(1, max)
+  return resolveVideoStyles(selected).slice(0, cap)
 }
 
 export function videoUrlForAsset(assetType: string): string | undefined {

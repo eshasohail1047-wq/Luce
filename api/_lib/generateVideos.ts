@@ -1,3 +1,4 @@
+import { generateImageWithProviders } from './generateImages'
 import { generateHeyGenVideo, getHeyGenApiKey } from './heygen'
 import { generateVideo, getOpenRouterApiKey } from './openRouter'
 
@@ -86,6 +87,25 @@ export function isVideoAssetKind(value: string): value is VideoAssetKind {
   return (VIDEO_ASSET_KINDS as string[]).includes(value)
 }
 
+/**
+ * Formats that need a PERSON on camera (talk / demo / hold product).
+ * Always compose a person+product keyframe first — never animate the bottle alone.
+ */
+const PERSON_LED_FORMATS = new Set<VideoAssetKind>([
+  'video_ugc_selfie',
+  'video_table_talk',
+  'video_testimonial',
+  'video_howto_demo',
+  'video_grwm',
+  'video_hook_caption',
+  'video_mirror_selfie',
+  'video_winner_cut',
+  'video_unboxing',
+])
+
+/** Every studio format gets a format-specific keyframe from the product photo. */
+const ALL_KEYFRAME_FORMATS = new Set<VideoAssetKind>(VIDEO_ASSET_KINDS)
+
 export type CreativeDirectionSummary = {
   prompt?: string
   lighting?: string
@@ -103,6 +123,20 @@ export type GenerateVideosInput = {
   creativeDirection?: CreativeDirectionSummary
   assets: VideoAssetKind[]
   recreateNote?: string
+  /** Clip length in seconds — user pick (any integer 5–15) */
+  durationSeconds?: number
+}
+
+/** heygen-video-1 accepts any integer duration from 5 through 15 seconds. */
+const MIN_DURATION = 5
+const MAX_DURATION = 15
+
+function clampDurationSeconds(raw: unknown, fallback = 5): number {
+  const n = Math.round(Number(raw))
+  if (!Number.isFinite(n)) {
+    return Math.max(MIN_DURATION, Math.min(MAX_DURATION, fallback))
+  }
+  return Math.max(MIN_DURATION, Math.min(MAX_DURATION, n))
 }
 
 export type GeneratedVideoAsset = {
@@ -139,33 +173,67 @@ const LABELS: Record<VideoAssetKind, string> = {
   video_winner_cut: 'Winner cut',
 }
 
+/**
+ * Format-specific KEYFRAME still — built from the user's product photo first,
+ * then animated. This is what makes "How to use" look like a how-to of THEIR product.
+ */
+const KEYFRAME_SCENES: Record<VideoAssetKind, string> = {
+  video_ugc_selfie:
+    'Vertical 9:16 candid smartphone selfie of a real young adult creator holding the exact product near their face, mouth slightly open mid-sentence as if talking to camera about the product, casual indoor background, natural phone light, true UGC energy.',
+  video_table_talk:
+    'Vertical 9:16 medium shot of a creator seated at a clean table facing camera, holding the exact product toward the lens, mid-conversation expression, natural daylight.',
+  video_testimonial:
+    'Vertical 9:16 sincere review: person facing camera holding the exact product at chest height, friendly talking expression.',
+  video_howto_demo:
+    'Vertical 9:16 instructional how-to-use frame: a real person clearly demonstrates using the exact product — e.g. lifting the bottle to spray on wrist/neck or applying it the correct way — tutorial pose, product packaging fully readable, clean bright background, looks like a step-by-step demo still.',
+  video_grwm:
+    'Vertical 9:16 vanity get-ready-with-me: person in frame with the exact product as the scent/finishing step, talking to camera in mirror light.',
+  video_hook_caption:
+    'Vertical 9:16 energetic talking-head social ad: person holding the exact product, strong eye contact, mouth mid-hook line.',
+  video_mirror_selfie:
+    'Vertical 9:16 bathroom mirror selfie: person holding the exact product, bright vanity light, casual talk-to-camera vibe.',
+  video_winner_cut:
+    'Vertical 9:16 winning ad still: smiling creator presenting the exact product to camera, mid-speech.',
+  video_unboxing:
+    'Vertical 9:16 unboxing reveal: hands/person at a table opening a box with the exact product clearly visible as the hero reveal, packaging exact.',
+  video_cinematic:
+    'Vertical 9:16 luxury cinematic hero still of the exact product centered on a premium surface, soft volumetric light / mist atmosphere, high-end commercial photography — product only, no person needed.',
+  video_product_spin:
+    'Vertical 9:16 clean hero packshot of the exact product centered on a seamless surface, studio lighting, ready for a slow turntable orbit — product only.',
+  video_asmr_spray:
+    'Vertical 9:16 extreme close-up of the exact product nozzle / top ready to press, shallow depth of field, ASMR beauty detail — packaging identity still readable.',
+  video_flatlay_reveal:
+    'Vertical 9:16 overhead flatlay of the exact product on a styled surface with minimal complementary props, balanced composition, packaging fully legible.',
+}
+
+/** What the VIDEO motion must do after the keyframe (format = behavior). */
 const FORMAT_BEATS: Record<VideoAssetKind, string> = {
   video_table_talk:
-    'Creator at a clean table talking to camera while presenting the product, natural speech energy, medium shot.',
+    'FORMAT = TABLE TALK: The person talks to camera about this product — natural speech, small gestures, product stays in frame and packaging readable the whole time.',
   video_cinematic:
-    'Premium cinematic product hero spot: slow camera move, soft mist or light bloom around the bottle, luxury commercial.',
+    'FORMAT = CINEMATIC: Slow camera push / drift around the product, soft mist or light bloom, luxury commercial hero motion. Keep packaging exact.',
   video_howto_demo:
-    'How-to demo: person sprays or applies the product correctly (wrist / skin), clear instructional motion.',
+    'FORMAT = HOW TO USE: Clear instructional demo of THIS product. Show the correct use motion (spray on wrist/neck, dab, apply, or open-and-use as fits the product type). Person may briefly narrate steps. Packaging stays exact and readable. Must feel like a tutorial of the user\'s product — not a random bottle.',
   video_unboxing:
-    'Unboxing: hands open packaging and reveal the product on a table, slow premium reveal.',
+    'FORMAT = UNBOXING: Hands open packaging and reveal THIS exact product; slow premium reveal motion; packaging stays exact.',
   video_ugc_selfie:
-    'UGC selfie / creator phone video holding the product near the face, candid social energy.',
+    'FORMAT = UGC SELFIE: Handheld creator selfie — person speaks casually to camera about why they love THIS product, natural lip motion, product held near the face, candid phone energy, with spoken audio.',
   video_testimonial:
-    'Testimonial: person facing camera holding the product, sincere review vibe.',
+    'FORMAT = TESTIMONIAL: Person faces camera, holds THIS product, speaks a short sincere review with natural lip sync.',
   video_grwm:
-    'Get-ready-with-me vanity routine finishing with the product as the scent step.',
+    'FORMAT = GRWM: Person talks through a vanity routine and uses / shows THIS product as the scent or finishing step.',
   video_asmr_spray:
-    'ASMR close-up of the nozzle being pressed with visible mist, shallow depth of field.',
+    'FORMAT = SPRAY ASMR: Close-up of the nozzle press with visible mist / detail motion, satisfying ASMR pacing. Keep THIS product identity exact.',
   video_product_spin:
-    'Hero product turn / slow orbit of the bottle on a clean surface.',
+    'FORMAT = PRODUCT SPIN: Slow orbit / turntable rotation of THIS exact product on a clean surface.',
   video_hook_caption:
-    'Talking-head hook style with space for a bold caption, energetic social ad.',
+    'FORMAT = HOOK: Talking-head hook — person says a bold opening line while holding THIS product, energetic social ad, spoken audio.',
   video_mirror_selfie:
-    'Bathroom mirror selfie holding the product, bright vanity light.',
+    'FORMAT = MIRROR SELFIE: Bathroom mirror selfie — person talks to their reflection while holding THIS product.',
   video_flatlay_reveal:
-    'Overhead flatlay reveal of the product on a styled surface.',
+    'FORMAT = FLATLAY REVEAL: Overhead flatlay with a gentle reveal / prop settle around THIS exact product.',
   video_winner_cut:
-    'Winning-ad style variation of a smiling creator presenting the product.',
+    'FORMAT = WINNER CUT: Smiling creator presents and briefly talks about THIS product like a winning ad.',
 }
 
 function humanize(id: string | undefined): string {
@@ -173,35 +241,88 @@ function humanize(id: string | undefined): string {
   return id.replaceAll('_', ' ')
 }
 
-function buildPrompt(
+function buildKeyframePrompt(
+  type: VideoAssetKind,
+  productName: string,
+  cd?: CreativeDirectionSummary,
+): string {
+  const personLed = PERSON_LED_FORMATS.has(type)
+  const scene = KEYFRAME_SCENES[type]
+  return `${scene}
+
+This still is the first frame for the "${LABELS[type]}" video format about "${productName}".
+
+CRITICAL PRODUCT FIDELITY:
+- The FIRST attached image is the ONLY allowed product packaging ground truth.
+- Keep bottle/jar shape, label artwork, logo, typography, colors, and proportions EXACT.
+- Do not invent a different perfume, skincare bottle, or brand.
+${
+  personLed
+    ? '- A real person must be clearly visible using / holding / presenting that exact product for this format.'
+    : '- Product is the hero of the frame; match the format scene (cinematic / spin / ASMR / flatlay) while keeping packaging exact.'
+}
+- Photorealistic. No text overlays, no watermarks, no fake UI.
+
+${cd?.prompt?.trim() ? `Creative note: ${cd.prompt.trim()}` : ''}`.trim()
+}
+
+function buildMotionPrompt(
   type: VideoAssetKind,
   productName: string,
   cd: CreativeDirectionSummary | undefined,
   recreateNote?: string,
+  personLed?: boolean,
 ): string {
   const userPrompt = cd?.prompt?.trim()
   const bits = [
-    `Vertical 9:16 product marketing video for "${productName}".`,
-    'Keep packaging fidelity: same bottle/jar shape, label, colors, and brand marks whenever the product is visible.',
+    `Vertical 9:16 "${LABELS[type]}" marketing video for the user's product "${productName}".`,
+    personLed
+      ? 'Animate THIS exact first frame: same person + same product packaging. Perform the format action (talk, demo how-to-use, unbox, etc.). Natural lip motion and gestures when speaking. Never swap the product or person.'
+      : 'Animate THIS exact first-frame product into the format motion. Keep packaging EXACT — same label, logo, shape, colors. Never invent a different product.',
     FORMAT_BEATS[type],
-    'Photorealistic, premium commercial quality, natural motion, no watermarks, no UI chrome.',
+    'Photorealistic, natural motion, no watermarks, no UI chrome, no fake burned-in captions.',
   ]
-  if (userPrompt) {
+  if (personLed) {
     bits.push(
-      `USER PROMPT (apply after matching any reference look): ${userPrompt}`,
+      'Include natural spoken audio matching the format (how-to narration, UGC chat, testimonial, hook line, etc.).',
     )
   }
+  if (type === 'video_howto_demo') {
+    bits.push(
+      'Must clearly show HOW TO USE this specific product end-to-end in a short tutorial beat — not just hold it.',
+    )
+  }
+  if (userPrompt) bits.push(`USER PROMPT: ${userPrompt}`)
   if (cd?.lighting) bits.push(`Lighting: ${humanize(cd.lighting)}.`)
   if (cd?.background) bits.push(`Background: ${humanize(cd.background)}.`)
   if (cd?.mood) bits.push(`Mood: ${humanize(cd.mood)}.`)
   if (cd?.styleTheme) bits.push(`Style theme: ${humanize(cd.styleTheme)}.`)
-  if (recreateNote?.trim()) {
-    bits.push(`Recreate note: ${recreateNote.trim()}`)
-  }
-  bits.push(
-    'Priority: match the reference still / product photo first for packaging and vibe, then follow the user prompt.',
-  )
+  if (recreateNote?.trim()) bits.push(`Recreate note: ${recreateNote.trim()}`)
   return bits.join(' ')
+}
+
+/** Compose a format-specific still from the user's product, then video animates it. */
+async function composeFormatKeyframe(input: {
+  type: VideoAssetKind
+  productName: string
+  productImage: string
+  referenceFrame?: string
+  creativeDirection?: CreativeDirectionSummary
+}): Promise<string> {
+  const refs = [input.productImage]
+  if (input.referenceFrame && input.referenceFrame !== input.productImage) {
+    refs.push(input.referenceFrame)
+  }
+  const prompt = buildKeyframePrompt(
+    input.type,
+    input.productName,
+    input.creativeDirection,
+  )
+  const still = await generateImageWithProviders({
+    prompt,
+    inputReferences: refs,
+  })
+  return still.imageDataUrl
 }
 
 export async function generateCampaignVideos(
@@ -237,38 +358,65 @@ export async function generateCampaignVideos(
   }
 
   const productImage = input.productImage?.trim() || undefined
+  if (!productImage) {
+    return {
+      status: 400,
+      body: {
+        error:
+          'productImage is required. Upload your product photo so videos keep packaging true.',
+      },
+    }
+  }
   const referenceFrame = input.referenceFrameImage?.trim() || undefined
 
   const generated: GeneratedVideoAsset[] = []
   const partialErrors: { type: VideoAssetKind; error: string }[] = []
 
-  // Sequential — video jobs are slow and rate-limited
+  // Sequential — each format: keyframe (from product) → motion video
   for (const type of assets) {
-    const promptUsed = buildPrompt(
-      type,
-      productName,
-      input.creativeDirection,
-      input.recreateNote,
-    )
+    const personLed = PERSON_LED_FORMATS.has(type)
     try {
-      // Product photo is the primary first frame; optional ref still/video frame as style guide.
-      const frameImages: { url: string; frameType: 'first_frame' }[] = []
-      if (productImage) {
-        frameImages.push({ url: productImage, frameType: 'first_frame' })
-      } else if (referenceFrame) {
-        frameImages.push({ url: referenceFrame, frameType: 'first_frame' })
+      let firstFrame = productImage
+      if (ALL_KEYFRAME_FORMATS.has(type)) {
+        console.info(
+          `[generate-videos] ${type}: composing format keyframe from product photo`,
+        )
+        try {
+          firstFrame = await composeFormatKeyframe({
+            type,
+            productName,
+            productImage,
+            referenceFrame,
+            creativeDirection: input.creativeDirection,
+          })
+        } catch (keyErr) {
+          console.warn(
+            `[generate-videos] ${type}: keyframe failed, falling back to product still`,
+            keyErr instanceof Error ? keyErr.message : keyErr,
+          )
+          firstFrame = productImage
+        }
       }
 
-      const inputReferences =
-        productImage && referenceFrame && productImage !== referenceFrame
-          ? [referenceFrame]
-          : undefined
+      const promptUsed = buildMotionPrompt(
+        type,
+        productName,
+        input.creativeDirection,
+        input.recreateNote,
+        personLed,
+      )
+
+      const duration = clampDurationSeconds(
+        input.durationSeconds,
+        personLed || type === 'video_howto_demo' ? 8 : 5,
+      )
 
       const result = await generateVideoWithProviders({
         prompt: promptUsed,
-        frameImages: frameImages.length ? frameImages : undefined,
-        inputReferences,
-        duration: 5,
+        frameImages: [{ url: firstFrame, frameType: 'first_frame' }],
+        // Style reference only when we did not already bake it into the keyframe refs
+        inputReferences: undefined,
+        duration,
         aspectRatio: '9:16',
         resolution: '768p',
         generateAudio: true,

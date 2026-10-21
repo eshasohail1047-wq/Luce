@@ -19,7 +19,7 @@ Copy `.env.example` to `.env.local` and fill in values. Never commit secrets.
 | `MUSE_IMAGE_MODEL` | Default `muse-image-1.0` |
 | `HEYGEN_API_KEY` | **Preferred videos** — HeyGen `heygen-video-1` (image/text → video) |
 | `OPENROUTER_API_KEY` | Fallback for images + videos if Muse/HeyGen fail or are unset |
-| `OPENROUTER_IMAGE_MODEL` | Default `google/gemini-2.5-flash-image` |
+| `OPENROUTER_IMAGE_MODEL` | Default `google/gemini-3-pro-image` (not Flash) |
 | `OPENROUTER_VIDEO_MODEL` | Default `heygen/heygen-video-1` via OpenRouter |
 
 Photo Studio → Muse (edit with product photo when present), else OpenRouter.  

@@ -17,6 +17,8 @@ export type MockOutput = {
   imageUrl?: string
   /** Playable MP4 for video formats */
   videoUrl?: string
+  /** Requested clip length in seconds (Video Studio) */
+  durationSeconds?: number
   text?: string
   note?: string
   version?: number
@@ -147,31 +149,16 @@ function isVideoAsset(assetType: string) {
   return assetType.startsWith('video_') || assetType.includes('video')
 }
 
-function isPackshotLike(assetType: string) {
-  return (
-    assetType === 'photo_studio_packshot' ||
-    assetType === 'photo_hand_model' ||
-    assetType === 'product_image' ||
-    assetType === 'ad_creative'
-  )
-}
-
 function pickImage(
   assetType: string,
   version: number,
   productImageUrl?: string,
 ): string | undefined {
-  const pool = [...(IMAGE_BY_ASSET[assetType] || ['/images/output-visuals.jpg'])]
-  if (productImageUrl) {
-    if (isPackshotLike(assetType)) {
-      return version <= 1
-        ? productImageUrl
-        : pool[(version - 2) % pool.length] || productImageUrl
-    }
-    const withProduct = [...pool, productImageUrl]
-    return withProduct[(version - 1) % withProduct.length]
-  }
-  return pool[(version - 1) % pool.length]
+  // Never swap the user's product for stock demo perfume / lifestyle stills.
+  // Demo packs show the uploaded product until real AI replaces the frame.
+  if (productImageUrl) return productImageUrl
+  const pool = IMAGE_BY_ASSET[assetType] || ['/images/output-visuals.jpg']
+  return pool[(Math.max(version, 1) - 1) % pool.length]
 }
 
 function buildOne(
@@ -180,8 +167,10 @@ function buildOne(
   productName: string,
   productImageUrl: string | undefined,
   version: number,
+  durationSeconds?: number,
 ): MockOutput {
-  const label = labelFor(assetType)
+  const baseLabel = labelFor(assetType)
+  const label = version > 1 ? `${baseLabel} · ${version}` : baseLabel
   const id = `${assetType}-${index}-v${version}`
 
   if (isCopyAsset(assetType)) {
@@ -200,23 +189,32 @@ function buildOne(
   const imageUrl = pickImage(assetType, version, productImageUrl)
   const usingProduct = Boolean(productImageUrl && imageUrl === productImageUrl)
   const video = isVideoAsset(assetType)
-  const videoUrl = video ? videoUrlForAsset(assetType) : undefined
+  // With a product photo: never attach stock demo MP4s (wrong product).
+  // AI generate fills videoUrl; until then show the product still as the poster.
+  const videoUrl =
+    video && !productImageUrl ? videoUrlForAsset(assetType) : undefined
+  const secs = video && durationSeconds ? durationSeconds : undefined
 
   return {
     id,
     assetType,
-    label,
+    label: secs ? `${label} · ${secs}s` : label,
     kind: video ? 'video' : 'image',
     imageUrl,
     ...(videoUrl ? { videoUrl } : {}),
-    note: usingProduct
-      ? version > 1
-        ? `Recreated with your product photo · v${version}`
-        : 'Uses your uploaded product photo'
-      : video
+    ...(secs ? { durationSeconds: secs } : {}),
+    note: video
+      ? productImageUrl
         ? version > 1
-          ? `Recreated · reference video first, then prompt · v${version}`
-          : 'Guided by your reference video first, then your prompt'
+          ? `Your product · ${secs || 5}s · waiting for AI · v${version}`
+          : `Your product · ${secs || 5}s — AI will build this format`
+        : version > 1
+          ? `Demo format clip · v${version}`
+          : 'Demo format clip'
+      : usingProduct
+        ? version > 1
+          ? `Recreated with your product photo · v${version}`
+          : 'Uses your uploaded product photo'
         : version > 1
           ? `Recreated visual · v${version}`
           : 'Format still — recreate if you want another option',
@@ -231,6 +229,8 @@ export function buildMockOutputs(input: {
   selectedAssets: string[]
   studioKind?: StudioKind
   mode?: 'campaign' | 'studio'
+  /** Per-format seconds for Video Studio */
+  videoDurations?: Partial<Record<string, number>>
 }): MockOutput[] {
   let assets = input.selectedAssets.filter(Boolean)
 
@@ -255,9 +255,19 @@ export function buildMockOutputs(input: {
     }
   }
 
-  return assets.map((assetType, index) =>
-    buildOne(assetType, index, input.productName, input.productImageUrl, 1),
-  )
+  const occurrence: Record<string, number> = {}
+  return assets.map((assetType, index) => {
+    occurrence[assetType] = (occurrence[assetType] || 0) + 1
+    const dur = input.videoDurations?.[assetType]
+    return buildOne(
+      assetType,
+      index,
+      input.productName,
+      input.productImageUrl,
+      occurrence[assetType],
+      typeof dur === 'number' ? dur : undefined,
+    )
+  })
 }
 
 /** Recreate a single asset with the next variant (still demo / no API). */

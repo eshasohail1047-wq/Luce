@@ -19,6 +19,8 @@ export type GenerateVideosRequest = {
   creativeDirection?: CreativeDirection
   assets: VideoAssetKind[]
   recreateNote?: string
+  /** Clip length in seconds (5–15, HeyGen limit) */
+  durationSeconds?: number
 }
 
 export type GeneratedVideoAsset = {
@@ -60,6 +62,7 @@ export async function requestGenerateVideos(
       creativeDirection: input.creativeDirection,
       assets: input.assets,
       recreateNote: input.recreateNote,
+      durationSeconds: input.durationSeconds,
     }),
   })
 
@@ -74,7 +77,7 @@ export async function requestGenerateVideos(
     if (res.status === 503) {
       throw new Error(
         data.error ||
-          'Video AI is not configured. Using demo format clips instead.',
+          'Video AI is not configured. Set HEYGEN_API_KEY and/or OPENROUTER_API_KEY.',
       )
     }
     throw new Error(data.error || `Video generation failed (${res.status})`)
