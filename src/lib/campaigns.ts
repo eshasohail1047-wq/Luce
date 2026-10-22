@@ -104,7 +104,7 @@ export type CreateStudioInput = {
   videoStyles?: VideoStyleId[]
   adStyles?: AdStyleId[]
   /** Per video format id → length in seconds (5–15) */
-  videoDurations?: Record<string, number>
+  videoDurations?: Partial<Record<string, number>>
   creativeDirection?: CreativeDirection
   /** Landing “Try free” path — first image pack on free plan */
   tryFree?: boolean

@@ -682,7 +682,10 @@ export default function StudioPage() {
           tryFree: isFreeTry,
           videoDurations:
             kind === 'videos'
-              ? syncDurationsToQuantities(videoQuantities, videoDurations)
+              ? (syncDurationsToQuantities(
+                  videoQuantities,
+                  videoDurations,
+                ) as Record<string, number>)
               : undefined,
           creativeDirection: {
             prompt,
