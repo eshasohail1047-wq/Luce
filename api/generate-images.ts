@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { verifyBearerToken } from './_lib/firebaseAdmin'
+import { authFailureMessage, verifyBearerToken } from './_lib/firebaseAdmin'
 import {
   generateCampaignImages,
   IMAGE_ASSET_KINDS,
@@ -14,7 +14,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const decoded = await verifyBearerToken(req.headers.authorization)
   if (!decoded?.uid) {
-    return res.status(401).json({ error: 'Sign in required to generate images.' })
+    return res
+      .status(401)
+      .json({ error: authFailureMessage(req.headers.authorization, 'images') })
   }
 
   const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}

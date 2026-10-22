@@ -132,7 +132,7 @@ export const PHOTO_STYLES: FormatOption<PhotoStyleId>[] = [
   {
     id: 'photo_moody_editorial',
     label: 'Moody editorial',
-    description: 'Dark, dramatic brand still',
+    description: 'Dark magazine-style reshoot (new lighting & angle)',
     thumb: HERO_PRODUCT.evening,
     tag: 'Editorial',
   },

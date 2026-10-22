@@ -1,17 +1,24 @@
 const OPENROUTER_IMAGES_URL = 'https://openrouter.ai/api/v1/images'
 const OPENROUTER_VIDEOS_URL = 'https://openrouter.ai/api/v1/videos'
-/** Stronger product-ref fidelity than flash; OpenRouter image→image. */
-const DEFAULT_MODEL = 'google/gemini-3-pro-image'
+/** Nano Banana = Gemini 2.5 Flash Image — ~$0.03–0.04/image; strong product/ref edits. */
+const DEFAULT_MODEL = 'google/gemini-2.5-flash-image'
 const DEFAULT_VIDEO_MODEL = 'heygen/heygen-video-1'
 const REQUEST_TIMEOUT_MS = 120_000
-const VIDEO_POLL_MS = 12_000
-const VIDEO_POLL_MAX = 60
+const VIDEO_POLL_FIRST_MS = 5_000
+const VIDEO_POLL_MS = 8_000
+const VIDEO_POLL_MAX = 50
+/** heygen/heygen-video-1 supported durations (see OpenRouter /videos/models). */
+const HEYGEN_DURATIONS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const
 
 export type GenerateImageInput = {
   prompt: string
   /** Product photo as data URL or public HTTPS URL */
   inputReferences?: string[]
   model?: string
+  /** Explicit aspect ratio for the image model (LUCE format hard requirement) */
+  aspectRatio?: string
+  /** Optional resolution tier when the model supports it (e.g. FLUX). */
+  resolution?: string
 }
 
 export type GenerateImageResult = {
@@ -112,10 +119,27 @@ export async function generateImage(
   const body: Record<string, unknown> = {
     model,
     prompt,
-    output_format: 'png',
   }
-  if (refs.length > 0) {
-    body.input_references = normalizeReferences(refs)
+  if (input.aspectRatio?.trim()) {
+    body.aspect_ratio = input.aspectRatio.trim()
+  }
+  // Only send params each family supports — unknown fields → 400.
+  const isFlux = /flux/i.test(model)
+  const isGeminiImage = /gemini|nano.?banana/i.test(model)
+  if (isFlux) {
+    const resolution = (input.resolution || '1K').trim()
+    if (resolution) body.resolution = resolution
+  } else if (!isGeminiImage) {
+    body.output_format = 'png'
+  }
+  // Gemini Flash Image accepts up to 3 refs; keep product first.
+  const refsForModel = isGeminiImage ? refs.slice(0, 3) : refs
+  if (refsForModel.length > 0) {
+    body.input_references = normalizeReferences(refsForModel)
+    console.info(
+      `[openrouter] ${model} · input_references=${refsForModel.length}` +
+        (input.aspectRatio ? ` · ${input.aspectRatio}` : ''),
+    )
   }
 
   const controller = new AbortController()
@@ -195,6 +219,9 @@ export type GenerateVideoInput = {
 }
 
 export type GenerateVideoResult = {
+  /** Prefer HTTPS playable URL from OpenRouter (avoids multi‑MB JSON). */
+  videoUrl: string
+  /** @deprecated Alias of videoUrl for older callers */
   videoDataUrl: string
   model: string
   jobId: string
@@ -220,8 +247,25 @@ function parseVideoError(body: unknown, status: number): string {
   return `OpenRouter video request failed (${status})`
 }
 
+function clampHeyGenDuration(raw: number | undefined): number {
+  const n = Math.round(Number(raw ?? 5))
+  if (!Number.isFinite(n)) return 5
+  let best: (typeof HEYGEN_DURATIONS)[number] = 5
+  let bestDist = Infinity
+  for (const d of HEYGEN_DURATIONS) {
+    const dist = Math.abs(d - n)
+    if (dist < bestDist) {
+      best = d
+      bestDist = dist
+    }
+  }
+  return best
+}
+
 /**
- * Submit + poll OpenRouter video generation, return an MP4 data URL.
+ * Submit + poll OpenRouter video generation.
+ * Returns a playable HTTPS URL when OpenRouter provides one (preferred),
+ * otherwise downloads and returns a data URL.
  */
 export async function generateVideo(
   input: GenerateVideoInput,
@@ -237,14 +281,24 @@ export async function generateVideo(
   const model =
     (input.model || getOpenRouterVideoModel()).trim() || DEFAULT_VIDEO_MODEL
   const headers = openRouterHeaders(apiKey)
+  const isHeyGen = model.includes('heygen')
 
   const body: Record<string, unknown> = {
     model,
     prompt,
-    duration: input.duration ?? 5,
+    duration: isHeyGen
+      ? clampHeyGenDuration(input.duration)
+      : input.duration ?? 5,
     aspect_ratio: input.aspectRatio ?? '9:16',
+    // heygen-video-1: 480p | 768p | 2K (not 720p/1080p)
     resolution: input.resolution ?? '768p',
-    generate_audio: input.generateAudio !== false,
+  }
+
+  // CRITICAL: heygen-video-1 always renders audio. Sending generate_audio:false
+  // returns 400 ("cannot be set to false"). Omit the field entirely for HeyGen.
+  // Only pass generate_audio for other models when explicitly requested true.
+  if (!isHeyGen && input.generateAudio === true) {
+    body.generate_audio = true
   }
 
   const frames = (input.frameImages || []).filter((f) => f.url?.trim())
@@ -252,7 +306,8 @@ export async function generateVideo(
     body.frame_images = frames.map((f) => ({
       type: 'image_url',
       image_url: { url: f.url.trim() },
-      frame_type: f.frameType || 'first_frame',
+      // heygen only supports first_frame
+      frame_type: 'first_frame' as const,
     }))
   }
 
@@ -264,10 +319,17 @@ export async function generateVideo(
     }))
   }
 
+  const payload = JSON.stringify(body)
+  console.info(
+    `[openrouter-video] submit ${model} · ${Math.round(payload.length / 1024)}KB` +
+      (frames.length ? ` · ${frames.length} frame(s)` : '') +
+      ` · ${body.duration}s`,
+  )
+
   const submitRes = await fetch(OPENROUTER_VIDEOS_URL, {
     method: 'POST',
     headers,
-    body: JSON.stringify(body),
+    body: payload,
   })
   const submitJson = (await submitRes.json().catch(() => null)) as {
     id?: string
@@ -277,30 +339,38 @@ export async function generateVideo(
   } | null
 
   if (!submitRes.ok || !submitJson?.id) {
-    throw new Error(parseVideoError(submitJson, submitRes.status))
+    const detail = parseVideoError(submitJson, submitRes.status)
+    console.error('[openrouter-video] submit failed', detail)
+    throw new Error(detail)
   }
 
   const jobId = submitJson.id
   const pollUrl =
     submitJson.polling_url || `${OPENROUTER_VIDEOS_URL}/${jobId}`
+  console.info(`[openrouter-video] job ${jobId} polling…`)
 
   let completed: {
     status?: string
     unsigned_urls?: string[]
-    error?: string
+    error?: string | { message?: string }
   } | null = null
 
   for (let i = 0; i < VIDEO_POLL_MAX; i++) {
-    await new Promise((r) => setTimeout(r, VIDEO_POLL_MS))
+    await new Promise((r) =>
+      setTimeout(r, i === 0 ? VIDEO_POLL_FIRST_MS : VIDEO_POLL_MS),
+    )
     const pollRes = await fetch(pollUrl, {
       headers: { Authorization: `Bearer ${apiKey}` },
     })
     const pollJson = (await pollRes.json().catch(() => null)) as {
       status?: string
       unsigned_urls?: string[]
-      error?: string
+      error?: string | { message?: string }
     } | null
     const status = pollJson?.status || ''
+    if (i === 0 || i % 3 === 0) {
+      console.info(`[openrouter-video] job ${jobId} status=${status || pollRes.status}`)
+    }
     if (status === 'completed') {
       completed = pollJson
       break
@@ -310,9 +380,15 @@ export async function generateVideo(
       status === 'cancelled' ||
       status === 'expired'
     ) {
-      throw new Error(
-        pollJson?.error || `Video generation ${status || 'failed'}`,
-      )
+      const errMsg =
+        typeof pollJson?.error === 'string'
+          ? pollJson.error
+          : pollJson?.error &&
+              typeof pollJson.error === 'object' &&
+              typeof pollJson.error.message === 'string'
+            ? pollJson.error.message
+            : `Video generation ${status || 'failed'}`
+      throw new Error(errMsg)
     }
   }
 
@@ -320,22 +396,47 @@ export async function generateVideo(
     throw new Error('Video generation timed out while waiting for OpenRouter')
   }
 
-  const contentUrl =
-    completed.unsigned_urls?.[0] ||
-    `${OPENROUTER_VIDEOS_URL}/${jobId}/content?index=0`
+  // OpenRouter content URLs require Authorization — browsers can't send that on
+  // <video src>, so return a same-origin proxy path instead of unsigned_urls.
+  const playable = `/api/openrouter-video/${encodeURIComponent(jobId)}`
+  console.info(
+    `[openrouter-video] job ${jobId} ready → proxy ${playable}` +
+      (completed.unsigned_urls?.[0] ? ' (upstream needs auth)' : ''),
+  )
+  return {
+    videoUrl: playable,
+    videoDataUrl: playable,
+    model,
+    jobId,
+  }
+}
 
+/**
+ * Stream a completed OpenRouter video with the server API key.
+ * Used by /api/openrouter-video/:jobId so the browser can play without a Bearer token.
+ */
+export async function fetchOpenRouterVideoContent(
+  jobId: string,
+): Promise<{ body: ArrayBuffer; contentType: string }> {
+  const apiKey = getOpenRouterApiKey()
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is not configured')
+  }
+  const id = jobId.trim()
+  if (!id || !/^gen-vid-[\w-]+$/i.test(id)) {
+    throw new Error('Invalid OpenRouter video job id')
+  }
+  const contentUrl = `${OPENROUTER_VIDEOS_URL}/${id}/content?index=0`
   const videoRes = await fetch(contentUrl, {
     headers: { Authorization: `Bearer ${apiKey}` },
   })
   if (!videoRes.ok) {
     throw new Error(`Could not download generated video (${videoRes.status})`)
   }
-
-  const buf = Buffer.from(await videoRes.arrayBuffer())
-  const mime = videoRes.headers.get('content-type') || 'video/mp4'
-  return {
-    videoDataUrl: `data:${mime};base64,${buf.toString('base64')}`,
-    model,
-    jobId,
+  const buf = await videoRes.arrayBuffer()
+  if (buf.byteLength < 1000) {
+    throw new Error('OpenRouter returned an empty or invalid video file')
   }
+  const contentType = videoRes.headers.get('content-type') || 'video/mp4'
+  return { body: buf, contentType }
 }

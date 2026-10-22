@@ -1,7 +1,8 @@
-import { requireAuth } from './firebase'
+import { requireIdToken } from './firebase'
 import type { CreativeDirection } from './creativeDirection'
 import type { VideoStyleId } from './deliverables'
 import { VIDEO_STYLES } from './deliverables'
+import { compressImageDataUrl } from './localDemoCampaign'
 
 export type VideoAssetKind = VideoStyleId
 
@@ -26,8 +27,20 @@ export type GenerateVideosRequest = {
 export type GeneratedVideoAsset = {
   type: VideoAssetKind
   label: string
-  videoDataUrl: string
+  /** Playable HTTPS or data URL from the video model */
+  videoUrl?: string
+  /** Legacy alias — same as videoUrl when present */
+  videoDataUrl?: string
   promptUsed?: string
+}
+
+/** Prefer HTTPS playable URL; fall back to data URL. */
+export function playableVideoUrl(
+  asset: GeneratedVideoAsset | undefined,
+): string | undefined {
+  if (!asset) return undefined
+  const url = (asset.videoUrl || asset.videoDataUrl || '').trim()
+  return url || undefined
 }
 
 export type GenerateVideosResponse = {
@@ -43,12 +56,16 @@ export type GenerateVideosResponse = {
 export async function requestGenerateVideos(
   input: GenerateVideosRequest,
 ): Promise<GenerateVideosResponse> {
-  const user = requireAuth().currentUser
-  if (!user) {
-    throw new Error('Sign in required to generate videos.')
-  }
+  const token = await requireIdToken()
+  const productImage = input.productImage?.startsWith('data:image/')
+    ? await compressImageDataUrl(input.productImage, 1024, 0.8)
+    : input.productImage
+  const referenceFrameImage = input.referenceFrameImage?.startsWith(
+    'data:image/',
+  )
+    ? await compressImageDataUrl(input.referenceFrameImage, 1024, 0.8)
+    : input.referenceFrameImage
 
-  const token = await user.getIdToken()
   const res = await fetch('/api/generate-videos', {
     method: 'POST',
     headers: {
@@ -57,8 +74,8 @@ export async function requestGenerateVideos(
     },
     body: JSON.stringify({
       productName: input.productName,
-      productImage: input.productImage,
-      referenceFrameImage: input.referenceFrameImage,
+      productImage,
+      referenceFrameImage,
       creativeDirection: input.creativeDirection,
       assets: input.assets,
       recreateNote: input.recreateNote,

@@ -28,10 +28,12 @@ import {
   type VideoStyleId,
 } from '../lib/deliverables'
 import {
+  compressImageDataUrl,
   fileToDataUrl,
+  loadLocalCampaign,
   newLocalId,
   saveLocalCampaign,
-  stashCampaignImage,
+  stashCampaignImageSafe,
   stashCampaignRefImage,
   withTimeout,
 } from '../lib/localDemoCampaign'
@@ -190,8 +192,18 @@ export default function NewCampaignPage() {
       includeStrategy,
     })
     const id = newLocalId('campaign')
-    const imageUrl = imageDataUrl || previewUrl || undefined
-    saveLocalCampaign({
+    let imageUrl = imageDataUrl || undefined
+    if (!imageUrl && imageFile) {
+      imageUrl = await compressImageDataUrl(await fileToDataUrl(imageFile))
+    }
+    if (imageUrl?.startsWith('data:image/')) {
+      imageUrl = await compressImageDataUrl(imageUrl)
+    }
+    if (imageUrl?.startsWith('blob:')) {
+      throw new Error('Product photo did not finish loading. Re-select it and try again.')
+    }
+    if (imageUrl) await stashCampaignImageSafe(id, imageUrl)
+    const saved = saveLocalCampaign({
       id,
       title: `${displayName} campaign`,
       status: 'product_confirmed',
@@ -203,18 +215,28 @@ export default function NewCampaignPage() {
       selectedAssets: resolved.selectedAssets,
       includeStrategy: resolved.includeStrategy,
       tryFree: false,
-      imageUrl,
+      imageUrl: imageUrl?.startsWith('data:') ? undefined : imageUrl,
       createdAt: Date.now(),
     })
-    if (imageUrl) stashCampaignImage(id, imageUrl)
+    if (!saved || !loadLocalCampaign(id)) {
+      throw new Error(
+        'Could not save this campaign in the browser. Try a smaller photo.',
+      )
+    }
     if (referenceFile) {
       try {
-        stashCampaignRefImage(id, await fileToDataUrl(referenceFile))
+        stashCampaignRefImage(
+          id,
+          await compressImageDataUrl(await fileToDataUrl(referenceFile)),
+        )
       } catch {
         /* optional */
       }
     }
-    navigate(`/app/campaigns/${id}`, { replace: true })
+    navigate(`/app/campaigns/${id}`, {
+      replace: true,
+      state: imageUrl ? { productImage: imageUrl } : undefined,
+    })
   }
 
   async function onSubmit(e: FormEvent) {
@@ -235,7 +257,9 @@ export default function NewCampaignPage() {
 
     let imageDataUrl: string | undefined
     try {
-      if (imageFile) imageDataUrl = await fileToDataUrl(imageFile)
+      if (imageFile) {
+        imageDataUrl = await compressImageDataUrl(await fileToDataUrl(imageFile))
+      }
     } catch {
       /* optional preview */
     }
@@ -265,21 +289,29 @@ export default function NewCampaignPage() {
             styleTheme: styleTheme || undefined,
           },
         }),
-        12_000,
+        45_000,
         'create-campaign',
       )
-      if (imageDataUrl) stashCampaignImage(result.campaignId, imageDataUrl)
+      const cloudImage = result.imageUrls?.[0] || imageDataUrl
+      if (imageDataUrl) await stashCampaignImageSafe(result.campaignId, imageDataUrl)
+      else if (cloudImage) await stashCampaignImageSafe(result.campaignId, cloudImage)
       if (referenceFile) {
         try {
           stashCampaignRefImage(
             result.campaignId,
-            await fileToDataUrl(referenceFile),
+            await compressImageDataUrl(await fileToDataUrl(referenceFile)),
           )
         } catch {
           /* optional */
         }
       }
-      navigate(`/app/campaigns/${result.campaignId}`, { replace: true })
+      navigate(`/app/campaigns/${result.campaignId}`, {
+        replace: true,
+        state:
+          imageDataUrl || cloudImage
+            ? { productImage: imageDataUrl || cloudImage }
+            : undefined,
+      })
     } catch (err) {
       console.warn('[NewCampaign] falling back to local demo campaign', err)
       try {

@@ -1,6 +1,13 @@
 import { generateImageWithProviders } from './generateImages'
 import { generateHeyGenVideo, getHeyGenApiKey } from './heygen'
+import {
+  buildLuceSpec,
+  renderVideoKeyframePrompt,
+  renderVideoMotionPrompt,
+} from './luceGeneration'
 import { generateVideo, getOpenRouterApiKey } from './openRouter'
+import { prepareFrameImage } from './prepareImage'
+import { getAiProviderStatus } from './providers'
 
 async function generateVideoWithProviders(input: {
   prompt: string
@@ -10,12 +17,15 @@ async function generateVideoWithProviders(input: {
   aspectRatio?: '9:16'
   resolution?: '768p'
   generateAudio?: boolean
-}): Promise<{ videoDataUrl: string; provider: string }> {
+}): Promise<{ videoUrl: string; videoDataUrl: string; provider: string }> {
   const firstFrame = input.frameImages?.[0]?.url
   const refs = input.inputReferences
+  const errors: string[] = []
 
+  // 1) Direct HeyGen when HEYGEN_API_KEY is set
   if (getHeyGenApiKey()) {
     try {
+      console.info('[generate-videos] trying HeyGen direct')
       const result = await generateHeyGenVideo({
         prompt: input.prompt,
         imageUrl: firstFrame,
@@ -24,32 +34,50 @@ async function generateVideoWithProviders(input: {
         aspectRatio: input.aspectRatio ?? '9:16',
         resolution: input.resolution ?? '768p',
       })
-      return { videoDataUrl: result.videoDataUrl, provider: 'heygen' }
+      console.info('[generate-videos] ok via heygen')
+      return {
+        videoUrl: result.videoDataUrl,
+        videoDataUrl: result.videoDataUrl,
+        provider: 'heygen',
+      }
     } catch (err) {
-      console.warn(
-        '[generate-videos] HeyGen failed, trying OpenRouter',
-        err instanceof Error ? err.message : err,
-      )
-      if (!getOpenRouterApiKey()) throw err
+      const msg = err instanceof Error ? err.message : String(err)
+      errors.push(`HeyGen: ${msg}`)
+      console.warn('[generate-videos] HeyGen failed, trying OpenRouter', msg)
     }
   }
 
-  if (!getOpenRouterApiKey()) {
-    throw new Error(
-      'No video provider configured. Set HEYGEN_API_KEY and/or OPENROUTER_API_KEY.',
-    )
+  // 2) OpenRouter heygen/heygen-video-1 (active path when HEYGEN_API_KEY is empty)
+  if (getOpenRouterApiKey()) {
+    try {
+      console.info('[generate-videos] trying OpenRouter heygen-video-1')
+      const result = await generateVideo({
+        prompt: input.prompt,
+        frameImages: input.frameImages,
+        inputReferences: refs,
+        duration: input.duration,
+        aspectRatio: input.aspectRatio,
+        resolution: input.resolution,
+        generateAudio: input.generateAudio,
+      })
+      console.info('[generate-videos] ok via openrouter')
+      return {
+        videoUrl: result.videoUrl,
+        videoDataUrl: result.videoDataUrl,
+        provider: 'openrouter',
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      errors.push(`OpenRouter: ${msg}`)
+      throw new Error(errors.join(' | ') || msg)
+    }
   }
 
-  const result = await generateVideo({
-    prompt: input.prompt,
-    frameImages: input.frameImages,
-    inputReferences: refs,
-    duration: input.duration,
-    aspectRatio: input.aspectRatio,
-    resolution: input.resolution,
-    generateAudio: input.generateAudio,
-  })
-  return { videoDataUrl: result.videoDataUrl, provider: 'openrouter' }
+  throw new Error(
+    errors.length
+      ? errors.join(' | ')
+      : 'No video provider configured. Set HEYGEN_API_KEY and/or OPENROUTER_API_KEY.',
+  )
 }
 
 export type VideoAssetKind =
@@ -103,9 +131,6 @@ const PERSON_LED_FORMATS = new Set<VideoAssetKind>([
   'video_unboxing',
 ])
 
-/** Every studio format gets a format-specific keyframe from the product photo. */
-const ALL_KEYFRAME_FORMATS = new Set<VideoAssetKind>(VIDEO_ASSET_KINDS)
-
 export type CreativeDirectionSummary = {
   prompt?: string
   lighting?: string
@@ -142,6 +167,9 @@ function clampDurationSeconds(raw: unknown, fallback = 5): number {
 export type GeneratedVideoAsset = {
   type: VideoAssetKind
   label: string
+  /** Playable HTTPS or data URL */
+  videoUrl: string
+  /** Alias kept for older clients */
   videoDataUrl: string
   promptUsed?: string
 }
@@ -245,25 +273,33 @@ function buildKeyframePrompt(
   type: VideoAssetKind,
   productName: string,
   cd?: CreativeDirectionSummary,
+  hasReferenceFrame = false,
 ): string {
   const personLed = PERSON_LED_FORMATS.has(type)
   const scene = KEYFRAME_SCENES[type]
-  return `${scene}
+  const personNote = personLed
+    ? 'A real person must be clearly visible using / holding / presenting that exact product for this format.'
+    : 'Product is the hero of the frame; match the format scene while keeping packaging exact.'
 
-This still is the first frame for the "${LABELS[type]}" video format about "${productName}".
-
-CRITICAL PRODUCT FIDELITY:
-- The FIRST attached image is the ONLY allowed product packaging ground truth.
-- Keep bottle/jar shape, label artwork, logo, typography, colors, and proportions EXACT.
-- Do not invent a different perfume, skincare bottle, or brand.
-${
-  personLed
-    ? '- A real person must be clearly visible using / holding / presenting that exact product for this format.'
-    : '- Product is the hero of the frame; match the format scene (cinematic / spin / ASMR / flatlay) while keeping packaging exact.'
-}
-- Photorealistic. No text overlays, no watermarks, no fake UI.
-
-${cd?.prompt?.trim() ? `Creative note: ${cd.prompt.trim()}` : ''}`.trim()
+  const spec = buildLuceSpec({
+    modality: 'video',
+    assetType: type,
+    assetLabel: LABELS[type],
+    productName,
+    formatContractBody: `${scene}\n\n${personNote}`,
+    creativeDirection: cd
+      ? {
+          prompt: cd.prompt,
+          lighting: cd.lighting ? humanize(cd.lighting) : undefined,
+          background: cd.background ? humanize(cd.background) : undefined,
+          mood: cd.mood ? humanize(cd.mood) : undefined,
+          styleTheme: cd.styleTheme ? humanize(cd.styleTheme) : undefined,
+        }
+      : undefined,
+    hasProductImage: true,
+    hasReferenceVideoFrame: hasReferenceFrame,
+  })
+  return renderVideoKeyframePrompt(spec)
 }
 
 function buildMotionPrompt(
@@ -272,33 +308,53 @@ function buildMotionPrompt(
   cd: CreativeDirectionSummary | undefined,
   recreateNote?: string,
   personLed?: boolean,
+  durationSeconds?: number,
 ): string {
-  const userPrompt = cd?.prompt?.trim()
-  const bits = [
-    `Vertical 9:16 "${LABELS[type]}" marketing video for the user's product "${productName}".`,
-    personLed
-      ? 'Animate THIS exact first frame: same person + same product packaging. Perform the format action (talk, demo how-to-use, unbox, etc.). Natural lip motion and gestures when speaking. Never swap the product or person.'
-      : 'Animate THIS exact first-frame product into the format motion. Keep packaging EXACT — same label, logo, shape, colors. Never invent a different product.',
-    FORMAT_BEATS[type],
-    'Photorealistic, natural motion, no watermarks, no UI chrome, no fake burned-in captions.',
-  ]
+  const motionExtras: string[] = []
   if (personLed) {
-    bits.push(
-      'Include natural spoken audio matching the format (how-to narration, UGC chat, testimonial, hook line, etc.).',
+    motionExtras.push(
+      'Keep the same person and exact product packaging. Add natural format motion (gestures, talking mouth movement, hands using the product).',
+    )
+  } else {
+    motionExtras.push(
+      'Animate the first-frame product with format motion. Packaging EXACT — same label, logo, shape, colors.',
     )
   }
   if (type === 'video_howto_demo') {
-    bits.push(
-      'Must clearly show HOW TO USE this specific product end-to-end in a short tutorial beat — not just hold it.',
+    motionExtras.push(
+      'Show a clear how-to-use motion (apply, spray, open, or demonstrate) — not just a static hold.',
     )
   }
-  if (userPrompt) bits.push(`USER PROMPT: ${userPrompt}`)
-  if (cd?.lighting) bits.push(`Lighting: ${humanize(cd.lighting)}.`)
-  if (cd?.background) bits.push(`Background: ${humanize(cd.background)}.`)
-  if (cd?.mood) bits.push(`Mood: ${humanize(cd.mood)}.`)
-  if (cd?.styleTheme) bits.push(`Style theme: ${humanize(cd.styleTheme)}.`)
-  if (recreateNote?.trim()) bits.push(`Recreate note: ${recreateNote.trim()}`)
-  return bits.join(' ')
+  if (type === 'video_cinematic') {
+    motionExtras.push(
+      'Slow luxury camera push-in or gentle orbit, soft volumetric light, premium commercial energy.',
+    )
+  }
+  if (type === 'video_product_spin') {
+    motionExtras.push('Slow continuous turntable / orbit rotation of the product.')
+  }
+
+  const spec = buildLuceSpec({
+    modality: 'video',
+    assetType: type,
+    assetLabel: LABELS[type],
+    productName,
+    formatContractBody: motionExtras.join(' '),
+    structureBeat: FORMAT_BEATS[type],
+    durationSeconds,
+    creativeDirection: cd
+      ? {
+          prompt: cd.prompt,
+          lighting: cd.lighting ? humanize(cd.lighting) : undefined,
+          background: cd.background ? humanize(cd.background) : undefined,
+          mood: cd.mood ? humanize(cd.mood) : undefined,
+          styleTheme: cd.styleTheme ? humanize(cd.styleTheme) : undefined,
+        }
+      : undefined,
+    recreateNote,
+    hasProductImage: true,
+  })
+  return renderVideoMotionPrompt(spec)
 }
 
 /** Compose a format-specific still from the user's product, then video animates it. */
@@ -317,6 +373,7 @@ async function composeFormatKeyframe(input: {
     input.type,
     input.productName,
     input.creativeDirection,
+    Boolean(input.referenceFrame),
   )
   const still = await generateImageWithProviders({
     prompt,
@@ -328,6 +385,9 @@ async function composeFormatKeyframe(input: {
 export async function generateCampaignVideos(
   input: GenerateVideosInput,
 ): Promise<GenerateVideosResult> {
+  const providerStatus = getAiProviderStatus()
+  console.info('[generate-videos]', providerStatus.summary)
+
   if (!getHeyGenApiKey() && !getOpenRouterApiKey()) {
     return {
       status: 503,
@@ -357,8 +417,8 @@ export async function generateCampaignVideos(
     }
   }
 
-  const productImage = input.productImage?.trim() || undefined
-  if (!productImage) {
+  const rawProductImage = input.productImage?.trim() || undefined
+  if (!rawProductImage) {
     return {
       status: 400,
       body: {
@@ -367,19 +427,26 @@ export async function generateCampaignVideos(
       },
     }
   }
-  const referenceFrame = input.referenceFrameImage?.trim() || undefined
+  const productImage = await prepareFrameImage(rawProductImage)
+  const referenceFrameRaw = input.referenceFrameImage?.trim() || undefined
+  const referenceFrame = referenceFrameRaw
+    ? await prepareFrameImage(referenceFrameRaw)
+    : undefined
 
   const generated: GeneratedVideoAsset[] = []
   const partialErrors: { type: VideoAssetKind; error: string }[] = []
 
-  // Sequential — each format: keyframe (from product) → motion video
+  // Sequential — person formats: keyframe → video; product formats: photo → video
   for (const type of assets) {
     const personLed = PERSON_LED_FORMATS.has(type)
     try {
       let firstFrame = productImage
-      if (ALL_KEYFRAME_FORMATS.has(type)) {
+      // Only person-on-camera formats need a composed keyframe. Product-led
+      // formats (cinematic / spin / ASMR / flatlay) animate the product photo
+      // directly — faster and fewer failure points for large uploads.
+      if (personLed) {
         console.info(
-          `[generate-videos] ${type}: composing format keyframe from product photo`,
+          `[generate-videos] ${type}: composing person+product keyframe`,
         )
         try {
           firstFrame = await composeFormatKeyframe({
@@ -389,6 +456,7 @@ export async function generateCampaignVideos(
             referenceFrame,
             creativeDirection: input.creativeDirection,
           })
+          firstFrame = await prepareFrameImage(firstFrame)
         } catch (keyErr) {
           console.warn(
             `[generate-videos] ${type}: keyframe failed, falling back to product still`,
@@ -396,7 +464,16 @@ export async function generateCampaignVideos(
           )
           firstFrame = productImage
         }
+      } else {
+        console.info(
+          `[generate-videos] ${type}: using product photo as first frame`,
+        )
       }
+
+      const duration = clampDurationSeconds(
+        input.durationSeconds,
+        personLed || type === 'video_howto_demo' ? 8 : 5,
+      )
 
       const promptUsed = buildMotionPrompt(
         type,
@@ -404,28 +481,33 @@ export async function generateCampaignVideos(
         input.creativeDirection,
         input.recreateNote,
         personLed,
+        duration,
       )
 
-      const duration = clampDurationSeconds(
-        input.durationSeconds,
-        personLed || type === 'video_howto_demo' ? 8 : 5,
-      )
-
+      // Format → explicit model params (LUCE §4 / §13 — never let the model guess)
       const result = await generateVideoWithProviders({
         prompt: promptUsed,
         frameImages: [{ url: firstFrame, frameType: 'first_frame' }],
-        // Style reference only when we did not already bake it into the keyframe refs
         inputReferences: undefined,
         duration,
         aspectRatio: '9:16',
         resolution: '768p',
-        generateAudio: true,
       })
+
+      const playable = result.videoUrl || result.videoDataUrl
+      if (!playable) {
+        throw new Error('Video provider returned an empty clip URL')
+      }
+
+      console.info(
+        `[generate-videos] ${type} ok via ${result.provider} · ${playable.slice(0, 48)}…`,
+      )
 
       generated.push({
         type,
         label: LABELS[type],
-        videoDataUrl: result.videoDataUrl,
+        videoUrl: playable,
+        videoDataUrl: playable,
         promptUsed,
       })
     } catch (err) {

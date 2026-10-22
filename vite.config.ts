@@ -162,6 +162,76 @@ function localApiRoutes(): Plugin {
           return
         }
 
+        if (url === '/api/ai-status') {
+          if (req.method !== 'GET') {
+            res.statusCode = 405
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Method not allowed' }))
+            return
+          }
+          try {
+            const { getAiProviderStatus } = await import(
+              './api/_lib/providers.ts'
+            )
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ok: true, ...getAiProviderStatus() }))
+          } catch (err) {
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                error: err instanceof Error ? err.message : 'status failed',
+              }),
+            )
+          }
+          return
+        }
+
+        // OpenRouter video content requires API key — proxy so <video src> can play
+        const openrouterVideoMatch = url?.match(
+          /^\/api\/openrouter-video\/([^/]+)\/?$/,
+        )
+        if (openrouterVideoMatch) {
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            res.statusCode = 405
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Method not allowed' }))
+            return
+          }
+          try {
+            const jobId = decodeURIComponent(openrouterVideoMatch[1] || '')
+            const { fetchOpenRouterVideoContent } = await import(
+              './api/_lib/openRouter.ts'
+            )
+            const { body, contentType } =
+              await fetchOpenRouterVideoContent(jobId)
+            res.statusCode = 200
+            res.setHeader('Content-Type', contentType)
+            res.setHeader('Cache-Control', 'private, max-age=3600')
+            res.setHeader('Accept-Ranges', 'none')
+            if (req.method === 'HEAD') {
+              res.setHeader('Content-Length', String(body.byteLength))
+              res.end()
+              return
+            }
+            res.end(Buffer.from(body))
+          } catch (err) {
+            console.error('[vite] openrouter-video proxy failed', err)
+            res.statusCode = 502
+            res.setHeader('Content-Type', 'application/json')
+            res.end(
+              JSON.stringify({
+                error:
+                  err instanceof Error && err.message
+                    ? err.message
+                    : 'Could not load generated video',
+              }),
+            )
+          }
+          return
+        }
+
         if (url === '/api/generate-videos') {
           if (req.method !== 'POST') {
             res.statusCode = 405
@@ -171,7 +241,10 @@ function localApiRoutes(): Plugin {
           }
           try {
             const body = await readJsonBody(req)
-            const { verifyBearerToken } = await import('./api/_lib/firebaseAdmin.ts')
+            const {
+              verifyBearerToken,
+              authFailureMessage,
+            } = await import('./api/_lib/firebaseAdmin.ts')
             const {
               generateCampaignVideos,
               VIDEO_ASSET_KINDS,
@@ -182,7 +255,10 @@ function localApiRoutes(): Plugin {
               res.setHeader('Content-Type', 'application/json')
               res.end(
                 JSON.stringify({
-                  error: 'Sign in required to generate videos.',
+                  error: authFailureMessage(
+                    req.headers.authorization,
+                    'videos',
+                  ),
                 }),
               )
               return
@@ -246,7 +322,10 @@ function localApiRoutes(): Plugin {
             res.setHeader('Content-Type', 'application/json')
             res.end(
               JSON.stringify({
-                error: 'Video generation failed on server. Try again.',
+                error:
+                  err instanceof Error && err.message
+                    ? err.message
+                    : 'Video generation failed on server. Try again.',
               }),
             )
           }
@@ -262,7 +341,10 @@ function localApiRoutes(): Plugin {
           }
           try {
             const body = await readJsonBody(req)
-            const { verifyBearerToken } = await import('./api/_lib/firebaseAdmin.ts')
+            const {
+              verifyBearerToken,
+              authFailureMessage,
+            } = await import('./api/_lib/firebaseAdmin.ts')
             const {
               generateCampaignImages,
               IMAGE_ASSET_KINDS,
@@ -273,7 +355,10 @@ function localApiRoutes(): Plugin {
               res.setHeader('Content-Type', 'application/json')
               res.end(
                 JSON.stringify({
-                  error: 'Sign in required to generate images.',
+                  error: authFailureMessage(
+                    req.headers.authorization,
+                    'images',
+                  ),
                 }),
               )
               return

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
@@ -29,7 +29,11 @@ import {
   loadStashedCampaignOutputs,
   loadStashedCampaignRefImage,
   loadStashedCampaignVideoDurations,
+  resolveCampaignImage,
+  resolveCampaignRefImage,
   stashCampaignImage,
+  stashCampaignImageSafe,
+  stashCampaignRefImageSafe,
   stashCampaignOutputs,
   updateLocalCampaign,
 } from '../lib/localDemoCampaign'
@@ -47,6 +51,7 @@ import {
 import {
   extractVideoFrameDataUrl,
   isVideoAssetKind,
+  playableVideoUrl,
   requestGenerateVideos,
   type VideoAssetKind,
 } from '../lib/generateVideos'
@@ -90,27 +95,27 @@ function applyAiImageToOutput(
     imageUrl: imageDataUrl,
     note:
       (item.version || 1) > 1
-        ? `AI-generated · variant ${item.version} · packaging fidelity from your product photo`
-        : 'AI-generated (Muse / OpenRouter) · packaging fidelity from your product photo',
+        ? `AI-generated · ${item.label} format · v${item.version} · product identity kept`
+        : `AI-generated · ${item.label} format · product identity from your photo`,
   }
 }
 
 function applyAiVideoToOutput(
   item: MockOutput,
-  videoDataUrl: string,
+  videoUrl: string,
 ): MockOutput {
   const secs = item.durationSeconds
     ? clampVideoDuration(item.durationSeconds)
     : undefined
   return {
     ...item,
-    videoUrl: videoDataUrl,
+    videoUrl,
     kind: 'video' as const,
     ...(secs ? { durationSeconds: secs } : {}),
     note:
       (item.version || 1) > 1
-        ? `AI video · ${secs || DEFAULT_VIDEO_DURATION}s · variant ${item.version}`
-        : `AI video · ${secs || DEFAULT_VIDEO_DURATION}s · your product as first frame`,
+        ? `AI-generated video · ${secs || DEFAULT_VIDEO_DURATION}s · variant ${item.version}`
+        : `AI-generated video · ${secs || DEFAULT_VIDEO_DURATION}s · your product as first frame`,
   }
 }
 
@@ -144,9 +149,27 @@ function activeStep(status: string) {
 
 export default function CampaignDetailPage() {
   const { campaignId } = useParams()
+  const location = useLocation()
   const { user, plan, freeImageUsed, markFreeImageUsed, workspace, loading } =
     useAuth()
   const navigate = useNavigate()
+  const navProductImage = (() => {
+    const s = location.state as {
+      productImage?: string
+      referenceImage?: string
+    } | null
+    const img = s?.productImage?.trim()
+    return img && (img.startsWith('data:image/') || img.startsWith('http'))
+      ? img
+      : undefined
+  })()
+  const navReferenceImage = (() => {
+    const s = location.state as { referenceImage?: string } | null
+    const img = s?.referenceImage?.trim()
+    return img && (img.startsWith('data:image/') || img.startsWith('http'))
+      ? img
+      : undefined
+  })()
   const [campaign, setCampaign] = useState<CampaignView | null>(null)
   /** Load failures only — blank empty-state when campaign is missing. */
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -206,7 +229,31 @@ export default function CampaignDetailPage() {
 
     ;(async () => {
       try {
-        const stashed = loadStashedCampaignImage(campaignId)
+        // Studio handoff: product + optional style reference → durable stash
+        if (navProductImage) {
+          try {
+            await stashCampaignImageSafe(campaignId, navProductImage)
+          } catch {
+            stashCampaignImage(campaignId, navProductImage)
+          }
+        }
+        if (navReferenceImage) {
+          try {
+            await stashCampaignRefImageSafe(campaignId, navReferenceImage)
+          } catch {
+            /* optional */
+          }
+        }
+        if (navProductImage || navReferenceImage) {
+          navigate(location.pathname, { replace: true, state: null })
+        }
+
+        const stashed =
+          (await resolveCampaignImage(campaignId)) ||
+          loadStashedCampaignImage(campaignId) ||
+          navProductImage
+        // Warm ref cache for generate
+        await resolveCampaignRefImage(campaignId)
 
         if (isLocalCampaignId(campaignId)) {
           const local = loadLocalCampaign(campaignId)
@@ -219,6 +266,7 @@ export default function CampaignDetailPage() {
           }
           if (!cancelled) {
             setLoadError(null)
+            const resolvedImage = local.imageUrl || stashed
             setCampaign({
               title: local.title,
               status: local.status,
@@ -231,7 +279,7 @@ export default function CampaignDetailPage() {
               selectedAssets: asFlatStringArray(local.selectedAssets),
               includeStrategy: local.includeStrategy,
               tryFree: local.tryFree,
-              imageUrl: local.imageUrl || stashed,
+              imageUrl: resolvedImage,
               videoDurations:
                 local.videoDurations ||
                 loadStashedCampaignVideoDurations(campaignId),
@@ -327,7 +375,15 @@ export default function CampaignDetailPage() {
     return () => {
       cancelled = true
     }
-  }, [user, campaignId, loading])
+  }, [
+    user,
+    campaignId,
+    loading,
+    navProductImage,
+    navReferenceImage,
+    location.pathname,
+    navigate,
+  ])
 
   const outputs = useMemo(() => {
     if (!campaign) return []
@@ -377,6 +433,46 @@ export default function CampaignDetailPage() {
     }
   }
 
+  /** Prefer live product Storage URL, then stash — never generate blind. */
+  async function resolveProductImage(): Promise<string | undefined> {
+    if (!campaignId || !campaign) return undefined
+    let url =
+      campaign.imageUrl ||
+      loadStashedCampaignImage(campaignId) ||
+      undefined
+
+    if ((!url || url.startsWith('/images/')) && campaign.productId) {
+      for (let i = 0; i < 10; i++) {
+        try {
+          const productSnap = await getDoc(
+            doc(requireDb(), 'products', campaign.productId),
+          )
+          if (productSnap.exists()) {
+            const urls = asFlatStringArray(productSnap.data().imageUrls)
+            if (urls[0]) {
+              url = urls[0]
+              break
+            }
+          }
+        } catch {
+          /* retry */
+        }
+        await new Promise((r) => setTimeout(r, 400))
+      }
+    }
+
+    if (url && !url.startsWith('/images/')) {
+      if (url.startsWith('data:image/')) {
+        url = await stashCampaignImageSafe(campaignId, url)
+      } else {
+        stashCampaignImage(campaignId, url)
+      }
+      setCampaign((prev) => (prev ? { ...prev, imageUrl: url } : prev))
+      return url
+    }
+    return undefined
+  }
+
   async function runMockGenerate() {
     if (!campaignId || !campaign) return
     if (!assertCanGenerate()) return
@@ -388,6 +484,28 @@ export default function CampaignDetailPage() {
       await persistStatus('generating')
       setCampaign((prev) => (prev ? { ...prev, status: 'generating' } : prev))
 
+      setActionMsg('Confirming your product photo…')
+      const productImageUrl = await resolveProductImage()
+      if (!productImageUrl) {
+        throw new Error(
+          'Your product photo is missing. Use “Upload photo” / “Replace photo” on this page, then Generate again.',
+        )
+      }
+
+      // Warm auth + show which AI path will run (OpenRouter until Muse/HeyGen keys are set)
+      try {
+        const statusRes = await fetch('/api/ai-status')
+        const statusJson = (await statusRes.json().catch(() => null)) as {
+          summary?: string
+        } | null
+        if (statusJson?.summary) {
+          setActionMsg(`AI ready · ${statusJson.summary}`)
+          await new Promise((r) => setTimeout(r, 400))
+        }
+      } catch {
+        /* optional */
+      }
+
       for (const value of [28, 52, 74]) {
         await new Promise((r) => setTimeout(r, 420))
         setProgress(value)
@@ -395,7 +513,7 @@ export default function CampaignDetailPage() {
 
       let nextOutputs = buildMockOutputs({
         productName: campaign.productName,
-        productImageUrl: campaign.imageUrl,
+        productImageUrl,
         selectedAssets: campaign.selectedAssets,
         studioKind: campaign.studioKind,
         mode: campaign.mode,
@@ -411,16 +529,27 @@ export default function CampaignDetailPage() {
 
       let aiWarning: string | null = null
       const stashedRef =
-        (campaignId ? loadStashedCampaignRefImage(campaignId) : undefined) ||
-        undefined
+        (campaignId
+          ? (await resolveCampaignRefImage(campaignId)) ||
+            loadStashedCampaignRefImage(campaignId)
+          : undefined) || undefined
 
       if (imageOutputs.length > 0) {
         setProgress(78)
-        setActionMsg('Generating AI product images…')
+        setActionMsg(
+          stashedRef
+            ? 'Generating AI images (product + your style reference)…'
+            : 'Generating AI product images…',
+        )
         const referenceImage =
           stashedRef && stashedRef.startsWith('data:image/')
             ? stashedRef
             : undefined
+        if (!referenceImage) {
+          console.warn(
+            '[generate] no style reference attached — formats will use product look only',
+          )
+        }
         let imageFailCount = 0
         for (let i = 0; i < imageOutputs.length; i++) {
           const item = imageOutputs[i]!
@@ -429,12 +558,12 @@ export default function CampaignDetailPage() {
             `Generating image ${i + 1} of ${imageOutputs.length}: ${item.label}${(item.version || 1) > 1 ? ` · v${item.version}` : ''}…`,
           )
           try {
-            if (!campaign.imageUrl) {
+            if (!productImageUrl) {
               throw new Error('Product photo missing — cannot generate formats.')
             }
             const ai = await requestGenerateImages({
               productName: campaign.productName,
-              productImage: campaign.imageUrl,
+              productImage: productImageUrl,
               referenceImage,
               creativeDirection: campaign.creativeDirection,
               assets: [item.assetType as ImageAssetKind],
@@ -457,15 +586,17 @@ export default function CampaignDetailPage() {
             }
           } catch (err) {
             imageFailCount += 1
+            const failReason =
+              err instanceof Error ? err.message : 'Image generation failed'
             console.warn('[generate] image variant failed', item.id, err)
             // Keep the user's product — never leave a stock demo perfume in the pack.
-            if (campaign.imageUrl) {
+            if (productImageUrl) {
               nextOutputs = nextOutputs.map((o) =>
                 o.id === item.id
                   ? {
                       ...o,
-                      imageUrl: campaign.imageUrl,
-                      note: 'AI failed for this format — showing your product photo',
+                      imageUrl: productImageUrl,
+                      note: `AI failed for this format — ${failReason}`,
                     }
                   : o,
               )
@@ -481,7 +612,7 @@ export default function CampaignDetailPage() {
         setProgress(86)
         setActionMsg('Generating AI videos from your product photo…')
         try {
-          if (!campaign.imageUrl) {
+          if (!productImageUrl) {
             throw new Error(
               'Product photo missing — Video Studio needs your packaging still.',
             )
@@ -509,7 +640,7 @@ export default function CampaignDetailPage() {
               )
               const ai = await requestGenerateVideos({
                 productName: campaign.productName,
-                productImage: campaign.imageUrl,
+                productImage: productImageUrl,
                 referenceFrameImage,
                 creativeDirection: {
                   ...campaign.creativeDirection,
@@ -525,13 +656,13 @@ export default function CampaignDetailPage() {
                 assets: [kind],
                 durationSeconds,
               })
-              const generated = ai.assets[0]
-              if (generated?.videoDataUrl) {
+              const clipUrl = playableVideoUrl(ai.assets[0])
+              if (clipUrl) {
                 nextOutputs = nextOutputs.map((o) =>
                   o.id === item.id
                     ? applyAiVideoToOutput(
                         { ...o, durationSeconds },
-                        generated.videoDataUrl,
+                        clipUrl,
                       )
                     : o,
                 )
@@ -540,6 +671,8 @@ export default function CampaignDetailPage() {
               }
             } catch (err) {
               videoFailCount += 1
+              const failReason =
+                err instanceof Error ? err.message : 'Video generation failed'
               console.warn('[generate] video variant failed', item.id, err)
               // Never leave a stock demo perfume clip in the pack.
               nextOutputs = nextOutputs.map((o) =>
@@ -548,8 +681,8 @@ export default function CampaignDetailPage() {
                       ...o,
                       kind: 'video' as const,
                       videoUrl: undefined,
-                      imageUrl: campaign.imageUrl,
-                      note: 'AI video failed — showing your product still (no demo clip)',
+                      imageUrl: productImageUrl,
+                      note: `AI video failed — ${failReason}`,
                     }
                   : o,
               )
@@ -561,21 +694,20 @@ export default function CampaignDetailPage() {
           }
         } catch (err) {
           console.warn('[generate] video batch failed', err)
+          const failReason =
+            err instanceof Error ? err.message : 'AI videos unavailable'
           nextOutputs = nextOutputs.map((o) =>
             isVideoAssetKind(o.assetType)
               ? {
                   ...o,
                   kind: 'video' as const,
                   videoUrl: undefined,
-                  imageUrl: campaign.imageUrl || o.imageUrl,
-                  note: 'AI video unavailable — showing your product still',
+                  imageUrl: productImageUrl || o.imageUrl,
+                  note: `AI video unavailable — ${failReason}`,
                 }
               : o,
           )
-          const videoMsg =
-            err instanceof Error
-              ? err.message
-              : 'AI videos unavailable — product stills kept.'
+          const videoMsg = `${failReason} — product stills kept.`
           aiWarning = aiWarning ? `${aiWarning} ${videoMsg}` : videoMsg
         }
       }
@@ -613,13 +745,13 @@ export default function CampaignDetailPage() {
       const usedAiImages = nextOutputs.some(
         (o) =>
           isImageAssetKind(o.assetType) &&
-          o.imageUrl?.startsWith('data:image/') &&
+          Boolean(o.imageUrl) &&
           o.note?.includes('AI-generated'),
       )
       const usedAiVideos = nextOutputs.some(
         (o) =>
           isVideoAssetKind(o.assetType) &&
-          o.videoUrl?.startsWith('data:video/') &&
+          Boolean(o.videoUrl) &&
           o.note?.includes('AI-generated'),
       )
       setActionMsg(
@@ -638,31 +770,20 @@ export default function CampaignDetailPage() {
       if (nextOutputs[0]) setPreviewId(nextOutputs[0].id)
     } catch (err) {
       console.error(err)
-      // Never leave the user stuck: always ship a local demo pack if cloud/AI fails.
-      try {
-        const fallback = buildMockOutputs({
-          productName: campaign.productName,
-          productImageUrl: campaign.imageUrl,
-          selectedAssets: campaign.selectedAssets,
-          studioKind: campaign.studioKind,
-          mode: campaign.mode,
-          videoDurations: campaign.videoDurations,
-        })
-        stashCampaignOutputs(campaignId, fallback)
-        setCampaign((prev) =>
-          prev ? { ...prev, status: 'ready', outputs: fallback } : prev,
-        )
-        if (fallback[0]) setPreviewId(fallback[0].id)
-        setError(null)
-        setActionMsg(
-          'Demo pack ready in this browser. Cloud sync had a problem — your previews still work here.',
-        )
-        void persistStatus('ready', { outputs: fallback })
-      } catch (fallbackErr) {
-        console.error(fallbackErr)
-        // Keep campaign UI — never blank the page with a raw Firebase message.
+      const failMsg =
+        err instanceof Error ? err.message : 'Could not generate pack.'
+      // Prefer stashed product photo — local campaigns often omit imageUrl in meta.
+      const fallbackPhoto =
+        campaign.imageUrl ||
+        (campaignId ? loadStashedCampaignImage(campaignId) : undefined) ||
+        undefined
+
+      if (!fallbackPhoto || fallbackPhoto.startsWith('/images/')) {
         setError(
-          friendlyFirestoreError(err, 'Could not generate demo pack. Try again.'),
+          friendlyFirestoreError(
+            err,
+            `${failMsg} Upload your product photo on this page, then Generate again.`,
+          ),
         )
         setCampaign((prev) =>
           prev
@@ -675,6 +796,51 @@ export default function CampaignDetailPage() {
               }
             : prev,
         )
+        setActionMsg(null)
+      } else {
+        try {
+          const fallback = buildMockOutputs({
+            productName: campaign.productName,
+            productImageUrl: fallbackPhoto,
+            selectedAssets: campaign.selectedAssets,
+            studioKind: campaign.studioKind,
+            mode: campaign.mode,
+            videoDurations: campaign.videoDurations,
+          })
+          stashCampaignOutputs(campaignId, fallback)
+          setCampaign((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: 'ready',
+                  imageUrl: fallbackPhoto,
+                  outputs: fallback,
+                }
+              : prev,
+          )
+          if (fallback[0]) setPreviewId(fallback[0].id)
+          setError(failMsg)
+          setActionMsg(
+            'Showing your product photo for each format. AI did not finish — use Recreate or Generate again.',
+          )
+          void persistStatus('ready', { outputs: fallback })
+        } catch (fallbackErr) {
+          console.error(fallbackErr)
+          setError(
+            friendlyFirestoreError(err, 'Could not generate pack. Try again.'),
+          )
+          setCampaign((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status:
+                    prev.status === 'generating'
+                      ? 'product_confirmed'
+                      : prev.status,
+                }
+              : prev,
+          )
+        }
       }
     } finally {
       setActionBusy(false)
@@ -734,8 +900,10 @@ export default function CampaignDetailPage() {
     setError(null)
     setActionMsg(null)
     try {
-      const dataUrl = await fileToDataUrl(file)
-      stashCampaignImage(campaignId, dataUrl)
+      const dataUrl = await stashCampaignImageSafe(
+        campaignId,
+        await fileToDataUrl(file),
+      )
       const guess = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim()
       const nextName =
         campaign.productName && campaign.productName !== 'Untitled product'
@@ -865,6 +1033,16 @@ export default function CampaignDetailPage() {
   const createMorePath = campaign
     ? studioPathFor({ mode: campaign.mode, studioKind: campaign.studioKind })
     : '/app/studio/photos'
+  // Local demos keep the photo in stash (meta omits huge data URLs)
+  const productDisplayUrl = (() => {
+    const fromCampaign =
+      campaign?.imageUrl && !campaign.imageUrl.startsWith('/images/')
+        ? campaign.imageUrl
+        : undefined
+    if (fromCampaign) return fromCampaign
+    return campaignId ? loadStashedCampaignImage(campaignId) : undefined
+  })()
+  const hasProductPhoto = Boolean(productDisplayUrl)
   const readyToGenerate =
     campaign &&
     (campaign.status === 'product_confirmed' ||
@@ -922,23 +1100,14 @@ export default function CampaignDetailPage() {
                 <p className="app-lead">{campaign.productName}</p>
               </div>
               <div className="create-banner-media">
-                {campaign.imageUrl ? (
-                  <img src={campaign.imageUrl} alt={campaign.productName} />
+                {productDisplayUrl ? (
+                  <img src={productDisplayUrl} alt={campaign.productName} />
                 ) : (
-                  <img
-                    src={
-                      campaign.mode === 'studio'
-                        ? campaign.studioKind === 'photos'
-                          ? '/images/moisturizer-studio.jpg'
-                          : campaign.studioKind === 'videos'
-                            ? '/images/output-ugc.jpg'
-                            : '/images/output-ads.jpg'
-                        : '/images/campaign-perfume-studio.jpg'
-                    }
-                    alt=""
-                  />
+                  <div className="create-banner-placeholder">
+                    <span>Add your product photo</span>
+                  </div>
                 )}
-                {campaign.imageUrl ? (
+                {productDisplayUrl ? (
                   <span className="create-banner-product-tag">Your product</span>
                 ) : null}
               </div>
@@ -981,7 +1150,7 @@ export default function CampaignDetailPage() {
                 >
                   {replacingPhoto
                     ? 'Updating…'
-                    : campaign.imageUrl
+                    : productDisplayUrl
                       ? 'Replace photo'
                       : 'Upload photo'}
                 </button>
@@ -989,8 +1158,8 @@ export default function CampaignDetailPage() {
 
               <div className="product-source-body">
                 <div className="product-source-media">
-                  {campaign.imageUrl ? (
-                    <img src={campaign.imageUrl} alt={campaign.productName} />
+                  {productDisplayUrl ? (
+                    <img src={productDisplayUrl} alt={campaign.productName} />
                   ) : (
                     <button
                       type="button"
@@ -1002,7 +1171,7 @@ export default function CampaignDetailPage() {
                       <span>JPG, PNG, or WebP</span>
                     </button>
                   )}
-                  {campaign.imageUrl ? (
+                  {productDisplayUrl ? (
                     <span className="product-source-badge">Uploaded photo</span>
                   ) : null}
                 </div>
@@ -1068,11 +1237,13 @@ export default function CampaignDetailPage() {
               </h2>
               <p>
                 {readyToGenerate
-                  ? campaign.studioKind === 'videos'
-                    ? 'Every format builds a scene from your product first (how-to = usage demo, UGC = creator talking, cinematic = hero spot), then animates that scene. Failures keep your still — never stock demo clips.'
-                    : campaign.studioKind === 'photos'
-                      ? 'Generates from your product photo into each format you picked. Failed formats keep your photo — never stock demos.'
-                      : 'Generates your pack from your product photo. Failed formats keep your photo — never stock demos.'
+                  ? !hasProductPhoto
+                    ? 'Upload your product photo above first — AI formats need it as the source of truth.'
+                    : campaign.studioKind === 'videos'
+                      ? 'Each selected video format is generated from your product photo (cinematic, UGC, how-to, etc.). Stay signed in — clips take 1–3 minutes each.'
+                      : campaign.studioKind === 'photos'
+                        ? 'Each selected image format (Moody editorial, packshot, flatlay…) is generated from your product photo. Stay signed in while it runs.'
+                        : 'Generates your pack from your product photo into each format you picked.'
                   : campaign.status === 'generating'
                     ? campaign.studioKind === 'videos'
                       ? 'Building AI videos from your product photo…'
@@ -1107,16 +1278,18 @@ export default function CampaignDetailPage() {
                   <button
                     type="button"
                     className="btn btn-grad"
-                    disabled={actionBusy}
+                    disabled={actionBusy || !hasProductPhoto}
                     onClick={() => void runMockGenerate()}
                   >
                     {actionBusy
                       ? 'Generating…'
-                      : campaign.studioKind === 'videos'
-                        ? 'Generate videos'
-                        : campaign.studioKind === 'photos'
-                          ? 'Generate images'
-                          : 'Generate pack'}
+                      : !hasProductPhoto
+                        ? 'Upload photo first'
+                        : campaign.studioKind === 'videos'
+                          ? 'Generate videos'
+                          : campaign.studioKind === 'photos'
+                            ? 'Generate images'
+                            : 'Generate pack'}
                     <span aria-hidden="true">→</span>
                   </button>
                 ) : null}
@@ -1128,6 +1301,17 @@ export default function CampaignDetailPage() {
                     onClick={() => void runMockGenerate()}
                   >
                     Resume generate
+                  </button>
+                ) : null}
+                {(campaign.status === 'ready' || campaign.status === 'exported') &&
+                hasProductPhoto ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={actionBusy}
+                    onClick={() => void runMockGenerate()}
+                  >
+                    {actionBusy ? 'Generating…' : 'Generate again'}
                   </button>
                 ) : null}
                 {(campaign.status === 'ready' || campaign.status === 'exported') &&

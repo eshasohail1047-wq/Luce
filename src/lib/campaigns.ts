@@ -212,30 +212,51 @@ async function createProductRecord(input: {
   let imageUrls: string[] = []
   let storageWarning: string | null = null
 
-  // Never block campaign create on Storage — upload in the background.
+  // Await upload so Generate has a real product URL (stash alone often fails on large photos).
   if (input.sourceType === 'upload' && input.imageFile) {
     const path = `users/${input.userId}/products/${productRef.id}/source.${extFromFile(input.imageFile)}`
     const file = input.imageFile
-    storageWarning = 'Photo uploads in the background. You can generate the demo pack now.'
-    void (async () => {
-      try {
-        const storageRef = ref(requireStorage(), path)
-        await uploadBytes(storageRef, file, {
-          contentType: file.type || 'image/jpeg',
-          customMetadata: {
-            originalName: file.name.slice(0, 120),
-          },
-        })
-        const url = await getDownloadURL(storageRef)
-        await updateDoc(productRef, {
-          imagePaths: [path],
-          imageUrls: [url],
-          updatedAt: serverTimestamp(),
-        })
-      } catch (err) {
-        console.error('[campaigns] background storage upload failed', err)
-      }
-    })()
+    try {
+      const storageRef = ref(requireStorage(), path)
+      await uploadBytes(storageRef, file, {
+        contentType: file.type || 'image/jpeg',
+        customMetadata: {
+          originalName: file.name.slice(0, 120),
+        },
+      })
+      const url = await getDownloadURL(storageRef)
+      imagePaths = [path]
+      imageUrls = [url]
+      await updateDoc(productRef, {
+        imagePaths,
+        imageUrls,
+        updatedAt: serverTimestamp(),
+      })
+    } catch (err) {
+      console.error('[campaigns] storage upload failed', err)
+      storageWarning =
+        'Photo could not be uploaded to cloud storage. Generation will use a local copy if available.'
+      // Fallback: keep trying in background in case it was a transient blip
+      void (async () => {
+        try {
+          const storageRef = ref(requireStorage(), path)
+          await uploadBytes(storageRef, file, {
+            contentType: file.type || 'image/jpeg',
+            customMetadata: {
+              originalName: file.name.slice(0, 120),
+            },
+          })
+          const url = await getDownloadURL(storageRef)
+          await updateDoc(productRef, {
+            imagePaths: [path],
+            imageUrls: [url],
+            updatedAt: serverTimestamp(),
+          })
+        } catch (retryErr) {
+          console.error('[campaigns] storage retry failed', retryErr)
+        }
+      })()
+    }
   }
 
   return { productRef, imagePaths, imageUrls, storageWarning }

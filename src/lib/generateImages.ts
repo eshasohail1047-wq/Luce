@@ -1,7 +1,8 @@
-import { requireAuth } from './firebase'
+import { requireIdToken } from './firebase'
 import type { CreativeDirection } from './creativeDirection'
 import type { PhotoStyleId } from './deliverables'
 import { PHOTO_STYLES } from './deliverables'
+import { compressImageDataUrl } from './localDemoCampaign'
 
 export type ImageAssetKind = PhotoStyleId | 'ad_creative' | 'product_image' | 'lifestyle_image' | 'promo_creative'
 
@@ -47,12 +48,15 @@ export type GenerateImagesResponse = {
 export async function requestGenerateImages(
   input: GenerateImagesRequest,
 ): Promise<GenerateImagesResponse> {
-  const user = requireAuth().currentUser
-  if (!user) {
-    throw new Error('Sign in required to generate images.')
-  }
+  const token = await requireIdToken()
+  // Shrink data-URL payloads so OpenRouter/Muse requests don't fail silently
+  const productImage = input.productImage?.startsWith('data:image/')
+    ? await compressImageDataUrl(input.productImage, 1024, 0.8)
+    : input.productImage
+  const referenceImage = input.referenceImage?.startsWith('data:image/')
+    ? await compressImageDataUrl(input.referenceImage, 1024, 0.8)
+    : input.referenceImage
 
-  const token = await user.getIdToken()
   const res = await fetch('/api/generate-images', {
     method: 'POST',
     headers: {
@@ -61,8 +65,8 @@ export async function requestGenerateImages(
     },
     body: JSON.stringify({
       productName: input.productName,
-      productImage: input.productImage,
-      referenceImage: input.referenceImage,
+      productImage,
+      referenceImage,
       creativeDirection: input.creativeDirection,
       assets: input.assets,
       recreateNote: input.recreateNote,

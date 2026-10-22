@@ -86,13 +86,8 @@ export async function generateMuseImage(
     n: 1,
     response_format: 'b64_json',
     output_format: 'png',
-    size: input.size || '1024x1536',
+    size: input.size || '1024x1280',
     reasoning_strength: 'low',
-    tool_enablement: {
-      enable_image_search: false,
-      enable_web_search: false,
-      enable_shell: false,
-    },
   }
 
   if (useEdit) {

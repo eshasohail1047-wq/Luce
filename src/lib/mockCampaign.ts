@@ -156,9 +156,13 @@ function pickImage(
 ): string | undefined {
   // Never swap the user's product for stock demo perfume / lifestyle stills.
   // Demo packs show the uploaded product until real AI replaces the frame.
-  if (productImageUrl) return productImageUrl
-  const pool = IMAGE_BY_ASSET[assetType] || ['/images/output-visuals.jpg']
-  return pool[(Math.max(version, 1) - 1) % pool.length]
+  if (productImageUrl && !productImageUrl.startsWith('/images/')) {
+    return productImageUrl
+  }
+  // No real product photo → leave empty (UI shows missing state). Never invent a jar.
+  void assetType
+  void version
+  return undefined
 }
 
 function buildOne(

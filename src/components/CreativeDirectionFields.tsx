@@ -86,7 +86,7 @@ export default function CreativeDirectionFields({
               ? 'Optional vibe clip — your product photo is the main input. We animate that product into each format you pick.'
               : isVideoRef
                 ? 'Optional — a short clip of the vibe you want (pace, framing, energy). Your product photo stays the packaging source of truth.'
-                : 'Optional — a mood or style pic for the shoot (lighting, scene, vibe). Your product photo stays the packaging source of truth.'}
+                : 'Product = packaging. Reference = look/mood. Format = shot type (packshot, flatlay, window…). Results blend all three.'}
           </p>
         </div>
       </div>

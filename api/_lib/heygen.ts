@@ -114,6 +114,7 @@ export async function generateHeyGenVideo(
       prompt_enhancement: 'quality',
       duration,
       resolution,
+      aspect_ratio: aspectRatio,
       image: toAsset(primary),
     }
   } else {

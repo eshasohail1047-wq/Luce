@@ -53,6 +53,21 @@ export function requireAuth(): Auth {
   return auth
 }
 
+/**
+ * Wait for Firebase Auth to finish restoring the session, then return a
+ * fresh ID token. Fixes "Sign in required" during generate when the UI
+ * already shows a signed-in user but currentUser was still null / stale.
+ */
+export async function requireIdToken(): Promise<string> {
+  const a = requireAuth()
+  await a.authStateReady()
+  const user = a.currentUser
+  if (!user) {
+    throw new Error('Sign in required. Refresh the page and sign in again.')
+  }
+  return user.getIdToken(/* forceRefresh */ true)
+}
+
 export function requireDb(): Firestore {
   if (!db) {
     throw new Error(

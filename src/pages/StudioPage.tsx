@@ -46,10 +46,13 @@ import {
   isLocalCampaignId,
   newLocalId,
   saveLocalCampaign,
-  stashCampaignImage,
+  loadLocalCampaign,
+  stashCampaignImageSafe,
+  loadStashedCampaignImage,
   stashCampaignOutputs,
-  stashCampaignRefImage,
+  stashCampaignRefImageSafe,
   stashCampaignVideoDurations,
+  compressImageDataUrl,
   updateLocalCampaign,
   withTimeout,
 } from '../lib/localDemoCampaign'
@@ -60,6 +63,7 @@ import {
 import {
   extractVideoFrameDataUrl,
   isVideoAssetKind,
+  playableVideoUrl,
   requestGenerateVideos,
 } from '../lib/generateVideos'
 import { recreateMockOutput, type MockOutput } from '../lib/mockCampaign'
@@ -515,12 +519,12 @@ export default function StudioPage() {
           recreateNote: directionNote || undefined,
           durationSeconds,
         })
-        const generated = ai.assets[0]
-        if (generated?.videoDataUrl) {
+        const clipUrl = playableVideoUrl(ai.assets[0])
+        if (clipUrl) {
           next = {
             ...next,
             kind: 'video',
-            videoUrl: generated.videoDataUrl,
+            videoUrl: clipUrl,
             imageUrl: productPhoto || next.imageUrl,
             durationSeconds,
             note: directionNote
@@ -531,19 +535,17 @@ export default function StudioPage() {
           throw new Error('Video model returned no clip for this format.')
         }
       } catch (err) {
+        const failReason =
+          err instanceof Error ? err.message : 'AI video unavailable'
         console.warn('[Studio] AI video recreate failed — keeping product still', err)
         next = {
           ...next,
           kind: 'video',
           videoUrl: undefined,
           imageUrl: productPhoto || next.imageUrl,
-          note: 'Kept your product still — AI video failed (no demo clip)',
+          note: `AI video failed — ${failReason}`,
         }
-        setWarning(
-          err instanceof Error
-            ? `${err.message} Your product still was kept (no demo clip).`
-            : 'AI video unavailable — your product still was kept.',
-        )
+        setWarning(`${failReason} Your product still was kept (no demo clip).`)
       }
     }
     const nextOutputs = outputs.map((o, i) => (i === index ? next : o))
@@ -636,7 +638,9 @@ export default function StudioPage() {
 
     let imageDataUrl: string | undefined
     try {
-      if (imageFile) imageDataUrl = await fileToDataUrl(imageFile)
+      if (imageFile) {
+        imageDataUrl = await compressImageDataUrl(await fileToDataUrl(imageFile))
+      }
     } catch {
       /* optional */
     }
@@ -688,10 +692,12 @@ export default function StudioPage() {
             styleTheme: styleTheme || undefined,
           },
         }),
-        12_000,
+        45_000,
         'create-studio',
       )
-      if (imageDataUrl) stashCampaignImage(result.campaignId, imageDataUrl)
+      const cloudImage = result.imageUrls?.[0] || imageDataUrl
+      if (imageDataUrl) await stashCampaignImageSafe(result.campaignId, imageDataUrl)
+      else if (cloudImage) await stashCampaignImageSafe(result.campaignId, cloudImage)
       if (kind === 'videos') {
         stashCampaignVideoDurations(
           result.campaignId,
@@ -701,23 +707,43 @@ export default function StudioPage() {
           >,
         )
       }
+      let refDataUrl: string | undefined
       if (referenceFile) {
         try {
-          stashCampaignRefImage(result.campaignId, await fileToDataUrl(referenceFile))
+          refDataUrl = await stashCampaignRefImageSafe(
+            result.campaignId,
+            await fileToDataUrl(referenceFile),
+          )
         } catch {
           /* optional */
         }
       }
       // Reserve the free image try when the project is started
       if (isFreeTry) await markFreeImageUsed()
-      navigate(`/app/campaigns/${result.campaignId}`, { replace: true })
+      navigate(`/app/campaigns/${result.campaignId}`, {
+        replace: true,
+        state: {
+          ...(imageDataUrl || cloudImage
+            ? { productImage: imageDataUrl || cloudImage }
+            : {}),
+          ...(refDataUrl ? { referenceImage: refDataUrl } : {}),
+        },
+      })
     } catch (err) {
       console.warn('[Studio] falling back to local demo project', err)
       try {
         const id = newLocalId('studio')
         const titleSuffix =
           kind === 'photos' ? 'Photos' : kind === 'videos' ? 'Videos' : 'Ads'
-        const imageUrl = imageDataUrl || previewUrl || undefined
+        // Compress first; never put the full data URL into the campaign JSON
+        // Do not use blob: previewUrl — it dies after navigation
+        let imageUrl = imageDataUrl || undefined
+        if (!imageUrl && imageFile) {
+          imageUrl = await compressImageDataUrl(await fileToDataUrl(imageFile))
+        }
+        if (imageUrl?.startsWith('data:image/')) {
+          imageUrl = await compressImageDataUrl(imageUrl)
+        }
         const syncedDurations =
           kind === 'videos'
             ? (syncDurationsToQuantities(videoQuantities, videoDurations) as Record<
@@ -725,7 +751,23 @@ export default function StudioPage() {
                 number
               >)
             : undefined
-        saveLocalCampaign({
+        // Never stash blob: preview URLs — they die after navigation
+        if (imageUrl?.startsWith('blob:')) {
+          throw new Error(
+            'Product photo did not finish loading. Re-select the image and try again.',
+          )
+        }
+        if (imageUrl) {
+          await stashCampaignImageSafe(id, imageUrl)
+          if (!loadStashedCampaignImage(id)) {
+            throw new Error(
+              'Could not keep your product photo in the browser. Try a smaller JPG, then create again.',
+            )
+          }
+        } else if (kind === 'photos' || kind === 'videos' || kind === 'ads') {
+          throw new Error('Add a product photo before creating this project.')
+        }
+        const saved = saveLocalCampaign({
           id,
           title: `${displayName} — ${titleSuffix}`,
           status: 'product_confirmed',
@@ -738,27 +780,46 @@ export default function StudioPage() {
           selectedAssets,
           includeStrategy: false,
           tryFree: isFreeTry,
-          imageUrl,
+          // HTTPS only inline; data URLs live in image stash
+          imageUrl: imageUrl?.startsWith('data:') ? undefined : imageUrl,
           ...(syncedDurations ? { videoDurations: syncedDurations } : {}),
           createdAt: Date.now(),
         })
-        if (imageUrl) stashCampaignImage(id, imageUrl)
+        if (!saved || !loadLocalCampaign(id)) {
+          throw new Error(
+            'Could not save this project in the browser. Try a smaller photo, or check that cloud create is working.',
+          )
+        }
         if (syncedDurations) stashCampaignVideoDurations(id, syncedDurations)
+        let refDataUrl: string | undefined
         if (referenceFile) {
           try {
-            stashCampaignRefImage(id, await fileToDataUrl(referenceFile))
+            refDataUrl = await stashCampaignRefImageSafe(
+              id,
+              await fileToDataUrl(referenceFile),
+            )
           } catch {
             /* optional */
           }
         }
         if (isFreeTry) await markFreeImageUsed()
-        navigate(`/app/campaigns/${id}`, { replace: true })
+        navigate(`/app/campaigns/${id}`, {
+          replace: true,
+          state: {
+            ...(imageUrl ? { productImage: imageUrl } : {}),
+            ...(refDataUrl ? { referenceImage: refDataUrl } : {}),
+          },
+        })
       } catch (localErr) {
         console.error(localErr)
+        const cloudHint =
+          err instanceof Error && err.message
+            ? ` Cloud error: ${err.message}`
+            : ''
         setError(
           friendlyFirestoreError(
             localErr,
-            'Could not start this project. Try again or use a smaller photo.',
+            `Could not start this project.${cloudHint} Try again with a smaller photo.`,
           ),
         )
         setBusy(false)
