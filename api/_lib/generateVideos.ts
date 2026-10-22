@@ -1,13 +1,13 @@
-import { generateImageWithProviders } from './generateImages'
-import { generateHeyGenVideo, getHeyGenApiKey } from './heygen'
+import { generateImageWithProviders } from './generateImages.js'
+import { generateHeyGenVideo, getHeyGenApiKey } from './heygen.js'
 import {
   buildLuceSpec,
   renderVideoKeyframePrompt,
   renderVideoMotionPrompt,
-} from './luceGeneration'
-import { generateVideo, getOpenRouterApiKey } from './openRouter'
-import { prepareFrameImage } from './prepareImage'
-import { getAiProviderStatus } from './providers'
+} from './luceGeneration.js'
+import { generateVideo, getOpenRouterApiKey } from './openRouter.js'
+import { prepareFrameImage } from './prepareImage.js'
+import { getAiProviderStatus } from './providers.js'
 
 async function generateVideoWithProviders(input: {
   prompt: string

@@ -3,7 +3,7 @@ import {
   EMAIL_RE,
   escapeHtml,
   getResendFrom,
-} from './resendClient'
+} from './resendClient.js'
 
 export type EarlyAccessResult =
   | { status: 200; body: { ok: true; id: string | null } }

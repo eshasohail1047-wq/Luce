@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { fetchOpenRouterVideoContent } from '../_lib/openRouter'
+import { fetchOpenRouterVideoContent } from '../_lib/openRouter.js'
 
 export const config = {
   maxDuration: 60,

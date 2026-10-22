@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { sendEarlyAccessEmail } from './_lib/earlyAccess'
+import { sendEarlyAccessEmail } from './_lib/earlyAccess.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {

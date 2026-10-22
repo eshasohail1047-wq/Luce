@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { authFailureMessage, verifyBearerToken } from './_lib/firebaseAdmin'
+import { authFailureMessage, verifyBearerToken } from './_lib/firebaseAdmin.js'
 import {
   generateCampaignVideos,
   VIDEO_ASSET_KINDS,
   type VideoAssetKind,
-} from './_lib/generateVideos'
+} from './_lib/generateVideos.js'
 
 export const config = {
   maxDuration: 300,
@@ -16,6 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
+  try {
   const decoded = await verifyBearerToken(req.headers.authorization)
   if (!decoded?.uid) {
     return res
@@ -80,4 +81,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   })
 
   return res.status(result.status).json(result.body)
+  } catch (err) {
+    console.error('[generate-videos] handler failed', err)
+    return res.status(500).json({
+      error:
+        err instanceof Error && err.message
+          ? err.message
+          : 'Video generation failed on server',
+    })
+  }
 }

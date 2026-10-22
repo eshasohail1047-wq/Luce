@@ -1,11 +1,24 @@
-import sharp from 'sharp'
-
 const MAX_EDGE = 1280
 const JPEG_QUALITY = 82
 /** FLUX / BFL reject reference images smaller than 256×256 */
 const MIN_EDGE = 256
 /** ~1.2MB base64 payload — OpenRouter frame_images choke on multi‑MB data URLs */
 const MAX_DATA_URL_CHARS = 1_600_000
+
+type SharpFactory = typeof import('sharp').default
+
+async function loadSharp(): Promise<SharpFactory | null> {
+  try {
+    const mod = await import('sharp')
+    return mod.default
+  } catch (err) {
+    console.warn(
+      '[prepare-image] sharp unavailable — passing images through unchanged',
+      err instanceof Error ? err.message : err,
+    )
+    return null
+  }
+}
 
 async function bufferFromImageUrl(url: string): Promise<Buffer | null> {
   const trimmed = url.trim()
@@ -33,6 +46,9 @@ export async function prepareReferenceImage(url: string): Promise<string> {
   const trimmed = url.trim()
   if (!trimmed) return trimmed
 
+  const sharp = await loadSharp()
+  if (!sharp) return trimmed
+
   try {
     const input = await bufferFromImageUrl(trimmed)
     if (!input) return trimmed
@@ -44,13 +60,11 @@ export async function prepareReferenceImage(url: string): Promise<string> {
     const tooLarge = w > MAX_EDGE || h > MAX_EDGE
 
     if (!tooSmall && !tooLarge && trimmed.startsWith('data:image/')) {
-      // Already valid size — still re-encode only if payload is huge
       if (trimmed.length <= MAX_DATA_URL_CHARS * 0.55) return trimmed
     }
 
     let pipeline = sharp(input, { failOn: 'none' }).rotate()
     if (tooSmall) {
-      // fit outside → both edges ≥ MIN_EDGE, aspect preserved
       pipeline = pipeline.resize({
         width: MIN_EDGE,
         height: MIN_EDGE,
@@ -94,8 +108,10 @@ export async function prepareFrameImage(url: string): Promise<string> {
   if (/^https?:\/\//i.test(trimmed)) return trimmed
   if (!trimmed.startsWith('data:image/')) return trimmed
 
-  // Already small enough — skip work
   if (trimmed.length <= MAX_DATA_URL_CHARS * 0.55) return trimmed
+
+  const sharp = await loadSharp()
+  if (!sharp) return trimmed
 
   const comma = trimmed.indexOf(',')
   if (comma < 0) return trimmed

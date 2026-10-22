@@ -5,7 +5,7 @@ import {
   escapeHtml,
   getAppUrl,
   getResendFrom,
-} from './resendClient'
+} from './resendClient.js'
 
 export type TransactionalType =
   | 'welcome'

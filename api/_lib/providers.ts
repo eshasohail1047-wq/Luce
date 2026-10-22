@@ -5,13 +5,13 @@
  * Videos: HeyGen direct → OpenRouter (heygen/heygen-video-1)
  */
 
-import { getHeyGenApiKey } from './heygen'
-import { getMuseApiKey, getMuseImageModel } from './muse'
+import { getHeyGenApiKey } from './heygen.js'
+import { getMuseApiKey, getMuseImageModel } from './muse.js'
 import {
   getOpenRouterApiKey,
   getOpenRouterImageModel,
   getOpenRouterVideoModel,
-} from './openRouter'
+} from './openRouter.js'
 
 export type AiProviderStatus = {
   images: {

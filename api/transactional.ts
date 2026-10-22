@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { verifyBearerToken } from './_lib/firebaseAdmin'
+import { verifyBearerToken } from './_lib/firebaseAdmin.js'
 import {
   sendTransactionalEmail,
   type TransactionalType,
-} from './_lib/transactional'
+} from './_lib/transactional.js'
 
 const ALLOWED: TransactionalType[] = [
   'welcome',

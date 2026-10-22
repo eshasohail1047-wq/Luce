@@ -1,7 +1,7 @@
 import { getAuth } from 'firebase-admin/auth'
 import { Resend } from 'resend'
-import { getAdminApp } from './firebaseAdmin'
-import { EMAIL_RE, escapeHtml } from './resendClient'
+import { getAdminApp } from './firebaseAdmin.js'
+import { EMAIL_RE, escapeHtml } from './resendClient.js'
 
 export type PasswordResetResult =
   | {

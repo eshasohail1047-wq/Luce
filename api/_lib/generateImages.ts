@@ -1,12 +1,12 @@
-import { generateMuseImage, getMuseApiKey } from './muse'
+import { generateMuseImage, getMuseApiKey } from './muse.js'
 import {
   buildLuceSpec,
   formatForImageAsset,
   renderImagePrompt,
-} from './luceGeneration'
-import { generateImage, getOpenRouterApiKey, getOpenRouterImageModel } from './openRouter'
-import { prepareReferenceImage } from './prepareImage'
-import { getAiProviderStatus, museSizeForAspect } from './providers'
+} from './luceGeneration.js'
+import { generateImage, getOpenRouterApiKey, getOpenRouterImageModel } from './openRouter.js'
+import { prepareReferenceImage } from './prepareImage.js'
+import { getAiProviderStatus, museSizeForAspect } from './providers.js'
 
 /**
  * Image generation ~$0.03–0.04/image (Nano Banana / Gemini 2.5 Flash Image).
