@@ -9,6 +9,7 @@ import { getHeyGenApiKey } from './heygen.js'
 import { getMuseApiKey, getMuseImageModel } from './muse.js'
 import {
   getOpenRouterApiKey,
+  getOpenRouterChatModel,
   getOpenRouterImageModel,
   getOpenRouterVideoModel,
 } from './openRouter.js'
@@ -25,6 +26,11 @@ export type AiProviderStatus = {
     heygenConfigured: boolean
     openRouterConfigured: boolean
     openRouterModel: string
+  }
+  copy: {
+    primary: 'openrouter' | 'none'
+    openRouterConfigured: boolean
+    chatModel: string
   }
   summary: string
 }
@@ -70,6 +76,17 @@ export function getAiProviderStatus(): AiProviderStatus {
     bits.push('Videos: NOT CONFIGURED')
   }
 
+  const copyPrimary: AiProviderStatus['copy']['primary'] = openRouterConfigured
+    ? 'openrouter'
+    : 'none'
+  if (copyPrimary === 'openrouter') {
+    bits.push(
+      `Copy agent (free): ${getOpenRouterChatModel()} via OpenRouter`,
+    )
+  } else {
+    bits.push('Copy agent: NOT CONFIGURED — set OPENROUTER_API_KEY')
+  }
+
   return {
     images: {
       primary: imagesPrimary,
@@ -82,6 +99,11 @@ export function getAiProviderStatus(): AiProviderStatus {
       heygenConfigured,
       openRouterConfigured,
       openRouterModel: getOpenRouterVideoModel(),
+    },
+    copy: {
+      primary: copyPrimary,
+      openRouterConfigured,
+      chatModel: getOpenRouterChatModel(),
     },
     summary: bits.join(' · '),
   }

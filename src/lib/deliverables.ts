@@ -417,6 +417,14 @@ export function normalizeVideoStyleId(id: string): VideoStyleId | null {
   return LEGACY_VIDEO[id] ?? null
 }
 
+const COPY_LABELS: Record<string, string> = {
+  caption: 'Caption',
+  hook: 'Hook',
+  cta: 'CTA',
+  hashtags: 'Hashtags',
+  ad_copy: 'Ad copy',
+}
+
 export function formatLabel(assetType: string): string | undefined {
   const photo = PHOTO_STYLES.find((s) => s.id === assetType)
   if (photo) return photo.label
@@ -424,6 +432,7 @@ export function formatLabel(assetType: string): string | undefined {
   if (video) return video.label
   const ad = AD_STYLES.find((s) => s.id === assetType)
   if (ad) return ad.label
+  if (COPY_LABELS[assetType]) return COPY_LABELS[assetType]
   const legacyPhoto = LEGACY_PHOTO[assetType]
   if (legacyPhoto) return PHOTO_STYLES.find((s) => s.id === legacyPhoto)?.label
   const legacyVideo = LEGACY_VIDEO[assetType]

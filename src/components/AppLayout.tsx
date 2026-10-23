@@ -11,7 +11,7 @@ const MAIN_NAV = [
   { to: '/app', label: 'Dashboard', end: true, icon: 'home' as const },
   { to: '/app/products', label: 'Products', end: false, icon: 'box' as const },
   { to: '/app/campaigns', label: 'Campaigns', end: false, icon: 'layers' as const },
-  { to: '/app/library', label: 'Library', end: false, icon: 'folder' as const },
+  { to: '/app/library', label: 'Saved', end: false, icon: 'folder' as const },
 ]
 
 const CREATE_NAV = [

@@ -34,7 +34,9 @@ import {
   stashCampaignImage,
   stashCampaignImageSafe,
   stashCampaignRefImageSafe,
+  stashCampaignCoverSafe,
   stashCampaignOutputs,
+  stashProductImageSafe,
   updateLocalCampaign,
 } from '../lib/localDemoCampaign'
 import {
@@ -48,6 +50,11 @@ import {
   requestGenerateImages,
   type ImageAssetKind,
 } from '../lib/generateImages'
+import {
+  isCopyAssetKind,
+  requestGenerateCopy,
+  type CopyAssetKind,
+} from '../lib/generateCopy'
 import {
   extractVideoFrameDataUrl,
   isVideoAssetKind,
@@ -65,6 +72,11 @@ import {
   saveRecreateSession,
   studioKindForAsset,
 } from '../lib/recreateSession'
+import {
+  isAssetSaved,
+  saveAssetToLibrary,
+  unsaveAsset,
+} from '../lib/savedAssets'
 import { statusLabel, studioPathFor } from '../lib/workspaceUi'
 
 type CampaignView = {
@@ -157,6 +169,7 @@ export default function CampaignDetailPage() {
     const s = location.state as {
       productImage?: string
       referenceImage?: string
+      autoGenerate?: boolean
     } | null
     const img = s?.productImage?.trim()
     return img && (img.startsWith('data:image/') || img.startsWith('http'))
@@ -170,6 +183,18 @@ export default function CampaignDetailPage() {
       ? img
       : undefined
   })()
+  /** Captured once on mount — location.state is cleared after product stash. */
+  const [fromGenerateFlow] = useState(() =>
+    Boolean(
+      (location.state as { autoGenerate?: boolean } | null)?.autoGenerate,
+    ),
+  )
+  const [kickoffPending, setKickoffPending] = useState(() =>
+    Boolean(
+      (location.state as { autoGenerate?: boolean } | null)?.autoGenerate,
+    ),
+  )
+  const autoGenerateStartedRef = useRef(false)
   const [campaign, setCampaign] = useState<CampaignView | null>(null)
   /** Load failures only — blank empty-state when campaign is missing. */
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -185,7 +210,10 @@ export default function CampaignDetailPage() {
   const [paywallReason, setPaywallReason] = useState<string | undefined>()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [previewSaved, setPreviewSaved] = useState(false)
+  const [savingAsset, setSavingAsset] = useState(false)
   const productFileRef = useRef<HTMLInputElement>(null)
+  const resultsTopRef = useRef<HTMLElement | null>(null)
 
   function generateActionForCampaign(): GenerateAction {
     if (!campaign) return 'campaign'
@@ -244,7 +272,7 @@ export default function CampaignDetailPage() {
             /* optional */
           }
         }
-        if (navProductImage || navReferenceImage) {
+        if (navProductImage || navReferenceImage || fromGenerateFlow) {
           navigate(location.pathname, { replace: true, state: null })
         }
 
@@ -353,6 +381,15 @@ export default function CampaignDetailPage() {
                 )
               : undefined,
           })
+          // Seed list/grid covers from this pack or product still
+          if (stashedOutputs?.length) {
+            stashCampaignOutputs(campaignId, stashedOutputs)
+          } else if (imageUrl) {
+            void stashCampaignCoverSafe(campaignId, imageUrl)
+          }
+          if (imageUrl && productId) {
+            void stashProductImageSafe(productId, imageUrl)
+          }
         }
 
         // Best-effort: remove legacy corrupt outputs fields so future status syncs succeed.
@@ -381,6 +418,7 @@ export default function CampaignDetailPage() {
     loading,
     navProductImage,
     navReferenceImage,
+    fromGenerateFlow,
     location.pathname,
     navigate,
   ])
@@ -407,6 +445,25 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     if (!previewId && outputs[0]) setPreviewId(outputs[0].id)
   }, [outputs, previewId])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      if (!user || !campaignId || !preview?.id) {
+        setPreviewSaved(false)
+        return
+      }
+      try {
+        const saved = await isAssetSaved(user.uid, campaignId, preview.id)
+        if (!cancelled) setPreviewSaved(saved)
+      } catch {
+        if (!cancelled) setPreviewSaved(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user, campaignId, preview?.id])
 
   async function persistStatus(
     status: string,
@@ -712,7 +769,52 @@ export default function CampaignDetailPage() {
         }
       }
 
-      if (imageOutputs.length === 0 && videoOutputs.length === 0) {
+      const copyOutputs = nextOutputs.filter((o) => isCopyAssetKind(o.assetType))
+      if (copyOutputs.length > 0) {
+        setProgress(92)
+        setActionMsg('Copy agent writing captions, hooks, and ads…')
+        try {
+          const kinds = [
+            ...new Set(
+              copyOutputs
+                .map((o) => o.assetType)
+                .filter((t): t is CopyAssetKind => isCopyAssetKind(t)),
+            ),
+          ]
+          const ai = await requestGenerateCopy({
+            productName: campaign.productName,
+            creativeDirection: campaign.creativeDirection,
+            assets: kinds,
+          })
+          for (const generated of ai.assets) {
+            nextOutputs = nextOutputs.map((o) =>
+              o.assetType === generated.type && o.kind === 'copy'
+                ? {
+                    ...o,
+                    text: generated.text,
+                    note: 'AI-generated by LUCE Copy Agent',
+                  }
+                : o,
+            )
+          }
+          if (ai.partialErrors?.length) {
+            const copyMsg = `Some copy pieces failed (${ai.partialErrors.length}); demo text kept for those.`
+            aiWarning = aiWarning ? `${aiWarning} ${copyMsg}` : copyMsg
+          }
+        } catch (err) {
+          console.warn('[generate] copy agent failed', err)
+          const failReason =
+            err instanceof Error ? err.message : 'Copy AI unavailable'
+          const copyMsg = `${failReason} — demo captions kept.`
+          aiWarning = aiWarning ? `${aiWarning} ${copyMsg}` : copyMsg
+        }
+      }
+
+      if (
+        imageOutputs.length === 0 &&
+        videoOutputs.length === 0 &&
+        copyOutputs.length === 0
+      ) {
         setProgress(90)
         await new Promise((r) => setTimeout(r, 200))
       }
@@ -754,15 +856,26 @@ export default function CampaignDetailPage() {
           Boolean(o.videoUrl) &&
           o.note?.includes('AI-generated'),
       )
+      const usedAiCopy = nextOutputs.some(
+        (o) =>
+          isCopyAssetKind(o.assetType) &&
+          Boolean(o.text) &&
+          o.note?.includes('AI-generated'),
+      )
+      const usedAnyAi = usedAiImages || usedAiVideos || usedAiCopy
       setActionMsg(
-        usedAiImages || usedAiVideos
+        usedAnyAi
           ? aiWarning
             ? `Pack ready with AI. ${aiWarning}`
-            : usedAiImages && usedAiVideos
-              ? 'Pack ready — AI images and videos generated.'
-              : usedAiVideos
-                ? 'Pack ready — AI videos generated (reference preferred, then prompt).'
-                : 'Pack ready — AI product images generated.'
+            : [
+                usedAiImages ? 'images' : null,
+                usedAiVideos ? 'videos' : null,
+                usedAiCopy ? 'captions & ads copy' : null,
+              ]
+                .filter(Boolean)
+                .join(', ')
+                .replace(/^/, 'Pack ready — AI ')
+                .concat(' generated.')
           : aiWarning
             ? `Demo pack ready. ${aiWarning}`
             : 'Demo campaign pack ready — preview below.',
@@ -848,6 +961,41 @@ export default function CampaignDetailPage() {
     }
   }
 
+  // Studio / New campaign "Generate" lands here with autoGenerate — run once, no second click.
+  useEffect(() => {
+    if (!fromGenerateFlow || !campaign || fetching || actionBusy) return
+    if (autoGenerateStartedRef.current) return
+    const ready =
+      campaign.status === 'product_confirmed' ||
+      campaign.status === 'draft' ||
+      campaign.status === 'product_pending'
+    if (!ready) return
+    const photo =
+      (campaign.imageUrl && !campaign.imageUrl.startsWith('/images/')
+        ? campaign.imageUrl
+        : undefined) ||
+      (campaignId ? loadStashedCampaignImage(campaignId) : undefined)
+    if (!photo) return
+    autoGenerateStartedRef.current = true
+    setKickoffPending(false)
+    void runMockGenerate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot kickoff after create
+  }, [fromGenerateFlow, campaign, fetching, actionBusy, campaignId])
+
+  useEffect(() => {
+    if (
+      !campaign ||
+      (campaign.status !== 'ready' && campaign.status !== 'exported')
+    ) {
+      return
+    }
+    if (!outputs.length) return
+    const t = window.setTimeout(() => {
+      resultsTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 80)
+    return () => window.clearTimeout(t)
+  }, [campaign?.status, outputs.length])
+
   async function runExport() {
     if (!campaignId || !campaign || outputs.length === 0) return
     setActionBusy(true)
@@ -883,6 +1031,65 @@ export default function CampaignDetailPage() {
     } catch (err) {
       console.error(err)
       setError(friendlyFirestoreError(err, 'Could not export asset.'))
+    }
+  }
+
+  async function runSaveOne(item: MockOutput) {
+    if (!user || !campaignId || !campaign) return
+    setSavingAsset(true)
+    setError(null)
+    setActionMsg(null)
+    try {
+      if (previewSaved) {
+        await unsaveAsset(user.uid, campaignId, item.id)
+        setPreviewSaved(false)
+        setActionMsg(`Removed ${item.label} from Saved.`)
+      } else {
+        await saveAssetToLibrary({
+          userId: user.uid,
+          campaignId,
+          productName: campaign.productName,
+          output: item,
+        })
+        setPreviewSaved(true)
+        setActionMsg(`Saved ${item.label}. Find it under Saved.`)
+      }
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Could not update Saved.')
+    } finally {
+      setSavingAsset(false)
+    }
+  }
+
+  async function runSaveAll() {
+    if (!user || !campaignId || !campaign || outputs.length === 0) return
+    setActionBusy(true)
+    setError(null)
+    setActionMsg(null)
+    try {
+      let n = 0
+      for (const item of outputs) {
+        if (!item.imageUrl && !item.videoUrl && !item.text) continue
+        await saveAssetToLibrary({
+          userId: user.uid,
+          campaignId,
+          productName: campaign.productName,
+          output: item,
+        })
+        n += 1
+      }
+      if (previewId) setPreviewSaved(true)
+      setActionMsg(
+        n
+          ? `Saved ${n} creative${n === 1 ? '' : 's'} to Saved.`
+          : 'Nothing to save in this pack.',
+      )
+    } catch (err) {
+      console.error(err)
+      setError(err instanceof Error ? err.message : 'Could not save pack.')
+    } finally {
+      setActionBusy(false)
     }
   }
 
@@ -1053,6 +1260,103 @@ export default function CampaignDetailPage() {
     (campaign.status === 'ready' ||
       campaign.status === 'exported' ||
       (campaign.status === 'generating' && outputs.length > 0))
+  const isGenerating = Boolean(
+    campaign &&
+      (campaign.status === 'generating' ||
+        (kickoffPending && readyToGenerate) ||
+        (fromGenerateFlow && actionBusy && readyToGenerate)),
+  )
+  const resultsFocus =
+    fromGenerateFlow ||
+    Boolean(
+      campaign &&
+        (campaign.status === 'generating' ||
+          campaign.status === 'ready' ||
+          campaign.status === 'exported'),
+    )
+
+  const resultsActions = campaign ? (
+    <div className="results-toolbar-actions">
+      {(campaign.status === 'ready' || campaign.status === 'exported') &&
+      outputs.length > 0 ? (
+        <>
+          <button
+            type="button"
+            className="btn btn-grad"
+            disabled={actionBusy}
+            onClick={() => void runExport()}
+          >
+            {actionBusy ? 'Exporting…' : 'Export pack'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={actionBusy}
+            onClick={() => void runSaveAll()}
+          >
+            Save all
+          </button>
+        </>
+      ) : null}
+      {(campaign.status === 'ready' || campaign.status === 'exported') &&
+      hasProductPhoto ? (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={actionBusy}
+          onClick={() => void runMockGenerate()}
+        >
+          {actionBusy ? 'Generating…' : 'Generate again'}
+        </button>
+      ) : null}
+      {campaign.status === 'generating' && !actionBusy ? (
+        <button
+          type="button"
+          className="btn btn-grad"
+          disabled={actionBusy}
+          onClick={() => void runMockGenerate()}
+        >
+          Resume
+        </button>
+      ) : null}
+      <Link className="btn btn-ghost" to={createMorePath}>
+        Create another
+      </Link>
+      <Link className="btn btn-ghost" to="/app/library">
+        Saved
+      </Link>
+      {confirmDelete ? (
+        <span className="campaign-delete-inline">
+          <span className="dash-campaign-confirm-label">Delete this project?</span>
+          <button
+            type="button"
+            className="settings-logout-btn"
+            disabled={deleting || actionBusy}
+            onClick={() => void handleDeleteCampaign()}
+          >
+            {deleting ? 'Deleting…' : 'Confirm delete'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={deleting}
+            onClick={() => setConfirmDelete(false)}
+          >
+            Cancel
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-ghost campaign-delete-trigger"
+          disabled={actionBusy || deleting}
+          onClick={() => setConfirmDelete(true)}
+        >
+          Delete
+        </button>
+      )}
+    </div>
+  ) : null
 
   return (
     <AppLayout>
@@ -1070,7 +1374,9 @@ export default function CampaignDetailPage() {
         reason={paywallReason}
         onClose={() => setPaywallOpen(false)}
       />
-      <main className="app-main campaign-create studio-page campaign-detail">
+      <main
+        className={`app-main campaign-create studio-page campaign-detail${resultsFocus ? ' campaign-results-focus' : ''}`}
+      >
         {!campaign ? (
           <div className="dash-empty">
             <p className="auth-error">
@@ -1080,6 +1386,296 @@ export default function CampaignDetailPage() {
               Back to campaigns
             </Link>
           </div>
+        ) : resultsFocus ? (
+          <>
+            <header className="results-hero" ref={resultsTopRef}>
+              <div className="results-hero-copy">
+                <p className="results-hero-kicker">
+                  {campaign.mode === 'studio' ? 'Studio results' : 'Campaign results'}
+                  {campaign.tryFree ? ' · Free trial' : ''}
+                </p>
+                <h1 id="results-title">
+                  {isGenerating
+                    ? 'Creating your pack…'
+                    : campaign.status === 'exported'
+                      ? 'Pack exported'
+                      : 'Your pack is ready'}
+                </h1>
+                <p className="results-hero-lead">
+                  {isGenerating
+                    ? actionMsg ||
+                      (campaign.studioKind === 'videos'
+                        ? 'Building AI videos from your product — stay on this page.'
+                        : 'Building each format from your product photo — stay on this page.')
+                    : (
+                      <>
+                        Review every asset for <strong>{campaign.productName}</strong>. Export
+                        singles, save favorites, or recreate any look in studio.
+                      </>
+                    )}
+                </p>
+                <div className="results-hero-meta">
+                  <span className={`dash-status status-${campaign.status}`}>
+                    {statusLabel(campaign.status)}
+                  </span>
+                  {outputs.length > 0 ? (
+                    <span className="results-hero-count">
+                      {outputs.length} asset{outputs.length === 1 ? '' : 's'}
+                    </span>
+                  ) : packLabels.length > 0 ? (
+                    <span className="results-hero-count">
+                      {packLabels.length} format{packLabels.length === 1 ? '' : 's'}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="results-hero-product">
+                {productDisplayUrl ? (
+                  <img src={productDisplayUrl} alt={campaign.productName} />
+                ) : (
+                  <div className="results-hero-product-empty">Product</div>
+                )}
+                <span>Source product</span>
+              </div>
+            </header>
+
+            {isGenerating ? (
+              <section className="results-generating" aria-live="polite">
+                <div className="results-generating-orb" aria-hidden="true" />
+                <div className="results-generating-copy">
+                  <h2>
+                    {campaign.studioKind === 'videos'
+                      ? 'Generating videos'
+                      : campaign.studioKind === 'photos'
+                        ? 'Generating images'
+                        : 'Generating pack'}
+                  </h2>
+                  <p>{actionMsg || 'Preparing your formats…'}</p>
+                  <div className="campaign-gen-progress">
+                    <div className="campaign-gen-bar">
+                      <span style={{ width: `${Math.max(progress, 8)}%` }} />
+                    </div>
+                    <p>
+                      {progress < 100
+                        ? `${Math.max(progress, 8)}% complete`
+                        : 'Finishing…'}
+                    </p>
+                  </div>
+                  {packLabels.length > 0 ? (
+                    <ul className="results-generating-formats">
+                      {packLabels.slice(0, 8).map((label) => (
+                        <li key={label}>{label}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+                {error ? (
+                  <p className="auth-error" role="alert">
+                    {error}
+                  </p>
+                ) : null}
+                {campaign.status === 'generating' && !actionBusy ? (
+                  <button
+                    type="button"
+                    className="btn btn-grad"
+                    onClick={() => void runMockGenerate()}
+                  >
+                    Resume generate
+                  </button>
+                ) : null}
+              </section>
+            ) : null}
+
+            {!isGenerating && error ? (
+              <p className="auth-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            {!isGenerating && actionMsg ? (
+              <p className="settings-success" role="status">
+                {actionMsg}
+              </p>
+            ) : null}
+
+            {!isGenerating ? (
+              <div className="results-toolbar">{resultsActions}</div>
+            ) : null}
+
+            {showResults && outputs.length > 0 && !isGenerating ? (
+              <section className="results-section results-section-stage" aria-labelledby="results-title">
+                <div className="results-layout results-layout-stage">
+                  <aside className="results-preview results-preview-stage">
+                    {preview ? (
+                      <>
+                        <p className="results-preview-kicker">
+                          {preview.label}
+                          {(preview.version || 1) > 1 ? ` · v${preview.version}` : ''}
+                        </p>
+                        {preview.kind === 'video' && preview.videoUrl ? (
+                          <div className="results-preview-media results-preview-video">
+                            <video
+                              key={preview.id}
+                              src={preview.videoUrl}
+                              poster={preview.imageUrl}
+                              controls
+                              autoPlay
+                              loop
+                              playsInline
+                            />
+                          </div>
+                        ) : preview.imageUrl ? (
+                          <div className="results-preview-media">
+                            <img src={preview.imageUrl} alt={preview.label} />
+                          </div>
+                        ) : null}
+                        {preview.text ? (
+                          <blockquote className="results-preview-copy">{preview.text}</blockquote>
+                        ) : (
+                          <p className="dash-muted">
+                            {preview.kind === 'video'
+                              ? 'Playing your selected video format — recreate for another look.'
+                              : 'Full preview — export, save, or recreate this look.'}
+                          </p>
+                        )}
+                        <p className="results-preview-note">{preview.note}</p>
+                        <div className="results-preview-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost results-preview-recreate"
+                            disabled={actionBusy || savingAsset}
+                            onClick={() => void runExportOne(preview)}
+                          >
+                            Export
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-grad results-preview-recreate"
+                            disabled={actionBusy || savingAsset}
+                            onClick={() => void runSaveOne(preview)}
+                          >
+                            {savingAsset
+                              ? 'Saving…'
+                              : previewSaved
+                                ? 'Unsave'
+                                : 'Save'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost results-preview-recreate"
+                            disabled={actionBusy}
+                            onClick={() => openRecreateInStudio(preview)}
+                          >
+                            {preview.kind === 'copy'
+                              ? 'Recreate copy'
+                              : preview.kind === 'video'
+                                ? 'Recreate video'
+                                : 'Recreate image'}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="dash-muted">Select an asset to preview.</p>
+                    )}
+                  </aside>
+
+                  <div className="results-grid results-grid-stage">
+                    {outputs.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`results-card${previewId === item.id ? ' is-active' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          className="results-card-hit"
+                          onClick={() => setPreviewId(item.id)}
+                        >
+                          <span className="results-card-media">
+                            {item.kind === 'video' && item.videoUrl ? (
+                              <video
+                                src={item.videoUrl}
+                                poster={item.imageUrl}
+                                muted
+                                loop
+                                playsInline
+                                preload="metadata"
+                              />
+                            ) : item.imageUrl ? (
+                              <img src={item.imageUrl} alt="" />
+                            ) : (
+                              <span className="results-card-fallback">
+                                {item.label.slice(0, 1)}
+                              </span>
+                            )}
+                            {item.kind === 'video' ? (
+                              <span className="results-card-badge">Video</span>
+                            ) : null}
+                            {item.kind === 'copy' ? (
+                              <span className="results-card-badge">Copy</span>
+                            ) : null}
+                            {(item.version || 1) > 1 ? (
+                              <span className="results-card-badge results-card-badge-version">
+                                v{item.version}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="results-card-body">
+                            <strong>{item.label}</strong>
+                            <span>{item.note}</span>
+                          </span>
+                        </button>
+                        <div className="results-card-actions">
+                          <button
+                            type="button"
+                            className="results-recreate-btn"
+                            disabled={actionBusy}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void runExportOne(item)
+                            }}
+                          >
+                            Export
+                          </button>
+                          <button
+                            type="button"
+                            className="results-recreate-btn"
+                            disabled={actionBusy}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openRecreateInStudio(item)
+                            }}
+                          >
+                            Recreate
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
+            {!isGenerating &&
+            outputs.length === 0 &&
+            (campaign.status === 'ready' ||
+              campaign.status === 'exported' ||
+              Boolean(readyToGenerate)) ? (
+              <div className="results-empty-pack">
+                <p>
+                  {error
+                    ? 'Generation didn’t finish. Try again when you’re ready.'
+                    : 'No assets in this pack yet.'}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-grad"
+                  disabled={actionBusy || !hasProductPhoto}
+                  onClick={() => void runMockGenerate()}
+                >
+                  {readyToGenerate ? 'Generate pack' : 'Build pack'}
+                </button>
+              </div>
+            ) : null}
+          </>
         ) : (
           <>
             <header
@@ -1227,49 +1823,19 @@ export default function CampaignDetailPage() {
                     : campaign.studioKind === 'photos'
                       ? 'Generate images'
                       : 'Generate pack'
-                  : campaign.status === 'generating'
-                    ? 'Generating…'
-                    : campaign.status === 'ready'
-                      ? 'Review your pack'
-                      : campaign.status === 'exported'
-                        ? 'Exported'
-                        : 'Next'}
+                  : 'Next'}
               </h2>
               <p>
                 {readyToGenerate
                   ? !hasProductPhoto
                     ? 'Upload your product photo above first — AI formats need it as the source of truth.'
-                    : campaign.studioKind === 'videos'
-                      ? 'Each selected video format is generated from your product photo (cinematic, UGC, how-to, etc.). Stay signed in — clips take 1–3 minutes each.'
-                      : campaign.studioKind === 'photos'
-                        ? 'Each selected image format (Moody editorial, packshot, flatlay…) is generated from your product photo. Stay signed in while it runs.'
-                        : 'Generates your pack from your product photo into each format you picked.'
-                  : campaign.status === 'generating'
-                    ? campaign.studioKind === 'videos'
-                      ? 'Building AI videos from your product photo…'
-                      : 'Building your format pack…'
-                    : campaign.status === 'ready'
-                      ? 'Preview each asset, then export the pack to your device.'
-                      : 'Your pack was exported. You can generate again anytime.'}
+                    : 'Generates your pack from your product photo into each format you picked.'
+                  : 'Open studio to create another pack.'}
               </p>
-
-              {campaign.status === 'generating' && progress > 0 ? (
-                <div className="campaign-gen-progress" aria-live="polite">
-                  <div className="campaign-gen-bar">
-                    <span style={{ width: `${progress}%` }} />
-                  </div>
-                  <p>{progress < 100 ? `Generating… ${progress}%` : 'Finishing…'}</p>
-                </div>
-              ) : null}
 
               {error ? (
                 <p className="auth-error" role="alert">
                   {error}
-                </p>
-              ) : null}
-              {actionMsg ? (
-                <p className="settings-success" role="status">
-                  {actionMsg}
                 </p>
               ) : null}
 
@@ -1293,237 +1859,11 @@ export default function CampaignDetailPage() {
                     <span aria-hidden="true">→</span>
                   </button>
                 ) : null}
-                {campaign.status === 'generating' && !actionBusy ? (
-                  <button
-                    type="button"
-                    className="btn btn-grad"
-                    disabled={actionBusy}
-                    onClick={() => void runMockGenerate()}
-                  >
-                    Resume generate
-                  </button>
-                ) : null}
-                {(campaign.status === 'ready' || campaign.status === 'exported') &&
-                hasProductPhoto ? (
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    disabled={actionBusy}
-                    onClick={() => void runMockGenerate()}
-                  >
-                    {actionBusy ? 'Generating…' : 'Generate again'}
-                  </button>
-                ) : null}
-                {(campaign.status === 'ready' || campaign.status === 'exported') &&
-                outputs.length > 0 ? (
-                  <button
-                    type="button"
-                    className="btn btn-grad"
-                    disabled={actionBusy}
-                    onClick={() => void runExport()}
-                  >
-                    {actionBusy ? 'Exporting…' : 'Export pack'}
-                  </button>
-                ) : null}
-                {(campaign.status === 'ready' || campaign.status === 'exported') &&
-                outputs.length === 0 ? (
-                  <button
-                    type="button"
-                    className="btn btn-grad"
-                    disabled={actionBusy}
-                    onClick={() => void runMockGenerate()}
-                  >
-                    Build preview pack
-                  </button>
-                ) : null}
                 <Link className="btn btn-ghost" to={createMorePath}>
                   Create another
                 </Link>
-                <Link className="btn btn-ghost" to="/app/library">
-                  Library
-                </Link>
-                {confirmDelete ? (
-                  <span className="campaign-delete-inline">
-                    <span className="dash-campaign-confirm-label">Delete this project?</span>
-                    <button
-                      type="button"
-                      className="settings-logout-btn"
-                      disabled={deleting || actionBusy}
-                      onClick={() => void handleDeleteCampaign()}
-                    >
-                      {deleting ? 'Deleting…' : 'Confirm delete'}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      disabled={deleting}
-                      onClick={() => setConfirmDelete(false)}
-                    >
-                      Cancel
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-ghost campaign-delete-trigger"
-                    disabled={actionBusy || deleting}
-                    onClick={() => setConfirmDelete(true)}
-                  >
-                    Delete
-                  </button>
-                )}
               </div>
             </div>
-
-            {showResults && outputs.length > 0 ? (
-              <section className="results-section" aria-labelledby="results-title">
-                <div className="dash-panel-head">
-                  <h2 id="results-title">Campaign results</h2>
-                  <span className="library-count">{outputs.length}</span>
-                </div>
-                <p className="results-lead">
-                  Review pack for <strong>{campaign.productName}</strong>. Don’t like one? Open
-                  studio to describe what you want changed.
-                </p>
-
-                <div className="results-layout">
-                  <div className="results-grid">
-                    {outputs.map((item) => (
-                      <div
-                        key={item.id}
-                        className={`results-card${previewId === item.id ? ' is-active' : ''}`}
-                      >
-                        <button
-                          type="button"
-                          className="results-card-hit"
-                          onClick={() => setPreviewId(item.id)}
-                        >
-                          <span className="results-card-media">
-                            {item.kind === 'video' && item.videoUrl ? (
-                              <video
-                                src={item.videoUrl}
-                                poster={item.imageUrl}
-                                muted
-                                loop
-                                playsInline
-                                preload="metadata"
-                              />
-                            ) : item.imageUrl ? (
-                              <img src={item.imageUrl} alt="" />
-                            ) : (
-                              <span className="results-card-fallback">
-                                {item.label.slice(0, 1)}
-                              </span>
-                            )}
-                            {item.kind === 'video' ? (
-                              <span className="results-card-badge">Video</span>
-                            ) : null}
-                            {item.kind === 'copy' ? (
-                              <span className="results-card-badge">Copy</span>
-                            ) : null}
-                            {(item.version || 1) > 1 ? (
-                              <span className="results-card-badge results-card-badge-version">
-                                v{item.version}
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="results-card-body">
-                            <strong>{item.label}</strong>
-                            <span>{item.note}</span>
-                          </span>
-                        </button>
-                        <div className="results-card-actions">
-                          <button
-                            type="button"
-                            className="results-recreate-btn"
-                            disabled={actionBusy}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void runExportOne(item)
-                            }}
-                          >
-                            Export
-                          </button>
-                          <button
-                            type="button"
-                            className="results-recreate-btn"
-                            disabled={actionBusy}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              openRecreateInStudio(item)
-                            }}
-                          >
-                            Recreate in studio
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <aside className="results-preview app-panel">
-                    {preview ? (
-                      <>
-                        <p className="results-preview-kicker">
-                          {preview.label}
-                          {(preview.version || 1) > 1 ? ` · v${preview.version}` : ''}
-                        </p>
-                        {preview.kind === 'video' && preview.videoUrl ? (
-                          <div className="results-preview-media results-preview-video">
-                            <video
-                              key={preview.id}
-                              src={preview.videoUrl}
-                              poster={preview.imageUrl}
-                              controls
-                              autoPlay
-                              loop
-                              playsInline
-                            />
-                          </div>
-                        ) : preview.imageUrl ? (
-                          <div className="results-preview-media">
-                            <img src={preview.imageUrl} alt={preview.label} />
-                          </div>
-                        ) : null}
-                        {preview.text ? (
-                          <blockquote className="results-preview-copy">{preview.text}</blockquote>
-                        ) : (
-                          <p className="dash-muted">
-                            {preview.kind === 'video'
-                              ? 'Playing your selected video format — recreate for another look.'
-                              : 'Image preview for review before export.'}
-                          </p>
-                        )}
-                        <p className="results-preview-note">{preview.note}</p>
-                        <div className="results-preview-actions">
-                          <button
-                            type="button"
-                            className="btn btn-ghost results-preview-recreate"
-                            disabled={actionBusy}
-                            onClick={() => void runExportOne(preview)}
-                          >
-                            Export
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost results-preview-recreate"
-                            disabled={actionBusy}
-                            onClick={() => openRecreateInStudio(preview)}
-                          >
-                            {preview.kind === 'copy'
-                              ? 'Recreate copy in studio'
-                              : preview.kind === 'video'
-                                ? 'Recreate video in studio'
-                                : 'Recreate image in studio'}
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="dash-muted">Select an asset to preview.</p>
-                    )}
-                  </aside>
-                </div>
-              </section>
-            ) : null}
           </>
         )}
       </main>

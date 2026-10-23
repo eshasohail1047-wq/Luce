@@ -34,6 +34,7 @@ import {
   newLocalId,
   saveLocalCampaign,
   stashCampaignImageSafe,
+  stashProductImageSafe,
   stashCampaignRefImage,
   withTimeout,
 } from '../lib/localDemoCampaign'
@@ -235,7 +236,10 @@ export default function NewCampaignPage() {
     }
     navigate(`/app/campaigns/${id}`, {
       replace: true,
-      state: imageUrl ? { productImage: imageUrl } : undefined,
+      state: {
+        autoGenerate: true,
+        ...(imageUrl ? { productImage: imageUrl } : {}),
+      },
     })
   }
 
@@ -293,8 +297,11 @@ export default function NewCampaignPage() {
         'create-campaign',
       )
       const cloudImage = result.imageUrls?.[0] || imageDataUrl
-      if (imageDataUrl) await stashCampaignImageSafe(result.campaignId, imageDataUrl)
-      else if (cloudImage) await stashCampaignImageSafe(result.campaignId, cloudImage)
+      const productStill = imageDataUrl || cloudImage
+      if (productStill) {
+        await stashCampaignImageSafe(result.campaignId, productStill)
+        await stashProductImageSafe(result.productId, productStill)
+      }
       if (referenceFile) {
         try {
           stashCampaignRefImage(
@@ -307,10 +314,12 @@ export default function NewCampaignPage() {
       }
       navigate(`/app/campaigns/${result.campaignId}`, {
         replace: true,
-        state:
-          imageDataUrl || cloudImage
+        state: {
+          autoGenerate: true,
+          ...(imageDataUrl || cloudImage
             ? { productImage: imageDataUrl || cloudImage }
-            : undefined,
+            : {}),
+        },
       })
     } catch (err) {
       console.warn('[NewCampaign] falling back to local demo campaign', err)

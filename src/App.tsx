@@ -105,47 +105,27 @@ const PRODUCT_LIGHTS = [
 const workflow = [
   {
     step: '01',
-    title: 'Create campaign & add product',
-    text: 'Start a campaign, then paste a Shopify URL or upload product photos with basic info.',
-    image: '/images/hiw-add-product.jpg',
-    panel: {
-      label: 'Create campaign',
-      title: 'Add your product',
-      lines: ['Paste product URL', 'or upload images + details'],
-    },
+    title: 'Add your product',
+    text: 'Paste a product URL or upload a clear product photo. LUCE locks that product as the source of truth for every creative.',
+    image: '/images/hiw-app-product.png',
   },
   {
     step: '02',
-    title: 'Confirm what LUCE understood',
-    text: 'Review name, features, category, and visuals — edit or confirm so every asset stays true to the real product.',
-    image: '/images/hiw-confirm-product.jpg',
-    panel: {
-      label: 'Product confirmation',
-      title: 'Hydrate Clinical',
-      lines: ['Skincare · Moisturizer', 'Confirmed · Ready to research'],
-    },
+    title: 'Pick your formats',
+    text: 'Choose studio, daylight, editorial, flatlay, and more — set how many variants you want, then generate.',
+    image: '/images/hiw-app-formats.png',
   },
   {
     step: '03',
-    title: 'Research & build strategy',
-    text: 'LUCE researches market, competitors, and trends — then defines audience, positioning, angle, message, and CTA.',
-    image: '/images/hiw-research-strategy.jpg',
-    panel: {
-      label: 'Research → Strategy',
-      title: 'Campaign brief',
-      lines: ['Market · Competitors · Trends', 'Audience · Angle · CTA'],
-    },
+    title: 'Review generated creatives',
+    text: 'Preview every still or clip in your campaign pack. Keep packaging true while you refine the ones you love.',
+    image: '/images/hiw-app-results.jpg',
   },
   {
     step: '04',
-    title: 'Generate, review & download',
-    text: 'Generate the full pack — visuals, videos, social, ads, and strategy — then download a ZIP and publish manually.',
-    image: '/images/hiw-generate-download.jpg',
-    panel: {
-      label: 'Campaign pack',
-      title: 'Ready to export',
-      lines: ['Visuals · UGC · Ads · Copy', 'ZIP download · Manual publish'],
-    },
+    title: 'Export or save favorites',
+    text: 'Download any creative, or save keepers to Saved so your best images and videos stay one click away.',
+    image: '/images/hiw-app-saved.jpg',
   },
 ]
 
@@ -163,35 +143,36 @@ const outputs = [
     title: 'Product visuals',
     tag: 'Photos',
     text: 'Studio, lifestyle, and promo stills with packaging kept exact.',
-    image: '/images/output-visuals.jpg',
+    image: '/images/outputs/miss-rose-visuals.jpg',
     featured: true,
   },
   {
     title: 'Creator videos',
     tag: 'UGC',
     text: 'Reel-ready clips that show the real product in motion.',
-    image: '/images/output-ugc.jpg',
+    image: '/images/outputs/miss-rose-packshot.jpg',
+    video: '/videos/creator/miss-rose-ugc.mp4',
     featured: false,
   },
   {
     title: 'Social content',
     tag: 'Copy',
     text: 'Hooks, captions, CTAs, and hashtags in one brand voice.',
-    image: '/images/output-social.jpg',
+    image: '/images/outputs/miss-rose-social.jpg',
     featured: false,
   },
   {
     title: 'Ads & strategy',
     tag: 'Paid',
     text: 'Ad creatives plus audience, angle, message, and CTA.',
-    image: '/images/output-ads.jpg',
+    image: '/images/outputs/miss-rose-ads.jpg',
     featured: false,
   },
   {
     title: 'Campaign export',
     tag: 'ZIP',
     text: 'One downloadable pack — ready to publish across channels.',
-    image: '/images/output-export.jpg',
+    image: '/images/outputs/miss-rose-export.jpg',
     featured: false,
   },
 ]
@@ -560,7 +541,7 @@ function HowItWorks() {
         <Reveal className="section-head hiw-head">
           <p className="eyebrow">Workflow</p>
           <h2 id="workflow-title">How it works</h2>
-          <p>One product → Research → Strategy → Complete campaign</p>
+          <p>Add product → Choose formats → Generate → Export &amp; save</p>
         </Reveal>
 
         <div className="hiw-grid">
@@ -568,15 +549,12 @@ function HowItWorks() {
             <div className="hiw-viz-frame">
               {workflow.map((item, i) => (
                 <div key={item.step} className={`hiw-viz-slot ${i === active ? 'is-active' : ''}`}>
-                  <img className="hiw-viz-media" src={item.image} alt="" />
-                  <div className="hiw-viz-veil" />
-                  <div className="hiw-panel">
-                    <p className="hiw-panel-label">{item.panel.label}</p>
-                    <strong>{item.panel.title}</strong>
-                    {item.panel.lines.map((line) => (
-                      <span key={line}>{line}</span>
-                    ))}
-                  </div>
+                  <img
+                    className="hiw-viz-media"
+                    src={item.image}
+                    alt=""
+                    loading={i === 0 ? 'eager' : 'lazy'}
+                  />
                 </div>
               ))}
             </div>
@@ -930,11 +908,24 @@ export default function App() {
               <Reveal
                 as="article"
                 key={item.title}
-                className={`output-card${item.featured ? ' featured' : ''}`}
+                className={`output-card${item.featured ? ' featured' : ''}${item.video ? ' has-video' : ''}`}
                 delay={i * 70}
               >
                 <div className="output-media">
-                  <img src={item.image} alt={item.title} loading="lazy" />
+                  {item.video ? (
+                    <video
+                      src={item.video}
+                      poster={item.image}
+                      muted
+                      playsInline
+                      loop
+                      autoPlay
+                      preload="metadata"
+                      aria-label={item.title}
+                    />
+                  ) : (
+                    <img src={item.image} alt={item.title} loading="lazy" />
+                  )}
                   <span className="output-tag">{item.tag}</span>
                 </div>
                 <div className="output-copy">

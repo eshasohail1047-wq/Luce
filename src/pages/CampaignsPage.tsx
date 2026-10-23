@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import CampaignMediaCard from '../components/CampaignMediaCard'
 import { useAuth } from '../auth/AuthProvider'
+import { useCampaignCovers } from '../hooks/useCampaignCovers'
 import {
   deleteUserCampaign,
   getProductsByIds,
@@ -9,29 +11,6 @@ import {
   type CampaignDoc,
   type ProductSummary,
 } from '../lib/campaigns'
-import {
-  campaignModeLabel,
-  isCampaignComplete,
-  relativeTime,
-  statusLabel,
-} from '../lib/workspaceUi'
-
-function ProductThumb({
-  name,
-  imageUrl,
-}: {
-  name: string
-  imageUrl?: string
-}) {
-  if (imageUrl) {
-    return <img className="dash-campaign-thumb" src={imageUrl} alt="" />
-  }
-  return (
-    <span className="dash-campaign-thumb dash-thumb-fallback" aria-hidden="true">
-      {name.slice(0, 1).toUpperCase()}
-    </span>
-  )
-}
 
 export default function CampaignsPage() {
   const { user, loading } = useAuth()
@@ -104,6 +83,7 @@ export default function CampaignsPage() {
     }
     return rows
   }, [campaigns, filter, query])
+  const covers = useCampaignCovers(filtered, productsById)
 
   if (loading) {
     return (
@@ -122,7 +102,8 @@ export default function CampaignsPage() {
           <div>
             <h1>Campaigns</h1>
             <p>
-              Studio projects and full campaign packs in one place.
+              Every image, video, ads, and full-campaign workspace. Open one to generate, export, or
+              save creatives to Saved.
               {query ? ` Showing results for “${searchParams.get('q')}”.` : ''}
             </p>
           </div>
@@ -177,62 +158,53 @@ export default function CampaignsPage() {
             </div>
           </div>
         ) : (
-          <ul className="dash-campaign-list workspace-campaign-list">
+          <ul className="campaign-media-grid workspace-campaign-grid">
             {filtered.map((c) => {
-              const product = c.productId ? productsById.get(c.productId) : undefined
               const name = c.title || c.productName || 'Untitled'
-              const done = isCampaignComplete(c.status)
               const confirming = confirmId === c.id
               const busy = deletingId === c.id
               return (
-                <li key={c.id} className="dash-campaign-item">
-                  <Link className="dash-campaign-row" to={`/app/campaigns/${c.id}`}>
-                    <ProductThumb name={name} imageUrl={product?.imageUrl} />
-                    <div className="dash-campaign-meta">
-                      <strong>{name}</strong>
-                      <span>
-                        {campaignModeLabel(c)}
-                        {c.tryFree ? ' · Free trial' : ''}
-                      </span>
-                    </div>
-                    <span className={`dash-badge dash-badge-${done ? 'done' : 'progress'}`}>
-                      {done ? 'Done' : statusLabel(c.status)}
-                    </span>
-                    <span className="dash-campaign-time">{relativeTime(c)}</span>
-                  </Link>
-                  <div className="dash-campaign-actions">
-                    {confirming ? (
-                      <>
-                        <span className="dash-campaign-confirm-label">Delete?</span>
-                        <button
-                          type="button"
-                          className="dash-campaign-delete-btn dash-campaign-delete-btn-confirm"
-                          disabled={busy}
-                          onClick={() => void handleDelete(c.id)}
-                        >
-                          {busy ? 'Deleting…' : 'Confirm'}
-                        </button>
-                        <button
-                          type="button"
-                          className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
-                          disabled={busy}
-                          onClick={() => setConfirmId(null)}
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="dash-campaign-delete-btn"
-                        disabled={Boolean(deletingId)}
-                        aria-label={`Delete ${name}`}
-                        onClick={() => setConfirmId(c.id)}
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </div>
+                <li key={c.id}>
+                  <CampaignMediaCard
+                    campaign={c}
+                    imageUrl={covers.get(c.id)}
+                    showStatusDetail
+                    actions={
+                      <div className="dash-campaign-actions">
+                        {confirming ? (
+                          <>
+                            <span className="dash-campaign-confirm-label">Delete?</span>
+                            <button
+                              type="button"
+                              className="dash-campaign-delete-btn dash-campaign-delete-btn-confirm"
+                              disabled={busy}
+                              onClick={() => void handleDelete(c.id)}
+                            >
+                              {busy ? 'Deleting…' : 'Confirm'}
+                            </button>
+                            <button
+                              type="button"
+                              className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
+                              disabled={busy}
+                              onClick={() => setConfirmId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="dash-campaign-delete-btn"
+                            disabled={Boolean(deletingId)}
+                            aria-label={`Delete ${name}`}
+                            onClick={() => setConfirmId(c.id)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    }
+                  />
                 </li>
               )
             })}

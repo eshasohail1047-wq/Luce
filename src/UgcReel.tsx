@@ -12,6 +12,38 @@ type Clip = {
 /** Unique creators — real motion clips only (no Ken Burns stills) */
 const CLIPS: Clip[] = [
   {
+    id: 'miss-rose',
+    format: 'UGC',
+    creator: '@rose.reviews',
+    product: 'Miss Rose Foundation',
+    src: '/videos/creator/miss-rose-ugc.mp4',
+    poster: '/images/ugc-makeup-blush.jpg',
+  },
+  {
+    id: 'heygen-1',
+    format: 'Reel',
+    creator: '@luce.creators',
+    product: 'Product talk',
+    src: '/videos/creator/heygen-ugc-1.mp4',
+    poster: '/images/moisturizer-ugc-poster.jpg',
+  },
+  {
+    id: 'heygen-2',
+    format: 'UGC',
+    creator: '@studio.luce',
+    product: 'Creator selfie',
+    src: '/videos/creator/heygen-ugc-2.mp4',
+    poster: '/images/campaign-ugc-serum.jpg',
+  },
+  {
+    id: 'image1-ugc',
+    format: 'Story',
+    creator: '@image.one',
+    product: 'UGC selfie clip',
+    src: '/videos/creator/image1-ugc.mp4',
+    poster: '/images/ugc-makeup-lipstick.jpg',
+  },
+  {
     id: 'lipstick',
     format: 'Makeup',
     creator: '@luxe.lips',

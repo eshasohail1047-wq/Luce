@@ -2,7 +2,16 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
-import { listUserProducts, type ProductSummary } from '../lib/campaigns'
+import {
+  listUserCampaigns,
+  listUserProducts,
+  type ProductSummary,
+} from '../lib/campaigns'
+import {
+  resolveCampaignCover,
+  resolveProductImage,
+  stashProductImageSafe,
+} from '../lib/localDemoCampaign'
 import { relativeTime } from '../lib/workspaceUi'
 
 function ProductCard({ product }: { product: ProductSummary }) {
@@ -13,7 +22,7 @@ function ProductCard({ product }: { product: ProductSummary }) {
           <img src={product.imageUrl} alt="" />
         ) : (
           <span className="product-card-fallback" aria-hidden="true">
-            {product.name.slice(0, 1).toUpperCase()}
+            Photo pending
           </span>
         )}
       </div>
@@ -58,8 +67,38 @@ export default function ProductsPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const rows = await listUserProducts(user.uid)
-        if (!cancelled) setProducts(rows)
+        const [rows, campaigns] = await Promise.all([
+          listUserProducts(user.uid),
+          listUserCampaigns(user.uid),
+        ])
+        if (cancelled) return
+
+        const campaignsByProduct = new Map<string, string[]>()
+        for (const c of campaigns) {
+          if (!c.productId) continue
+          const list = campaignsByProduct.get(c.productId) ?? []
+          list.push(c.id)
+          campaignsByProduct.set(c.productId, list)
+        }
+
+        const enriched = await Promise.all(
+          rows.map(async (product) => {
+            let imageUrl = await resolveProductImage(product.id, product.imageUrl)
+            if (!imageUrl) {
+              const linked = campaignsByProduct.get(product.id) ?? []
+              for (const campaignId of linked) {
+                imageUrl = await resolveCampaignCover(campaignId, product.imageUrl)
+                if (imageUrl) {
+                  void stashProductImageSafe(product.id, imageUrl)
+                  break
+                }
+              }
+            }
+            return imageUrl ? { ...product, imageUrl } : product
+          }),
+        )
+
+        if (!cancelled) setProducts(enriched)
       } catch (err) {
         console.error(err)
         if (!cancelled) setListError('Could not load products.')
@@ -88,7 +127,10 @@ export default function ProductsPage() {
         <header className="workspace-list-header">
           <div>
             <h1>Products</h1>
-            <p>Products you’ve added from a URL or photo upload.</p>
+            <p>
+              Your product catalog — each card uses the real product photo when available. Start a
+              new image or full campaign from here.
+            </p>
           </div>
           <Link className="dash-create-btn" to="/app/studio/photos">
             <span aria-hidden="true">+</span> Add product

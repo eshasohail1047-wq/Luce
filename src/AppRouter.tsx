@@ -12,6 +12,7 @@ import LibraryPage from './pages/LibraryPage'
 import StudioPage from './pages/StudioPage'
 import SettingsPage from './pages/SettingsPage'
 import LegalPage from './pages/LegalPage'
+import HiwShotsPage from './pages/HiwShotsPage'
 
 export default function AppRouter() {
   return (
@@ -32,6 +33,7 @@ export default function AppRouter() {
             <Route path="/app/campaigns/:campaignId" element={<CampaignDetailPage />} />
             <Route path="/app/campaigns" element={<CampaignsPage />} />
             <Route path="/app/studio/:kind" element={<StudioPage />} />
+            <Route path="/demo/hiw" element={<HiwShotsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

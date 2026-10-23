@@ -1,40 +1,119 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
 import {
-  getProductsByIds,
-  listUserCampaigns,
-  type CampaignDoc,
-  type ProductSummary,
-} from '../lib/campaigns'
-import {
-  campaignModeLabel,
-  isCampaignComplete,
-  relativeTime,
-  statusLabel,
-} from '../lib/workspaceUi'
+  listSavedAssets,
+  removeSavedAsset,
+  type SavedAsset,
+} from '../lib/savedAssets'
+import { downloadMockOutput } from '../lib/mockCampaign'
+
+function relativeSaved(ms: number) {
+  const days = Math.floor((Date.now() - ms) / 86_400_000)
+  if (days <= 0) return 'Today'
+  if (days === 1) return '1 day ago'
+  if (days < 7) return `${days} days ago`
+  return `${Math.floor(days / 7)} week${Math.floor(days / 7) === 1 ? '' : 's'} ago`
+}
+
+function SavedCard({
+  asset,
+  onRemove,
+  onExport,
+  busy,
+}: {
+  asset: SavedAsset
+  onRemove: () => void
+  onExport: () => void
+  busy: boolean
+}) {
+  return (
+    <article className="campaign-media-card saved-asset-card">
+      <div className="campaign-media-link saved-asset-media">
+        <div className="campaign-media-frame">
+          {asset.kind === 'video' && asset.videoUrl ? (
+            <video
+              className="campaign-media-img"
+              src={asset.videoUrl}
+              poster={asset.imageUrl}
+              muted
+              playsInline
+              preload="metadata"
+            />
+          ) : asset.imageUrl ? (
+            <img className="campaign-media-img" src={asset.imageUrl} alt="" />
+          ) : (
+            <span className="campaign-media-soft">
+              {asset.kind === 'video' ? 'Video' : asset.kind === 'copy' ? 'Copy' : 'Asset'}
+            </span>
+          )}
+          <span className="campaign-media-shade" />
+        </div>
+        <div className="campaign-media-copy">
+          <span className="dash-badge dash-badge-done campaign-media-badge">Saved</span>
+          <strong>{asset.label}</strong>
+          <span className="campaign-media-sub">
+            {asset.productName}
+            <span aria-hidden="true"> · </span>
+            {relativeSaved(asset.savedAt)}
+          </span>
+        </div>
+        <div className="saved-asset-overlay">
+          <button
+            type="button"
+            className="btn btn-grad saved-asset-export"
+            disabled={busy}
+            onClick={() => void onExport()}
+          >
+            {busy ? '…' : 'Export'}
+          </button>
+        </div>
+      </div>
+      <div className="campaign-media-actions saved-asset-actions">
+        <Link
+          className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
+          to={`/app/campaigns/${asset.campaignId}`}
+        >
+          Open project
+        </Link>
+        <button
+          type="button"
+          className="dash-campaign-delete-btn"
+          disabled={busy}
+          aria-label={`Remove ${asset.label} from saved`}
+          onClick={() => void onRemove()}
+        >
+          Remove
+        </button>
+      </div>
+    </article>
+  )
+}
 
 export default function LibraryPage() {
   const { user, loading } = useAuth()
-  const [campaigns, setCampaigns] = useState<CampaignDoc[]>([])
-  const [productsById, setProductsById] = useState<Map<string, ProductSummary>>(new Map())
+  const [assets, setAssets] = useState<SavedAsset[]>([])
   const [listError, setListError] = useState<string | null>(null)
   const [listing, setListing] = useState(true)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  async function refresh() {
+    if (!user) return
+    const rows = await listSavedAssets(user.uid)
+    setAssets(rows)
+  }
 
   useEffect(() => {
     if (!user) return
     let cancelled = false
     ;(async () => {
       try {
-        const rows = await listUserCampaigns(user.uid)
-        if (cancelled) return
-        setCampaigns(rows)
-        const productMap = await getProductsByIds(rows.map((c) => c.productId))
-        if (!cancelled) setProductsById(productMap)
+        const rows = await listSavedAssets(user.uid)
+        if (!cancelled) setAssets(rows)
       } catch (err) {
         console.error(err)
-        if (!cancelled) setListError('Could not load library.')
+        if (!cancelled) setListError('Could not load saved creatives.')
       } finally {
         if (!cancelled) setListing(false)
       }
@@ -43,15 +122,6 @@ export default function LibraryPage() {
       cancelled = true
     }
   }, [user])
-
-  const ready = useMemo(
-    () => campaigns.filter((c) => isCampaignComplete(c.status)),
-    [campaigns],
-  )
-  const inProgress = useMemo(
-    () => campaigns.filter((c) => !isCampaignComplete(c.status)),
-    [campaigns],
-  )
 
   if (loading) {
     return (
@@ -68,8 +138,10 @@ export default function LibraryPage() {
       <main className="dash dash-simple workspace-list">
         <header className="workspace-list-header">
           <div>
-            <h1>Library</h1>
-            <p>Exports and finished packs will collect here after generation.</p>
+            <h1>Saved</h1>
+            <p>
+              Creatives you save from a campaign. Export any image or video from here anytime.
+            </p>
           </div>
           <Link className="dash-create-btn" to="/app/studio/photos">
             Create images
@@ -84,94 +156,70 @@ export default function LibraryPage() {
 
         {listing ? (
           <p className="dash-muted">Loading…</p>
-        ) : campaigns.length === 0 ? (
+        ) : assets.length === 0 ? (
           <div className="dash-empty">
-            <p>Your library is empty. Create a project to start collecting assets.</p>
+            <p>
+              Nothing saved yet. Generate in a campaign, then tap <strong>Save</strong> on the
+              creatives you want to keep.
+            </p>
             <div className="workspace-empty-actions">
               <Link className="dash-create-btn dash-create-btn-sm" to="/app/studio/photos">
                 Image Studio
               </Link>
+              <Link
+                className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
+                to="/app/campaigns"
+              >
+                Campaigns
+              </Link>
             </div>
           </div>
         ) : (
-          <>
-            <section className="library-section" aria-labelledby="library-ready-title">
-              <div className="dash-panel-head">
-                <h2 id="library-ready-title">Ready &amp; exported</h2>
-                <span className="library-count">{ready.length}</span>
-              </div>
-              {ready.length === 0 ? (
-                <div className="library-placeholder">
-                  <p>
-                    No finished packs yet. Projects stay here after generation completes — ready for
-                    download and reuse.
-                  </p>
-                </div>
-              ) : (
-                <ul className="dash-campaign-list">
-                  {ready.map((c) => {
-                    const product = c.productId ? productsById.get(c.productId) : undefined
-                    const name = c.title || c.productName || 'Untitled'
-                    return (
-                      <li key={c.id}>
-                        <Link className="dash-campaign-row" to={`/app/campaigns/${c.id}`}>
-                          {product?.imageUrl ? (
-                            <img className="dash-campaign-thumb" src={product.imageUrl} alt="" />
-                          ) : (
-                            <span className="dash-campaign-thumb dash-thumb-fallback" aria-hidden="true">
-                              {name.slice(0, 1).toUpperCase()}
-                            </span>
-                          )}
-                          <div className="dash-campaign-meta">
-                            <strong>{name}</strong>
-                            <span>{campaignModeLabel(c)}</span>
-                          </div>
-                          <span className="dash-badge dash-badge-done">{statusLabel(c.status)}</span>
-                          <span className="dash-campaign-time">{relativeTime(c)}</span>
-                        </Link>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </section>
-
-            <section className="library-section" aria-labelledby="library-progress-title">
-              <div className="dash-panel-head">
-                <h2 id="library-progress-title">In progress</h2>
-                <span className="library-count">{inProgress.length}</span>
-              </div>
-              {inProgress.length === 0 ? (
-                <p className="dash-muted">No open projects.</p>
-              ) : (
-                <ul className="dash-campaign-list">
-                  {inProgress.map((c) => {
-                    const product = c.productId ? productsById.get(c.productId) : undefined
-                    const name = c.title || c.productName || 'Untitled'
-                    return (
-                      <li key={c.id}>
-                        <Link className="dash-campaign-row" to={`/app/campaigns/${c.id}`}>
-                          {product?.imageUrl ? (
-                            <img className="dash-campaign-thumb" src={product.imageUrl} alt="" />
-                          ) : (
-                            <span className="dash-campaign-thumb dash-thumb-fallback" aria-hidden="true">
-                              {name.slice(0, 1).toUpperCase()}
-                            </span>
-                          )}
-                          <div className="dash-campaign-meta">
-                            <strong>{name}</strong>
-                            <span>{campaignModeLabel(c)}</span>
-                          </div>
-                          <span className="dash-badge dash-badge-progress">{statusLabel(c.status)}</span>
-                          <span className="dash-campaign-time">{relativeTime(c)}</span>
-                        </Link>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </section>
-          </>
+          <ul className="campaign-media-grid">
+            {assets.map((asset) => (
+              <li key={asset.id}>
+                <SavedCard
+                  asset={asset}
+                  busy={busyId === asset.id}
+                  onExport={async () => {
+                    setBusyId(asset.id)
+                    setListError(null)
+                    try {
+                      await downloadMockOutput(
+                        {
+                          id: asset.outputId,
+                          assetType: asset.assetType,
+                          label: asset.label,
+                          kind: asset.kind,
+                          imageUrl: asset.imageUrl,
+                          videoUrl: asset.videoUrl,
+                          text: asset.text,
+                        },
+                        asset.productName,
+                      )
+                    } catch (err) {
+                      console.error(err)
+                      setListError('Could not export that creative.')
+                    } finally {
+                      setBusyId(null)
+                    }
+                  }}
+                  onRemove={async () => {
+                    setBusyId(asset.id)
+                    try {
+                      await removeSavedAsset(asset.id)
+                      await refresh()
+                    } catch (err) {
+                      console.error(err)
+                      setListError('Could not remove from saved.')
+                    } finally {
+                      setBusyId(null)
+                    }
+                  }}
+                />
+              </li>
+            ))}
+          </ul>
         )}
       </main>
     </AppLayout>

@@ -43,3 +43,4 @@ export function studioPathFor(campaign: Pick<CampaignDoc, 'mode' | 'studioKind'>
   if (campaign.mode === 'studio' && campaign.studioKind === 'ads') return '/app/studio/ads'
   return '/app/campaigns/new'
 }
+

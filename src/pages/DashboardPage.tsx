@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import CampaignMediaCard from '../components/CampaignMediaCard'
 import { useAuth } from '../auth/AuthProvider'
+import { useCampaignCovers } from '../hooks/useCampaignCovers'
 import {
   getProductsByIds,
   listUserCampaigns,
@@ -9,11 +11,6 @@ import {
   type ProductSummary,
 } from '../lib/campaigns'
 import { isPaidPlan } from '../lib/plans'
-import {
-  campaignModeLabel,
-  isCampaignComplete,
-  relativeTime,
-} from '../lib/workspaceUi'
 
 const CREATE_PATHS = [
   {
@@ -53,25 +50,6 @@ const CREATE_PATHS = [
   },
 ] as const
 
-function ProductThumb({
-  name,
-  imageUrl,
-  className,
-}: {
-  name: string
-  imageUrl?: string
-  className?: string
-}) {
-  if (imageUrl) {
-    return <img className={className} src={imageUrl} alt="" />
-  }
-  return (
-    <span className={`${className ?? ''} dash-thumb-fallback`.trim()} aria-hidden="true">
-      {name.slice(0, 1).toUpperCase()}
-    </span>
-  )
-}
-
 export default function DashboardPage() {
   const { user, plan, loading } = useAuth()
   const [campaigns, setCampaigns] = useState<CampaignDoc[]>([])
@@ -102,6 +80,7 @@ export default function DashboardPage() {
   }, [user])
 
   const recent = useMemo(() => campaigns.slice(0, 5), [campaigns])
+  const covers = useCampaignCovers(recent, productsById)
 
   if (loading) {
     return (
@@ -182,7 +161,9 @@ export default function DashboardPage() {
         <section className="dash-panel dash-panel-simple" aria-labelledby="dash-recent-title">
           <div className="dash-panel-head">
             <h2 id="dash-recent-title">Recent</h2>
-            {campaigns.length > 0 ? <Link to="/app/campaigns">View all</Link> : null}
+            {campaigns.length > 0 ? (
+              <Link to="/app/campaigns">View all campaigns</Link>
+            ) : null}
           </div>
 
           {listing ? (
@@ -192,31 +173,12 @@ export default function DashboardPage() {
               <p>Nothing here yet. Add a product to begin.</p>
             </div>
           ) : (
-            <ul className="dash-campaign-list">
-              {recent.map((c) => {
-                const product = c.productId ? productsById.get(c.productId) : undefined
-                const name = c.title || c.productName || 'Untitled'
-                const done = isCampaignComplete(c.status)
-                return (
-                  <li key={c.id}>
-                    <Link className="dash-campaign-row" to={`/app/campaigns/${c.id}`}>
-                      <ProductThumb
-                        className="dash-campaign-thumb"
-                        name={name}
-                        imageUrl={product?.imageUrl}
-                      />
-                      <div className="dash-campaign-meta">
-                        <strong>{name}</strong>
-                        <span>{campaignModeLabel(c)}</span>
-                      </div>
-                      <span className={`dash-badge dash-badge-${done ? 'done' : 'progress'}`}>
-                        {done ? 'Done' : 'In progress'}
-                      </span>
-                      <span className="dash-campaign-time">{relativeTime(c)}</span>
-                    </Link>
-                  </li>
-                )
-              })}
+            <ul className="campaign-media-grid">
+              {recent.map((c) => (
+                <li key={c.id}>
+                  <CampaignMediaCard campaign={c} imageUrl={covers.get(c.id)} />
+                </li>
+              ))}
             </ul>
           )}
         </section>

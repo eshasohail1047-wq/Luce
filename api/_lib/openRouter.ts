@@ -1,8 +1,22 @@
 const OPENROUTER_IMAGES_URL = 'https://openrouter.ai/api/v1/images'
 const OPENROUTER_VIDEOS_URL = 'https://openrouter.ai/api/v1/videos'
+const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions'
 /** Nano Banana = Gemini 2.5 Flash Image — ~$0.03–0.04/image; strong product/ref edits. */
 const DEFAULT_MODEL = 'google/gemini-2.5-flash-image'
 const DEFAULT_VIDEO_MODEL = 'heygen/heygen-video-1'
+/**
+ * Free OpenRouter text for captions / hooks / CTAs / hashtags / ad copy.
+ * `openrouter/free` auto-picks a free :free model; override with OPENROUTER_CHAT_MODEL
+ * (e.g. google/gemma-4-31b-it:free, meta-llama/llama-3.2-3b-instruct:free).
+ */
+const DEFAULT_CHAT_MODEL = 'openrouter/free'
+/** Free-only fallbacks if the primary free model is rate-limited / unavailable. */
+const FREE_CHAT_FALLBACKS = [
+  'google/gemma-4-31b-it:free',
+  'google/gemma-4-26b-a4b-it:free',
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'nvidia/nemotron-3.5-lightning:free',
+] as const
 const REQUEST_TIMEOUT_MS = 120_000
 const VIDEO_POLL_FIRST_MS = 5_000
 const VIDEO_POLL_MS = 8_000
@@ -41,6 +55,30 @@ export function getOpenRouterVideoModel(): string {
   return (
     process.env.OPENROUTER_VIDEO_MODEL?.trim() || DEFAULT_VIDEO_MODEL
   )
+}
+
+export function getOpenRouterChatModel(): string {
+  const configured = process.env.OPENROUTER_CHAT_MODEL?.trim()
+  if (!configured) return DEFAULT_CHAT_MODEL
+  // Prefer free tier for copy — if someone sets a paid id without :free, keep it
+  // but default path stays on openrouter/free.
+  return configured
+}
+
+function chatModelsPreferFree(primary: string): string[] {
+  const first = primary.trim() || DEFAULT_CHAT_MODEL
+  const extras = FREE_CHAT_FALLBACKS.filter((id) => id !== first)
+  // Only free models so OpenRouter never bills a paid hop.
+  // OpenRouter allows at most 3 entries in the `models` fallback array
+  // → keep primary + up to 3 free backups (4 ids total in our chain).
+  const freeOnly = [first, ...extras].filter(
+    (id) => id === 'openrouter/free' || id.endsWith(':free'),
+  )
+  const chain =
+    freeOnly.length > 0
+      ? freeOnly
+      : [DEFAULT_CHAT_MODEL, ...FREE_CHAT_FALLBACKS]
+  return chain.slice(0, 4)
 }
 
 function openRouterHeaders(apiKey: string): Record<string, string> {
@@ -408,6 +446,79 @@ export async function generateVideo(
     videoDataUrl: playable,
     model,
     jobId,
+  }
+}
+
+export type ChatCompletionInput = {
+  system: string
+  user: string
+  model?: string
+  temperature?: number
+  maxTokens?: number
+}
+
+export type ChatCompletionResult = {
+  text: string
+  model: string
+}
+
+/**
+ * OpenRouter chat completions — used for captions, hooks, CTAs, hashtags, ad copy.
+ */
+export async function generateChatCompletion(
+  input: ChatCompletionInput,
+): Promise<ChatCompletionResult> {
+  const apiKey = getOpenRouterApiKey()
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is not configured')
+  }
+  const system = input.system.trim()
+  const user = input.user.trim()
+  if (!system || !user) {
+    throw new Error('Chat system and user messages are required')
+  }
+  const model =
+    (input.model || getOpenRouterChatModel()).trim() || DEFAULT_CHAT_MODEL
+  const models = chatModelsPreferFree(model)
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 60_000)
+  try {
+    const res = await fetch(OPENROUTER_CHAT_URL, {
+      method: 'POST',
+      headers: openRouterHeaders(apiKey),
+      body: JSON.stringify({
+        model: models[0],
+        // Free-only fallbacks — OpenRouter max 3 items in `models`
+        models: models.slice(1, 4),
+        temperature: input.temperature ?? 0.75,
+        max_tokens: input.maxTokens ?? 600,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+      }),
+      signal: controller.signal,
+    })
+    const raw = await res.json().catch(() => null)
+    if (!res.ok) {
+      throw new Error(parseOpenRouterError(raw, res.status))
+    }
+    const choice = (raw as {
+      choices?: { message?: { content?: string | null } }[]
+      model?: string
+    })?.choices?.[0]
+    const text = choice?.message?.content?.trim()
+    if (!text) {
+      throw new Error('OpenRouter free chat returned empty text')
+    }
+    const usedModel =
+      typeof (raw as { model?: string })?.model === 'string'
+        ? (raw as { model: string }).model
+        : models[0]!
+    return { text, model: usedModel }
+  } finally {
+    clearTimeout(timer)
   }
 }
 

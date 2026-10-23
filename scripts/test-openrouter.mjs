@@ -48,7 +48,12 @@ async function req(name, path, body) {
 
 const models = await req('MODELS', '/models')
 const chat = await req('CHAT', '/chat/completions', {
-  model: 'openai/gpt-4o-mini',
+  model: 'openrouter/free',
+  models: [
+    'google/gemma-4-31b-it:free',
+    'meta-llama/llama-3.2-3b-instruct:free',
+    'nvidia/nemotron-3.5-lightning:free',
+  ],
   messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
   max_tokens: 16,
 })

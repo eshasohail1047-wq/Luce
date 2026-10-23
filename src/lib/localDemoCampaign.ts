@@ -296,6 +296,55 @@ export async function resolveCampaignImage(
   return undefined
 }
 
+/** Product-library thumb — survives even when Firestore imageUrls stayed empty. */
+export async function stashProductImageSafe(
+  productId: string,
+  dataUrl: string,
+): Promise<string | undefined> {
+  const id = productId.trim()
+  if (!id) return undefined
+  const src = dataUrl.trim()
+  if (!src) return undefined
+  if (/^https?:\/\//i.test(src)) {
+    try {
+      await idbPutImage(`product:${id}`, src)
+    } catch (err) {
+      console.warn('[localDemo] product URL stash failed', err)
+    }
+    return src
+  }
+  if (!src.startsWith('data:image/')) return undefined
+  try {
+    const compact = await compressImageDataUrl(src, 720, 0.72)
+    await idbPutImage(`product:${id}`, compact)
+    return compact
+  } catch (err) {
+    console.warn('[localDemo] product image stash failed', err)
+    return undefined
+  }
+}
+
+export async function resolveProductImage(
+  productId: string,
+  firestoreUrl?: string,
+): Promise<string | undefined> {
+  const https = firestoreUrl?.trim()
+  if (https && /^https?:\/\//i.test(https)) return https
+
+  const id = productId.trim()
+  if (!id) return https?.startsWith('data:image/') ? https : undefined
+
+  try {
+    const fromIdb = await idbGetImage(`product:${id}`)
+    if (fromIdb) return fromIdb
+  } catch (err) {
+    console.warn('[localDemo] product image load failed', err)
+  }
+
+  if (https?.startsWith('data:image/')) return https
+  return undefined
+}
+
 function writeWebRefCache(campaignId: string, dataUrl: string): void {
   if (dataUrl.length > WEB_CACHE_MAX_CHARS) return
   const key = REF_KEY + campaignId
@@ -407,11 +456,86 @@ export function loadStashedCampaignVideoDurations(
   }
 }
 
+function firstOutputImageUrl(outputs: unknown): string | undefined {
+  if (!Array.isArray(outputs)) return undefined
+  for (const item of outputs) {
+    if (!item || typeof item !== 'object') continue
+    const row = item as { kind?: string; imageUrl?: string }
+    const url = typeof row.imageUrl === 'string' ? row.imageUrl.trim() : ''
+    if (!url) continue
+    if (url.startsWith('data:image/') || /^https?:\/\//i.test(url)) return url
+  }
+  return undefined
+}
+
+/** Small durable list/grid cover (generated still or product photo). */
+export async function stashCampaignCoverSafe(
+  campaignId: string,
+  dataUrl: string,
+): Promise<string | undefined> {
+  const src = dataUrl.trim()
+  if (!src) return undefined
+  if (/^https?:\/\//i.test(src)) {
+    try {
+      await idbPutImage(`cover:${campaignId}`, src)
+    } catch (err) {
+      console.warn('[localDemo] cover URL stash failed', err)
+    }
+    return src
+  }
+  if (!src.startsWith('data:image/')) return undefined
+  try {
+    const compact = await compressImageDataUrl(src, 640, 0.72)
+    await idbPutImage(`cover:${campaignId}`, compact)
+    return compact
+  } catch (err) {
+    console.warn('[localDemo] cover stash failed', err)
+    return undefined
+  }
+}
+
+export async function resolveCampaignCover(
+  campaignId: string,
+  productImageUrl?: string,
+): Promise<string | undefined> {
+  // 1) Generated pack still (same session)
+  const fromOutputs = firstOutputImageUrl(
+    loadStashedCampaignOutputs<unknown>(campaignId),
+  )
+  if (fromOutputs) {
+    void stashCampaignCoverSafe(campaignId, fromOutputs)
+    return fromOutputs
+  }
+
+  // 2) Durable cover from a previous generate in this browser
+  try {
+    const fromIdb = await idbGetImage(`cover:${campaignId}`)
+    if (fromIdb) return fromIdb
+  } catch (err) {
+    console.warn('[localDemo] cover load failed', err)
+  }
+
+  // 3) Product photo on Firestore / CDN
+  const product = productImageUrl?.trim()
+  if (product && /^https?:\/\//i.test(product)) return product
+
+  // 4) Local product photo stash for this campaign
+  const stashedProduct = await resolveCampaignImage(campaignId)
+  if (stashedProduct) return stashedProduct
+
+  if (product?.startsWith('data:image/')) return product
+  return undefined
+}
+
 export function stashCampaignOutputs(campaignId: string, outputs: unknown) {
   try {
     sessionStorage.setItem(OUTPUTS_KEY + campaignId, JSON.stringify(outputs))
   } catch (err) {
     console.error('[localDemo] outputs stash failed', err)
+  }
+  const cover = firstOutputImageUrl(outputs)
+  if (cover) {
+    void stashCampaignCoverSafe(campaignId, cover)
   }
 }
 
