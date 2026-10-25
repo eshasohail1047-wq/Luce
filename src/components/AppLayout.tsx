@@ -17,7 +17,7 @@ const MAIN_NAV = [
 const CREATE_NAV = [
   { to: '/app/studio/photos', label: 'Image Studio', icon: 'image' as const, pro: false },
   { to: '/app/studio/videos', label: 'Video Studio', icon: 'video' as const, pro: true },
-  { to: '/app/studio/ads', label: 'Ads & Social', icon: 'tag' as const, pro: true },
+  { to: '/app/studio/ads', label: 'Ad Lab', icon: 'tag' as const, pro: true },
   { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark' as const, pro: true },
 ]
 

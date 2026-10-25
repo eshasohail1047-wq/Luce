@@ -10,6 +10,7 @@ import CampaignsPage from './pages/CampaignsPage'
 import ProductsPage from './pages/ProductsPage'
 import LibraryPage from './pages/LibraryPage'
 import StudioPage from './pages/StudioPage'
+import { AdsSocialRoute } from './pages/AdsSocialPage'
 import SettingsPage from './pages/SettingsPage'
 import LegalPage from './pages/LegalPage'
 import HiwShotsPage from './pages/HiwShotsPage'
@@ -32,6 +33,7 @@ export default function AppRouter() {
             <Route path="/app/campaigns/new" element={<NewCampaignPage />} />
             <Route path="/app/campaigns/:campaignId" element={<CampaignDetailPage />} />
             <Route path="/app/campaigns" element={<CampaignsPage />} />
+            <Route path="/app/studio/ads" element={<AdsSocialRoute />} />
             <Route path="/app/studio/:kind" element={<StudioPage />} />
             <Route path="/demo/hiw" element={<HiwShotsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

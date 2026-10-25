@@ -88,9 +88,14 @@ function isStudioKind(value: string | undefined): value is StudioKind {
   return Boolean(value && VALID_KINDS.includes(value as StudioKind))
 }
 
-export default function StudioPage() {
+export default function StudioPage({
+  forcedKind,
+}: {
+  /** Used when mounted from /app/studio/ads recreate without :kind param */
+  forcedKind?: StudioKind
+} = {}) {
   const { kind: kindParam } = useParams()
-  const kind = isStudioKind(kindParam) ? kindParam : null
+  const kind = forcedKind ?? (isStudioKind(kindParam) ? kindParam : null)
   const [searchParams] = useSearchParams()
   const { user, plan, freeImageUsed, markFreeImageUsed, loading } = useAuth()
   const navigate = useNavigate()

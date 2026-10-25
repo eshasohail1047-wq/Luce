@@ -36,8 +36,8 @@ const CREATE_PATHS = [
   },
   {
     to: '/app/studio/ads',
-    label: 'Ads & Social',
-    hint: 'Creatives ready to run paid ads',
+    label: 'Ad Lab',
+    hint: 'Strategy, angles & campaign creatives',
     image: '/images/output-social.jpg',
     pro: true,
   },
