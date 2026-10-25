@@ -227,7 +227,6 @@ export default function AdLabPage() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<CampaignResult | null>(null)
   const [paywallOpen, setPaywallOpen] = useState(false)
-  const [paywallReason, setPaywallReason] = useState<string | undefined>()
   const [hookCopied, setHookCopied] = useState(false)
 
   useEffect(() => {
@@ -444,7 +443,6 @@ export default function AdLabPage() {
       <PaywallModal
         open={paywallOpen}
         title="Unlock Ad Lab"
-        reason={paywallReason}
         onClose={() => setPaywallOpen(false)}
       />
 
