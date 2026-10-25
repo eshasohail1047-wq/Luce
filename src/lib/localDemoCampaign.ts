@@ -577,6 +577,168 @@ export function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(new Error('Could not encode image'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+/**
+ * Normalize any browser-displayable image URL into a data URL suitable for
+ * /api/generate-images. Relative paths like `/images/foo.jpg` must NOT be sent
+ * raw — the Vercel API / OpenRouter cannot fetch them.
+ */
+export async function ensureAiImagePayload(url: string): Promise<string> {
+  const src = url.trim()
+  if (!src) throw new Error('Product image is required')
+  if (src.startsWith('data:image/')) {
+    return compressImageDataUrl(src, 1024, 0.8)
+  }
+
+  const absolute =
+    src.startsWith('/') && typeof window !== 'undefined'
+      ? `${window.location.origin}${src}`
+      : src
+
+  if (!/^https?:\/\//i.test(absolute) && !absolute.startsWith('data:')) {
+    throw new Error(
+      'Product image must be a data URL, https URL, or site path like /images/…',
+    )
+  }
+
+  const res = await fetch(absolute)
+  if (!res.ok) {
+    throw new Error(`Could not load product image (${res.status})`)
+  }
+  const blob = await res.blob()
+  if (!blob.type.startsWith('image/') && !src.match(/\.(jpe?g|png|webp|gif)(\?|$)/i)) {
+    throw new Error('Selected asset is not a usable still image for AI')
+  }
+  const dataUrl = await blobToDataUrl(blob)
+  if (!dataUrl.startsWith('data:image/')) {
+    throw new Error('Could not encode product image for AI')
+  }
+  return compressImageDataUrl(dataUrl, 1024, 0.8)
+}
+
+/**
+ * Client-side ad preview when AI generate is gated (free plan).
+ * Bakes headline + CTA onto the product still so Download / Save get a real creative.
+ */
+export async function composeAdPreviewDataUrl(input: {
+  imageUrl: string
+  headline: string
+  cta: string
+  brand?: string
+}): Promise<string> {
+  const raw = input.imageUrl.trim()
+  if (!raw) throw new Error('No image to compose')
+
+  const src =
+    raw.startsWith('data:image/') || /^https?:\/\//i.test(raw)
+      ? raw
+      : raw.startsWith('/') && typeof window !== 'undefined'
+        ? `${window.location.origin}${raw}`
+        : raw
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image()
+    el.onload = () => resolve(el)
+    el.onerror = () => reject(new Error('Could not load image for ad preview'))
+    el.crossOrigin = 'anonymous'
+    el.src = src
+  })
+
+  const W = 1080
+  const H = 1350
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas unavailable')
+
+  const iw = img.naturalWidth || img.width
+  const ih = img.naturalHeight || img.height
+  const scale = Math.max(W / Math.max(iw, 1), H / Math.max(ih, 1))
+  const dw = iw * scale
+  const dh = ih * scale
+  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh)
+
+  const grad = ctx.createLinearGradient(0, H * 0.45, 0, H)
+  grad.addColorStop(0, 'rgba(12, 10, 9, 0)')
+  grad.addColorStop(0.45, 'rgba(12, 10, 9, 0.35)')
+  grad.addColorStop(1, 'rgba(12, 10, 9, 0.88)')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, W, H)
+
+  const pad = 72
+  let y = H - 280
+
+  if (input.brand?.trim()) {
+    ctx.fillStyle = 'rgba(255,255,255,0.72)'
+    ctx.font = '600 28px "Segoe UI", system-ui, sans-serif'
+    ctx.fillText(input.brand.trim().toUpperCase().slice(0, 40), pad, y)
+    y += 48
+  }
+
+  const headline = (input.headline || 'Meet your new favorite').trim().slice(0, 72)
+  ctx.fillStyle = '#fff'
+  ctx.font = '700 56px "Segoe UI", system-ui, sans-serif'
+  const words = headline.split(/\s+/)
+  let line = ''
+  const lines: string[] = []
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w
+    if (ctx.measureText(next).width > W - pad * 2 && line) {
+      lines.push(line)
+      line = w
+    } else {
+      line = next
+    }
+  }
+  if (line) lines.push(line)
+  for (const l of lines.slice(0, 3)) {
+    ctx.fillText(l, pad, y)
+    y += 64
+  }
+
+  const cta = (input.cta || 'Shop Now').trim().slice(0, 28)
+  y += 28
+  ctx.font = '700 32px "Segoe UI", system-ui, sans-serif'
+  const ctaW = Math.min(W - pad * 2, Math.max(220, ctx.measureText(cta).width + 72))
+  const ctaH = 64
+  const ctaX = pad
+  const ctaY = Math.min(y, H - pad - ctaH)
+  ctx.fillStyle = '#f4f0ea'
+  roundRect(ctx, ctaX, ctaY, ctaW, ctaH, 12)
+  ctx.fill()
+  ctx.fillStyle = '#1a1410'
+  ctx.fillText(cta, ctaX + 36, ctaY + 42)
+
+  return canvas.toDataURL('image/jpeg', 0.9)
+}
+
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  const radius = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + radius, y)
+  ctx.arcTo(x + w, y, x + w, y + h, radius)
+  ctx.arcTo(x + w, y + h, x, y + h, radius)
+  ctx.arcTo(x, y + h, x, y, radius)
+  ctx.arcTo(x, y, x + w, y, radius)
+  ctx.closePath()
+}
+
 export async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   try {

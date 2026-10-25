@@ -88,6 +88,12 @@ export type CreateCampaignInput = {
   includeSocial?: boolean
   includeAds?: boolean
   includeStrategy?: boolean
+  includeHooks?: boolean
+  includeCaptions?: boolean
+  includeCtas?: boolean
+  includeHashtags?: boolean
+  includeAdCreative?: boolean
+  includeAdCopy?: boolean
   creativeDirection?: CreativeDirection
 }
 
@@ -304,6 +310,12 @@ export async function createCampaignWithProduct(input: CreateCampaignInput) {
             includeSocial: input.includeSocial,
             includeAds: input.includeAds,
             includeStrategy: input.includeStrategy,
+            includeHooks: input.includeHooks,
+            includeCaptions: input.includeCaptions,
+            includeCtas: input.includeCtas,
+            includeHashtags: input.includeHashtags,
+            includeAdCreative: input.includeAdCreative,
+            includeAdCopy: input.includeAdCopy,
           })
         : resolveDeliverables(input.deliverables ?? [])
 

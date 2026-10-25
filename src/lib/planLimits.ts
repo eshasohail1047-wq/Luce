@@ -7,6 +7,11 @@ export type PlanGenerateLimits = {
   label: string
 }
 
+/**
+ * Paid plans: effectively unlimited for MVP Full Campaign
+ * (capped only by available format catalog size in the UI).
+ * Free: still 1 image / no video for studio try.
+ */
 export const PLAN_GENERATE_LIMITS: Record<UserPlan, PlanGenerateLimits> = {
   free: {
     maxImages: 1,
@@ -14,19 +19,19 @@ export const PLAN_GENERATE_LIMITS: Record<UserPlan, PlanGenerateLimits> = {
     label: 'Free: 1 image · no video',
   },
   starter: {
-    maxImages: 5,
-    maxVideos: 3,
-    label: 'Starter: up to 5 images + 3 videos / campaign',
+    maxImages: 99,
+    maxVideos: 99,
+    label: 'Starter: choose as many image & video formats as you need',
   },
   growth: {
-    maxImages: 8,
-    maxVideos: 5,
-    label: 'Growth: up to 8 images + 5 videos / campaign',
+    maxImages: 99,
+    maxVideos: 99,
+    label: 'Growth: choose as many image & video formats as you need',
   },
   pro: {
-    maxImages: 12,
-    maxVideos: 8,
-    label: 'Pro: up to 12 images + 8 videos / campaign',
+    maxImages: 99,
+    maxVideos: 99,
+    label: 'Pro: choose as many image & video formats as you need',
   },
 }
 

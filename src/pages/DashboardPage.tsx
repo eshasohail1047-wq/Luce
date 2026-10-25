@@ -12,7 +12,16 @@ import {
 } from '../lib/campaigns'
 import { isPaidPlan } from '../lib/plans'
 
-const CREATE_PATHS = [
+type CreatePath = {
+  to: string
+  label: string
+  hint: string
+  image: string
+  pro: boolean
+  comingSoon?: boolean
+}
+
+const CREATE_PATHS: CreatePath[] = [
   {
     to: '/app/studio/photos',
     label: 'Product Images',
@@ -36,15 +45,16 @@ const CREATE_PATHS = [
   },
   {
     to: '/app/studio/ads',
-    label: 'Ad Lab',
-    hint: 'Strategy, angles & campaign creatives',
+    label: 'Ads & Social',
+    hint: 'Coming soon — use Full Campaign for now',
     image: '/images/output-social.jpg',
     pro: true,
+    comingSoon: true,
   },
   {
     to: '/app/campaigns/new',
     label: 'Full Campaign',
-    hint: 'Strategy + visuals + ads in one',
+    hint: 'Any mix of images & videos + ads extras',
     image: '/images/campaign-beauty-flatlay.jpg',
     pro: true,
   },
@@ -103,7 +113,7 @@ export default function DashboardPage() {
             <h2>Add a product. Get campaign creatives.</h2>
             <p>
               Paste a product URL or upload a photo. LUCE builds the visuals you need to sell —
-              images, video, ads, or a full campaign pack.
+              images, video, or a full campaign with hooks, captions & CTAs.
             </p>
             <div className="dash-hero-card-actions">
               <Link className="dash-create-btn" to="/app/studio/photos">
@@ -128,7 +138,27 @@ export default function DashboardPage() {
           </div>
           <div className="dash-paths">
             {CREATE_PATHS.map((path) => {
-              const paidHint = path.pro && !isPaidPlan(plan)
+              const paidHint = path.pro && !isPaidPlan(plan) && !path.comingSoon
+              if (path.comingSoon) {
+                return (
+                  <div
+                    key={path.to + path.label}
+                    className="dash-path is-soon"
+                    aria-disabled="true"
+                    title="Coming soon — not in MVP"
+                  >
+                    <img className="dash-path-img" src={path.image} alt="" />
+                    <span className="dash-path-shade" aria-hidden="true" />
+                    <span className="dash-path-copy">
+                      <strong>
+                        {path.label}
+                        <span className="dash-path-soon">Coming soon</span>
+                      </strong>
+                      <span>{path.hint}</span>
+                    </span>
+                  </div>
+                )
+              }
               return (
                 <Link
                   key={path.to + path.label}

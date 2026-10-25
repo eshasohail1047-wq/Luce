@@ -62,8 +62,12 @@ export default function NewCampaignPage() {
   const [showDetails, setShowDetails] = useState(true)
   const [photoStyles, setPhotoStyles] = useState<PhotoStyleId[]>([])
   const [videoStyles, setVideoStyles] = useState<VideoStyleId[]>([])
-  const [includeSocial, setIncludeSocial] = useState(true)
-  const [includeAds, setIncludeAds] = useState(false)
+  const [includeHooks, setIncludeHooks] = useState(true)
+  const [includeCaptions, setIncludeCaptions] = useState(true)
+  const [includeCtas, setIncludeCtas] = useState(true)
+  const [includeHashtags, setIncludeHashtags] = useState(true)
+  const [includeAdCreative, setIncludeAdCreative] = useState(true)
+  const [includeAdCopy, setIncludeAdCopy] = useState(true)
   const [includeStrategy, setIncludeStrategy] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [lighting, setLighting] = useState<LightingId | ''>('')
@@ -186,10 +190,14 @@ export default function NewCampaignPage() {
       (imageFile ? imageFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '') ||
       (productUrl.trim() ? 'Product from URL' : 'Untitled product')
     const resolved = resolveCampaignFromFormats({
-      photoStyles: photoStyles.slice(0, limits.maxImages),
-      videoStyles: videoStyles.slice(0, limits.maxVideos),
-      includeSocial,
-      includeAds,
+      photoStyles,
+      videoStyles,
+      includeHooks,
+      includeCaptions,
+      includeCtas,
+      includeHashtags,
+      includeAdCreative,
+      includeAdCopy,
       includeStrategy,
     })
     const id = newLocalId('campaign')
@@ -280,10 +288,14 @@ export default function NewCampaignPage() {
           price: price.trim() || undefined,
           category: category.trim() || undefined,
           imageFile: sourceType === 'upload' ? imageFile : null,
-          photoStyles: photoStyles.slice(0, limits.maxImages),
-          videoStyles: videoStyles.slice(0, limits.maxVideos),
-          includeSocial,
-          includeAds,
+          photoStyles,
+          videoStyles,
+          includeHooks,
+          includeCaptions,
+          includeCtas,
+          includeHashtags,
+          includeAdCreative,
+          includeAdCopy,
           includeStrategy,
           creativeDirection: {
             prompt,
@@ -585,8 +597,8 @@ export default function NewCampaignPage() {
               <h2>Image formats</h2>
               <p>
                 {photoStyles.length === 0
-                  ? `Pick looks — blank uses ${Math.min(DEFAULT_PHOTO_STYLES.length, limits.maxImages)} starter formats · max ${limits.maxImages}`
-                  : `${photoStyles.length} / ${limits.maxImages} selected`}
+                  ? `Pick as many as you want — blank uses ${DEFAULT_PHOTO_STYLES.length} starters`
+                  : `${photoStyles.length} selected · choose any combination`}
               </p>
             </div>
             <FormatPickGrid
@@ -594,12 +606,9 @@ export default function NewCampaignPage() {
               selected={photoStyles}
               onChange={setPhotoStyles}
               defaultIds={DEFAULT_PHOTO_STYLES}
-              max={limits.maxImages}
+              max={Math.max(limits.maxImages, PHOTO_STYLES.length)}
               disabled={busy}
               ariaLabel="Image formats"
-              onLimitHit={() =>
-                setWarning(`Your plan allows up to ${limits.maxImages} images per campaign.`)
-              }
             />
           </section>
 
@@ -610,8 +619,8 @@ export default function NewCampaignPage() {
                 {limits.maxVideos === 0
                   ? 'Upgrade to unlock video formats'
                   : videoStyles.length === 0
-                    ? `Winning formats — hover to preview · blank uses ${Math.min(DEFAULT_VIDEO_STYLES.length, limits.maxVideos)} · max ${limits.maxVideos}`
-                    : `${videoStyles.length} / ${limits.maxVideos} selected`}
+                    ? `Pick as many as you want — blank uses ${DEFAULT_VIDEO_STYLES.length} starters`
+                    : `${videoStyles.length} selected · choose any combination`}
               </p>
             </div>
             <FormatPickGrid
@@ -619,39 +628,72 @@ export default function NewCampaignPage() {
               selected={videoStyles}
               onChange={setVideoStyles}
               defaultIds={DEFAULT_VIDEO_STYLES}
-              max={limits.maxVideos}
+              max={Math.max(limits.maxVideos, VIDEO_STYLES.length)}
               disabled={busy || limits.maxVideos === 0}
               videoAspect
               ariaLabel="Video formats"
-              onLimitHit={() =>
-                setWarning(`Your plan allows up to ${limits.maxVideos} videos per campaign.`)
-              }
             />
           </section>
 
           <section className="form-section">
             <div className="form-section-head">
-              <h2>Extras</h2>
-              <p>Optional copy and ads alongside your formats</p>
+              <h2>Ads & copy extras</h2>
+              <p>Add hooks, captions, CTAs and ad creatives to the same campaign</p>
             </div>
             <div className="campaign-extra-toggles" role="group" aria-label="Campaign extras">
-              <label className={`extra-toggle${includeSocial ? ' is-on' : ''}`}>
+              <label className={`extra-toggle${includeHooks ? ' is-on' : ''}`}>
                 <input
                   type="checkbox"
-                  checked={includeSocial}
-                  onChange={(e) => setIncludeSocial(e.target.checked)}
+                  checked={includeHooks}
+                  onChange={(e) => setIncludeHooks(e.target.checked)}
                   disabled={busy}
                 />
-                <span>Social copy</span>
+                <span>Hooks</span>
               </label>
-              <label className={`extra-toggle${includeAds ? ' is-on' : ''}`}>
+              <label className={`extra-toggle${includeCaptions ? ' is-on' : ''}`}>
                 <input
                   type="checkbox"
-                  checked={includeAds}
-                  onChange={(e) => setIncludeAds(e.target.checked)}
+                  checked={includeCaptions}
+                  onChange={(e) => setIncludeCaptions(e.target.checked)}
                   disabled={busy}
                 />
-                <span>Ad creative + copy</span>
+                <span>Captions</span>
+              </label>
+              <label className={`extra-toggle${includeCtas ? ' is-on' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={includeCtas}
+                  onChange={(e) => setIncludeCtas(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>CTAs</span>
+              </label>
+              <label className={`extra-toggle${includeHashtags ? ' is-on' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={includeHashtags}
+                  onChange={(e) => setIncludeHashtags(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>Hashtags</span>
+              </label>
+              <label className={`extra-toggle${includeAdCreative ? ' is-on' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={includeAdCreative}
+                  onChange={(e) => setIncludeAdCreative(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>Ad creative</span>
+              </label>
+              <label className={`extra-toggle${includeAdCopy ? ' is-on' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={includeAdCopy}
+                  onChange={(e) => setIncludeAdCopy(e.target.checked)}
+                  disabled={busy}
+                />
+                <span>Ad copy</span>
               </label>
               <label className={`extra-toggle${includeStrategy ? ' is-on' : ''}`}>
                 <input
@@ -664,12 +706,12 @@ export default function NewCampaignPage() {
               </label>
             </div>
             <p className="dash-muted" style={{ marginTop: 10 }}>
-              Pack preview: ~{Math.min(photoCount, limits.maxImages)} images
-              {limits.maxVideos > 0
-                ? ` · ~${Math.min(videoCount, limits.maxVideos)} videos`
-                : ''}
-              {includeSocial ? ' · social copy' : ''}
-              {includeAds ? ' · ads' : ''}
+              Pack preview: ~{photoCount} images
+              {limits.maxVideos > 0 ? ` · ~${videoCount} videos` : ''}
+              {includeHooks ? ' · hooks' : ''}
+              {includeCaptions ? ' · captions' : ''}
+              {includeCtas ? ' · CTAs' : ''}
+              {includeAdCreative || includeAdCopy ? ' · ads' : ''}
             </p>
           </section>
 

@@ -303,14 +303,26 @@ export function videoUrlForAsset(assetType: string): string | undefined {
   return mapped ? VIDEO_STYLES.find((s) => s.id === mapped)?.videoUrl : undefined
 }
 
+/** Optional copy / ads extras for Full Campaign. */
+export type CampaignCopyExtras = {
+  includeHooks?: boolean
+  includeCaptions?: boolean
+  includeCtas?: boolean
+  includeHashtags?: boolean
+  includeAdCreative?: boolean
+  includeAdCopy?: boolean
+}
+
 /** Build campaign selectedAssets from explicit format picks (not deliverable guesswork). */
 export function resolveCampaignFromFormats(input: {
   photoStyles: PhotoStyleId[]
   videoStyles: VideoStyleId[]
+  /** @deprecated Prefer granular extras — kept for older call sites */
   includeSocial?: boolean
+  /** @deprecated Prefer includeAdCreative / includeAdCopy */
   includeAds?: boolean
   includeStrategy?: boolean
-}): {
+} & CampaignCopyExtras): {
   deliverables: DeliverableId[]
   selectedAssets: AssetType[]
   includeStrategy: boolean
@@ -329,14 +341,38 @@ export function resolveCampaignFromFormats(input: {
   if (photos.length) deliverables.push('visuals')
   if (videos.length) deliverables.push('videos')
 
-  if (input.includeSocial !== false) {
-    deliverables.push('social')
-    selectedAssets.push('caption', 'hook', 'cta', 'hashtags')
+  const hasGranular =
+    input.includeHooks !== undefined ||
+    input.includeCaptions !== undefined ||
+    input.includeCtas !== undefined ||
+    input.includeHashtags !== undefined ||
+    input.includeAdCreative !== undefined ||
+    input.includeAdCopy !== undefined
+
+  if (hasGranular) {
+    if (input.includeCaptions) selectedAssets.push('caption')
+    if (input.includeHooks) selectedAssets.push('hook')
+    if (input.includeCtas) selectedAssets.push('cta')
+    if (input.includeHashtags) selectedAssets.push('hashtags')
+    if (input.includeCaptions || input.includeHooks || input.includeCtas || input.includeHashtags) {
+      deliverables.push('social')
+    }
+    if (input.includeAdCreative) selectedAssets.push('ad_creative')
+    if (input.includeAdCopy) selectedAssets.push('ad_copy')
+    if (input.includeAdCreative || input.includeAdCopy) {
+      deliverables.push('ads')
+    }
+  } else {
+    if (input.includeSocial !== false) {
+      deliverables.push('social')
+      selectedAssets.push('caption', 'hook', 'cta', 'hashtags')
+    }
+    if (input.includeAds) {
+      deliverables.push('ads')
+      selectedAssets.push('ad_creative', 'ad_copy')
+    }
   }
-  if (input.includeAds) {
-    deliverables.push('ads')
-    selectedAssets.push('ad_creative', 'ad_copy')
-  }
+
   if (input.includeStrategy) {
     deliverables.push('strategy')
   }

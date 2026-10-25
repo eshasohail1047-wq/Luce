@@ -20,6 +20,30 @@ async function loadSharp(): Promise<SharpFactory | null> {
   }
 }
 
+function publicAppOrigin(): string | undefined {
+  const fromEnv =
+    process.env.APP_URL?.trim() ||
+    process.env.OPENROUTER_HTTP_REFERER?.trim() ||
+    (process.env.VERCEL_URL?.trim()
+      ? `https://${process.env.VERCEL_URL.trim()}`
+      : undefined)
+  if (!fromEnv) return undefined
+  try {
+    return new URL(fromEnv).origin
+  } catch {
+    return undefined
+  }
+}
+
+/** Resolve site-relative paths (e.g. /images/foo.jpg) to an absolute URL the server can fetch. */
+function absoluteImageUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed.startsWith('/')) return trimmed
+  const origin = publicAppOrigin()
+  if (!origin) return trimmed
+  return `${origin}${trimmed}`
+}
+
 async function bufferFromImageUrl(url: string): Promise<Buffer | null> {
   const trimmed = url.trim()
   if (!trimmed) return null
@@ -30,11 +54,17 @@ async function bufferFromImageUrl(url: string): Promise<Buffer | null> {
     if (!b64) return null
     return Buffer.from(b64, 'base64')
   }
-  if (/^https?:\/\//i.test(trimmed)) {
-    const res = await fetch(trimmed)
+  const fetchUrl = absoluteImageUrl(trimmed)
+  if (/^https?:\/\//i.test(fetchUrl)) {
+    const res = await fetch(fetchUrl)
     if (!res.ok) return null
     return Buffer.from(await res.arrayBuffer())
   }
+  // Relative path with no APP_URL / VERCEL_URL — cannot fetch on the server
+  console.warn(
+    '[prepare-image] relative productImage ignored (set APP_URL). Client should send a data URL.',
+    trimmed.slice(0, 80),
+  )
   return null
 }
 
@@ -46,12 +76,32 @@ export async function prepareReferenceImage(url: string): Promise<string> {
   const trimmed = url.trim()
   if (!trimmed) return trimmed
 
+  // Reject relative paths before any provider call — OpenRouter cannot fetch /images/…
+  if (trimmed.startsWith('/') || trimmed.startsWith('./')) {
+    const abs = absoluteImageUrl(trimmed)
+    if (abs === trimmed || !/^https?:\/\//i.test(abs)) {
+      throw new Error(
+        'productImage must be a data URL or public https URL. Relative paths like /images/… are not fetchable by the AI API — convert on the client first.',
+      )
+    }
+  }
+
   const sharp = await loadSharp()
-  if (!sharp) return trimmed
+  if (!sharp) {
+    // Without sharp, still resolve relative→absolute when APP_URL is set
+    return absoluteImageUrl(trimmed)
+  }
 
   try {
     const input = await bufferFromImageUrl(trimmed)
-    if (!input) return trimmed
+    if (!input) {
+      if (trimmed.startsWith('/') || trimmed.startsWith('./')) {
+        throw new Error(
+          'productImage must be a data URL or public https URL. Relative paths like /images/… are not fetchable by the AI API — convert on the client first.',
+        )
+      }
+      return trimmed
+    }
 
     const metaInfo = await sharp(input, { failOn: 'none' }).rotate().metadata()
     const w = metaInfo.width || 0

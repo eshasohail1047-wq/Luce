@@ -14,11 +14,25 @@ const MAIN_NAV = [
   { to: '/app/library', label: 'Saved', end: false, icon: 'folder' as const },
 ]
 
-const CREATE_NAV = [
-  { to: '/app/studio/photos', label: 'Image Studio', icon: 'image' as const, pro: false },
-  { to: '/app/studio/videos', label: 'Video Studio', icon: 'video' as const, pro: true },
-  { to: '/app/studio/ads', label: 'Ad Lab', icon: 'tag' as const, pro: true },
-  { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark' as const, pro: true },
+type CreateNavItem = {
+  to: string
+  label: string
+  icon: 'image' | 'video' | 'tag' | 'spark'
+  pro: boolean
+  comingSoon?: boolean
+}
+
+const CREATE_NAV: CreateNavItem[] = [
+  { to: '/app/studio/photos', label: 'Image Studio', icon: 'image', pro: false },
+  { to: '/app/studio/videos', label: 'Video Studio', icon: 'video', pro: true },
+  {
+    to: '/app/studio/ads',
+    label: 'Ads & Social',
+    icon: 'tag',
+    pro: true,
+    comingSoon: true,
+  },
+  { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark', pro: true },
 ]
 
 function NavIcon({
@@ -263,21 +277,33 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <div className="studio-rail-group">
             <p className="studio-rail-label">Create</p>
             <nav className="studio-rail-nav" aria-label="Create">
-              {CREATE_NAV.map((item) => (
-                <NavLink
-                  key={item.to + item.label}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `studio-rail-link${isActive ? ' is-active' : ''}`
-                  }
-                >
-                  <NavIcon name={item.icon} />
-                  <span>{item.label}</span>
-                  {item.pro && !paid ? (
-                    <span className="studio-rail-pro">Paid</span>
-                  ) : null}
-                </NavLink>
-              ))}
+              {CREATE_NAV.map((item) =>
+                item.comingSoon ? (
+                  <span
+                    key={item.to + item.label}
+                    className="studio-rail-link is-soon"
+                    title="Coming soon — not in MVP"
+                  >
+                    <NavIcon name={item.icon} />
+                    <span>{item.label}</span>
+                    <span className="studio-rail-soon">Coming soon</span>
+                  </span>
+                ) : (
+                  <NavLink
+                    key={item.to + item.label}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      `studio-rail-link${isActive ? ' is-active' : ''}`
+                    }
+                  >
+                    <NavIcon name={item.icon} />
+                    <span>{item.label}</span>
+                    {item.pro && !paid ? (
+                      <span className="studio-rail-pro">Paid</span>
+                    ) : null}
+                  </NavLink>
+                ),
+              )}
             </nav>
           </div>
 

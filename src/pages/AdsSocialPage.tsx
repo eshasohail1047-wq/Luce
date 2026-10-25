@@ -1,836 +1,812 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, useSearchParams } from 'react-router-dom'
+import { useRef, useState } from 'react'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import StudioPage from './StudioPage'
 import PaywallModal from '../components/PaywallModal'
 import { useAuth } from '../auth/AuthProvider'
-import { listUserProducts, type ProductSummary } from '../lib/campaigns'
-import { resolveProductImage } from '../lib/localDemoCampaign'
+import {
+  composeAdPreviewDataUrl,
+  ensureAiImagePayload,
+  fileToDataUrl,
+} from '../lib/localDemoCampaign'
 import { canGenerate } from '../lib/planAccess'
 import { requestGenerateCopy } from '../lib/generateCopy'
 import { requestGenerateImages } from '../lib/generateImages'
 import { saveAssetToLibrary } from '../lib/savedAssets'
 import type { MockOutput } from '../lib/mockCampaign'
 
-type GoalId = 'sales' | 'launch' | 'awareness' | 'promotion'
-type AngleId = 'problem' | 'desire' | 'social_proof'
+type CreateKind = 'ad' | 'social' | 'carousel' | 'story' | 'reel' | 'launch' | 'offer'
+type PlatformId = 'instagram' | 'tiktok' | 'facebook' | 'pinterest'
+type ResultTab = 'ad' | 'captions' | 'hooks' | 'headlines' | 'ctas'
 
-type Strategy = {
-  customer: string
-  problem: string
-  motivation: string
-  bestAngle: string
-  keyMessage: string
-  audienceLabel: string
-  audienceDetail: string
-  platform: string
-  platformDetail: string
-  format: string
-  formatDetail: string
-  recommendedHook: string
+type UploadedAsset = {
+  url: string
+  name: string
+  kind: 'image' | 'video'
 }
 
-type AngleCard = {
-  id: AngleId
-  title: string
-  description: string
-  hook: string
-  visual: string
-  headline: string
-  cta: string
-}
-
-type CampaignResult = {
-  angleId: AngleId
-  angleTitle: string
+type ResultKit = {
   imageUrl: string
+  primaryText: string
+  headline: string
+  caption: string
+  hook: string
+  cta: string
+  hashtags: string
+  captions: string[]
   hooks: string[]
   headlines: string[]
-  primaryText: string
-  cta: string
-  social: { platform: string; adaptation: string }[]
-  usedAiImage: boolean
-  usedAiCopy: boolean
+  ctas: string[]
+  usedAi: boolean
 }
 
-const DEMO_PRODUCT: ProductSummary = {
-  id: 'demo-rose-oud',
-  name: 'Rose Oud Perfume',
-  category: 'Fragrance',
-  brand: 'Maison Luce',
-  imageUrl: '/images/fidelity-studio.jpg',
-}
-
-const GOALS: { id: GoalId; label: string; icon: 'cart' | 'rocket' | 'eye' | 'tag' }[] = [
-  { id: 'sales', label: 'Sales', icon: 'cart' },
-  { id: 'launch', label: 'Launch', icon: 'rocket' },
-  { id: 'awareness', label: 'Awareness', icon: 'eye' },
-  { id: 'promotion', label: 'Promotion', icon: 'tag' },
+/** Real LUCE gallery images — format-matched previews for each creative type */
+const CREATE_OPTIONS: {
+  id: CreateKind
+  title: string
+  sub: string
+  image: string
+}[] = [
+  {
+    id: 'ad',
+    title: 'Ad Creative',
+    sub: 'Paid ad',
+    image: '/images/output-ads.jpg',
+  },
+  {
+    id: 'social',
+    title: 'Social Post',
+    sub: 'Organic',
+    image: '/images/output-social.jpg',
+  },
+  {
+    id: 'carousel',
+    title: 'Carousel',
+    sub: 'Multi-slide',
+    image: '/images/hiw-app-formats.jpg',
+  },
+  {
+    id: 'story',
+    title: 'Story',
+    sub: 'Vertical',
+    image: '/images/video-poster-mirror.jpg',
+  },
+  {
+    id: 'reel',
+    title: 'Reel / Short',
+    sub: 'Short video',
+    image: '/images/video-poster-ugc.jpg',
+  },
+  {
+    id: 'launch',
+    title: 'Product Launch',
+    sub: 'New drop',
+    image: '/images/campaign-perfume-studio.jpg',
+  },
+  {
+    id: 'offer',
+    title: 'Offer / Sale',
+    sub: 'Promotion',
+    image: '/images/format-perfume-promo.jpg',
+  },
 ]
 
-function GoalIcon({ name }: { name: (typeof GOALS)[number]['icon'] }) {
+const PLATFORMS: { id: PlatformId; label: string }[] = [
+  { id: 'instagram', label: 'Instagram' },
+  { id: 'tiktok', label: 'TikTok' },
+  { id: 'facebook', label: 'Facebook' },
+  { id: 'pinterest', label: 'Pinterest' },
+]
+
+const CTA_OPTIONS = ['Shop Now', 'Discover', 'Learn More', 'Get Yours', 'Buy Now'] as const
+const BUSY = ['Reading your image…', 'Writing copy…', 'Designing the ad…', 'Finishing captions…']
+
+function createLabel(id: CreateKind) {
+  return CREATE_OPTIONS.find((c) => c.id === id)?.title ?? 'Ad Creative'
+}
+
+function fallbackCopy(name: string, cta: string, prompt: string) {
+  const scent = /perfume|fragrance|scent|oud|rose/i.test(name)
+  const vibe = prompt.trim()
+    ? prompt.trim().slice(0, 120)
+    : scent
+      ? 'a sophisticated blend of warm oud and delicate rose'
+      : `a scroll-stopping look for ${name}`
+  return {
+    primaryText: `Discover ${name} — ${vibe}.`,
+    headline: scent ? 'Meet Your New Signature Scent' : `Meet ${name}`,
+    caption: scent
+      ? `A scent that stays with you. ✨\n\n${name}.`
+      : `${name} — made to stand out. ✨`,
+    hook: scent ? 'POV: You finally found your signature scent.' : `POV: You found ${name}.`,
+    cta: cta || 'Shop Now',
+    hashtags: scent ? '#LuxuryFragrance #LUCE' : '#LUCE #AdsAndSocial',
+  }
+}
+
+function Icon({
+  name,
+  size = 18,
+}: {
+  name: 'plus' | 'check' | 'spark' | 'upload' | 'image' | 'video' | PlatformId
+  size?: number
+}) {
   const c = {
-    width: 16,
-    height: 16,
+    width: size,
+    height: size,
     viewBox: '0 0 24 24',
     fill: 'none',
     stroke: 'currentColor',
-    strokeWidth: 1.8,
+    strokeWidth: 1.75,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
     'aria-hidden': true as const,
   }
-  if (name === 'cart')
+  if (name === 'plus')
     return (
       <svg {...c}>
-        <circle cx="9" cy="20" r="1" />
-        <circle cx="17" cy="20" r="1" />
-        <path d="M3 4h2l2.2 10.5a1.8 1.8 0 0 0 1.8 1.4h7.6a1.8 1.8 0 0 0 1.8-1.4L20 8H7" />
+        <path d="M12 5v14M5 12h14" />
       </svg>
     )
-  if (name === 'rocket')
+  if (name === 'check')
     return (
-      <svg {...c}>
-        <path d="M12 3c3 2 5 5 5 9-2 0-4 .5-5 1.5C11 12.5 9 12 7 12c0-4 2-7 5-9Z" />
-        <path d="m9 17-2 4" />
-        <path d="m15 17 2 4" />
+      <svg {...c} strokeWidth={2.4}>
+        <path d="m6 12 4 4 8-8" />
       </svg>
     )
-  if (name === 'eye')
+  if (name === 'spark')
     return (
       <svg {...c}>
-        <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
-        <circle cx="12" cy="12" r="2.5" />
+        <path d="m12 3 1.2 3.8L17 8l-3.8 1.2L12 13l-1.2-3.8L7 8l3.8-1.2L12 3Z" />
+        <path d="M5 16h4M15 16h4M7 20h10" />
+      </svg>
+    )
+  if (name === 'upload')
+    return (
+      <svg {...c}>
+        <path d="M12 16V7M8.5 10.5 12 7l3.5 3.5" />
+        <path d="M5 18h14" />
+      </svg>
+    )
+  if (name === 'image')
+    return (
+      <svg {...c}>
+        <rect x="3" y="5" width="18" height="14" rx="2.5" />
+        <circle cx="8.5" cy="10" r="1.4" />
+        <path d="m21 15-4.5-4.5L7 20" />
+      </svg>
+    )
+  if (name === 'video')
+    return (
+      <svg {...c}>
+        <rect x="3" y="6" width="13" height="12" rx="2" />
+        <path d="m16 10 5-3v10l-5-3v-4Z" />
+      </svg>
+    )
+  if (name === 'instagram')
+    return (
+      <svg {...c}>
+        <rect x="3" y="3" width="18" height="18" rx="5" />
+        <circle cx="12" cy="12" r="4" />
+        <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+      </svg>
+    )
+  if (name === 'tiktok')
+    return (
+      <svg {...c}>
+        <path d="M14 4v9.2a3.8 3.8 0 1 1-3.2-3.75V13" />
+        <path d="M14 7.5c1.4 1.2 3 1.9 4.8 2" />
+      </svg>
+    )
+  if (name === 'facebook')
+    return (
+      <svg {...c}>
+        <path d="M14 9h3V6h-3c-2.2 0-4 1.8-4 4v2H8v3h2v6h3v-6h2.2l.8-3H13v-2c0-.6.4-1 1-1Z" />
       </svg>
     )
   return (
     <svg {...c}>
-      <path d="M12 3H5v7l8.5 8.5a2 2 0 0 0 2.8 0L20 15a2 2 0 0 0 0-2.8L12 3Z" />
-      <circle cx="8" cy="8" r="1" />
+      <circle cx="12" cy="12" r="9" />
+      <path d="M10.5 19.5 12 13c-1.5 0-2.5-1-2.5-2.4 0-1.5 1.2-2.6 2.8-2.6 1.5 0 2.4.9 2.4 2.3 0 1.8-1 3.1-2 3.1-.5 0-.9-.3-1-.8l-.5 2Z" />
     </svg>
   )
 }
 
-function buildStrategy(product: ProductSummary, goal: GoalId): Strategy {
-  const name = product.name || 'this product'
-  const brand = product.brand || 'your brand'
-  const cat = (product.category || 'beauty').toLowerCase()
-  const fragrance = /fragrance|perfume|scent|beauty/.test(cat) || /perfume|oud|fragrance/i.test(name)
-
-  const bestAngle =
-    goal === 'sales' || goal === 'promotion'
-      ? 'Problem → Solution'
-      : goal === 'launch'
-        ? 'Lifestyle / Desire'
-        : 'Social Proof'
-
-  if (fragrance) {
-    return {
-      customer: 'Women 25–40 who love luxury fragrances and want a distinctive signature scent.',
-      problem: 'They want a sophisticated, long-lasting fragrance that feels unique.',
-      motivation: 'Emotional connection, confidence, luxury and receiving compliments.',
-      bestAngle: goal === 'awareness' ? 'Social Proof' : goal === 'launch' ? 'Lifestyle / Desire' : bestAngle,
-      keyMessage: 'A scent that turns everyday moments into memorable ones.',
-      audienceLabel: 'Women, 25–40',
-      audienceDetail: 'Interested in fragrance, beauty, luxury and self-care · active on Instagram & TikTok',
-      platform: 'Instagram',
-      platformDetail: 'Reels + Feed',
-      format: 'Video Ad',
-      formatDetail: '9:16',
-      recommendedHook:
-        goal === 'awareness'
-          ? 'The fragrance everyone keeps asking about…'
-          : goal === 'launch'
-            ? 'Smell like you belong in the room.'
-            : 'Still looking for a fragrance that actually lasts?',
-    }
-  }
-
-  return {
-    customer: `People who care about ${cat} and want ${name} to feel distinctive — not generic.`,
-    problem: `They want something that feels premium and memorable, without guessing what will resonate.`,
-    motivation: `Confidence, compliments, and an emotional lift that makes ${name} feel worth it.`,
-    bestAngle,
-    keyMessage: `${name} turns everyday moments into ones people remember — stay true to ${brand}.`,
-    audienceLabel: 'Suggested audience',
-    audienceDetail: `Adults 25–40 interested in ${cat}, beauty & lifestyle · active on Instagram & TikTok`,
-    platform: 'Instagram',
-    platformDetail: 'Reels + Feed',
-    format: goal === 'awareness' || goal === 'launch' ? 'Video Ad' : 'Static + Video',
-    formatDetail: '9:16',
-    recommendedHook: `Still looking for ${name} that actually stands out?`,
-  }
-}
-
-function buildAngles(product: ProductSummary, offer: string): AngleCard[] {
-  const name = product.name || 'your product'
-  const claim = offer.trim() ? 'Claim Offer' : 'Shop Now'
-  return [
-    {
-      id: 'problem',
-      title: 'Problem / Solution',
-      description: 'Show the problem and position your product as the solution.',
-      hook: `Still looking for ${name} that actually lasts?`,
-      visual: 'Close-up product shot + real-life use.',
-      headline: 'Long-lasting luxury.',
-      cta: claim,
-    },
-    {
-      id: 'desire',
-      title: 'Desire / Lifestyle',
-      description: 'Sell the feeling and lifestyle your product creates.',
-      hook: 'Smell like you belong in the room.',
-      visual: 'Elegant lifestyle setting + product.',
-      headline: 'Your signature scent.',
-      cta: 'Discover Now',
-    },
-    {
-      id: 'social_proof',
-      title: 'Social Proof',
-      description: 'Use reviews and customer experiences to build trust.',
-      hook: 'The fragrance everyone keeps asking about…',
-      visual: 'UGC / review + product.',
-      headline: 'Loved by fragrance lovers.',
-      cta: claim,
-    },
-  ]
-}
-
-function imageKindForAngle(angle: AngleId) {
-  if (angle === 'desire') return 'photo_hand_model' as const
-  if (angle === 'social_proof') return 'photo_window_daylight' as const
-  return 'photo_moody_editorial' as const
-}
-
-/** Route: recreate stays on classic studio; else Ad Lab. */
+/** Ads & Social is post-MVP — keep recreate for library, otherwise send to Full Campaign. */
 export function AdsSocialRoute() {
   const [searchParams] = useSearchParams()
-  if (searchParams.get('recreate') === '1') {
-    return <StudioPage forcedKind="ads" />
-  }
-  return <AdLabPage />
+  if (searchParams.get('recreate') === '1') return <StudioPage forcedKind="ads" />
+  return <Navigate to="/app/campaigns/new" replace />
 }
 
-export default function AdLabPage() {
+export default function AdsSocialPage() {
   const { user, plan, freeImageUsed, loading } = useAuth()
-  const [products, setProducts] = useState<ProductSummary[]>([])
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [product, setProduct] = useState<ProductSummary | null>(null)
-  const [goal, setGoal] = useState<GoalId>('sales')
-  const [luceAudience, setLuceAudience] = useState(true)
-  const [audienceEdit, setAudienceEdit] = useState('')
-  const [editingAudience, setEditingAudience] = useState(false)
-  const [offer, setOffer] = useState('')
-  const [selectedAngle, setSelectedAngle] = useState<AngleId | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const refFileRef = useRef<HTMLInputElement>(null)
+
+  const [asset, setAsset] = useState<UploadedAsset | null>(null)
+  const [createKind, setCreateKind] = useState<CreateKind>('ad')
+  const [platforms, setPlatforms] = useState<PlatformId[]>(['instagram'])
+  const [prompt, setPrompt] = useState('')
+  const [referenceUrl, setReferenceUrl] = useState<string | null>(null)
+  const [cta, setCta] = useState('Shop Now')
+  const [customCta, setCustomCta] = useState('')
+  const [useCustomCta, setUseCustomCta] = useState(false)
+
   const [busy, setBusy] = useState(false)
   const [busyLabel, setBusyLabel] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<CampaignResult | null>(null)
+  const [result, setResult] = useState<ResultKit | null>(null)
+  const [resultTab, setResultTab] = useState<ResultTab>('ad')
   const [paywallOpen, setPaywallOpen] = useState(false)
-  const [hookCopied, setHookCopied] = useState(false)
+  const [paywallReason, setPaywallReason] = useState<string | undefined>()
+  const [savedOk, setSavedOk] = useState(false)
 
-  useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const rows = await listUserProducts(user.uid)
-        const enriched = await Promise.all(
-          rows.map(async (row) => {
-            const imageUrl = await resolveProductImage(row.id, row.imageUrl)
-            return imageUrl ? { ...row, imageUrl } : row
-          }),
-        )
-        if (cancelled) return
-        setProducts(enriched)
-        setProduct((prev) => prev || enriched[0] || DEMO_PRODUCT)
-      } catch {
-        if (!cancelled) setProduct((prev) => prev || DEMO_PRODUCT)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [user])
+  const effectiveCta = useCustomCta ? customCta.trim() || 'Shop Now' : cta
+  const productName = asset?.name || 'Your product'
 
-  const selected = product || DEMO_PRODUCT
-  const strategy = useMemo(() => buildStrategy(selected, goal), [selected, goal])
-  const angles = useMemo(() => buildAngles(selected, offer), [selected, offer])
-  const audienceText = luceAudience
-    ? `${strategy.audienceLabel}: ${strategy.audienceDetail}`
-    : audienceEdit || `${strategy.audienceLabel}: ${strategy.audienceDetail}`
-
-  async function copyHook() {
+  async function onUpload(file: File | null) {
+    if (!file) return
     try {
-      await navigator.clipboard.writeText(strategy.recommendedHook)
-      setHookCopied(true)
-      window.setTimeout(() => setHookCopied(false), 1600)
+      const url = await fileToDataUrl(file)
+      setAsset({
+        url,
+        name: file.name.replace(/\.[^.]+$/, '') || 'My product',
+        kind: file.type.startsWith('video/') ? 'video' : 'image',
+      })
+      setResult(null)
+      setError(null)
+    } catch {
+      setError('Could not read that file.')
+    }
+  }
+
+  async function onReference(file: File | null) {
+    if (!file) return
+    try {
+      setReferenceUrl(await fileToDataUrl(file))
+    } catch {
+      setError('Could not read reference.')
+    }
+  }
+
+  function togglePlatform(id: PlatformId) {
+    setPlatforms((prev) => {
+      if (prev.includes(id)) return prev.length === 1 ? prev : prev.filter((p) => p !== id)
+      return [...prev, id]
+    })
+  }
+
+  async function copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
     } catch {
       /* ignore */
     }
   }
 
-  async function generateForAngle(angleId: AngleId) {
-    const angle = angles.find((a) => a.id === angleId)
-    if (!angle) return
+  async function generate() {
+    if (!asset) {
+      setError('Upload a product image first.')
+      return
+    }
 
     const gate = canGenerate({ plan, action: 'ads', freeImageUsed })
-    // Always produce strategy creatives; AI when allowed
     const useAi = gate.allowed
 
-    setSelectedAngle(angleId)
     setBusy(true)
     setError(null)
     setResult(null)
-    setBusyLabel('Applying marketing angle…')
+    setSavedOk(false)
+    setResultTab('ad')
+
+    let step = 0
+    setBusyLabel(BUSY[0])
+    const tick = window.setInterval(() => {
+      step = Math.min(step + 1, BUSY.length - 1)
+      setBusyLabel(BUSY[step])
+    }, 800)
 
     try {
-      let imageUrl = selected.imageUrl || DEMO_PRODUCT.imageUrl!
-      let usedAiImage = false
-      let usedAiCopy = false
-      let hooks = [angle.hook, strategy.recommendedHook, `${selected.name} — made to be remembered.`]
-      let headlines = [angle.headline, `Meet ${selected.name}.`, strategy.keyMessage]
-      let primaryText = `${angle.hook} ${strategy.keyMessage}${
-        offer.trim() ? ` Offer: ${offer.trim()}.` : ''
-      }`
-      let cta = angle.cta
+      const still = asset.url
+      let imageUrl = still
+      let usedAi = false
+      let copy = fallbackCopy(productName, effectiveCta, prompt)
+
+      const direction = [
+        `Create: ${createLabel(createKind)}.`,
+        `Platforms: ${platforms.join(', ')}.`,
+        `CTA: ${effectiveCta}.`,
+        prompt.trim() ? `Prompt: ${prompt.trim()}` : 'Infer from product.',
+        'Keep product identity exact. Reference is style only.',
+      ].join(' ')
 
       if (useAi) {
-        setBusyLabel('Writing copy for this angle…')
+        setBusyLabel('Writing copy…')
         try {
-          const copy = await requestGenerateCopy({
-            productName: selected.name,
-            brand: selected.brand,
-            category: selected.category,
-            creativeDirection: {
-              prompt: `Ad Lab angle: ${angle.title}. Hook style: ${angle.hook}. Goal: ${goal}. Audience: ${audienceText}. Visual: ${angle.visual}. Offer: ${offer || 'none'}.`,
-            },
-            assets: ['hook', 'caption', 'cta', 'ad_copy', 'hashtags'],
+          const res = await requestGenerateCopy({
+            productName,
+            creativeDirection: { prompt: direction },
+            assets: ['ad_copy', 'hook', 'caption', 'cta', 'hashtags'],
+            recreateNote: `Ads & Social · ${createLabel(createKind)}`,
           })
-          for (const a of copy.assets) {
-            if (a.type === 'hook') hooks = [a.text, ...hooks.filter((h) => h !== a.text)]
-            if (a.type === 'ad_copy' || a.type === 'caption') primaryText = a.text
-            if (a.type === 'cta') cta = a.text
-          }
-          usedAiCopy = copy.assets.length > 0
-        } catch (err) {
-          console.warn('[AdLab] copy failed', err)
-        }
-
-        const productImage = selected.imageUrl
-        if (productImage && (productImage.startsWith('data:') || productImage.startsWith('http'))) {
-          setBusyLabel('Creating visual in Image Studio…')
-          try {
-            const img = await requestGenerateImages({
-              productName: selected.name,
-              productImage,
-              creativeDirection: {
-                prompt: `${angle.visual} Marketing angle: ${angle.title}. Mood matches: ${angle.hook}`,
-              },
-              assets: [imageKindForAngle(angleId)],
-              recreateNote: `Ad Lab · ${angle.title}`,
-            })
-            const generated = img.assets[0]?.imageDataUrl
-            if (generated) {
-              imageUrl = generated
-              usedAiImage = true
+          for (const a of res.assets) {
+            if (a.type === 'ad_copy') {
+              copy.primaryText = a.text
+              const line = a.text.split(/[.\n]/)[0]?.trim()
+              if (line && line.length >= 8 && line.length <= 72) copy.headline = line
             }
-          } catch (err) {
-            console.warn('[AdLab] image failed — product still used', err)
+            if (a.type === 'caption') copy.caption = a.text
+            if (a.type === 'hook') copy.hook = a.text
+            if (a.type === 'cta' && !useCustomCta) copy.cta = a.text
+            if (a.type === 'hashtags') copy.hashtags = a.text
           }
+          copy.cta = effectiveCta
+        } catch (err) {
+          console.warn('[Ads] copy', err)
         }
-      } else if (!gate.allowed) {
-        // Free users still get a full strategy kit with product photo
-        setBusyLabel('Building preview campaign…')
-        await new Promise((r) => setTimeout(r, 500))
+
+        setBusyLabel('Designing the ad…')
+        try {
+          const productImage = await ensureAiImagePayload(still)
+          const referenceImage = referenceUrl?.startsWith('data:image/')
+            ? await ensureAiImagePayload(referenceUrl)
+            : undefined
+          const img = await requestGenerateImages({
+            productName,
+            productImage,
+            referenceImage,
+            creativeDirection: {
+              prompt: direction,
+              mood: 'premium_clean',
+              styleTheme: 'luxury_beauty',
+            },
+            assets: ['ad_creative'],
+            recreateNote: `Ads & Social · ${createLabel(createKind)}`,
+          })
+          if (img.assets[0]?.imageDataUrl) {
+            imageUrl = img.assets[0].imageDataUrl
+            usedAi = true
+          }
+        } catch (err) {
+          console.warn('[Ads] image', err)
+          setError(
+            (err instanceof Error ? err.message : 'Image failed') +
+              ' — showing a local ad preview.',
+          )
+        }
+      } else if (gate.needsPaywall) {
+        setPaywallReason(gate.reason)
       }
 
-      setBusyLabel('Packaging campaign…')
-      await new Promise((r) => setTimeout(r, 350))
+      if (!usedAi) {
+        try {
+          imageUrl = await composeAdPreviewDataUrl({
+            imageUrl: still,
+            headline: copy.hook || copy.headline,
+            cta: copy.cta,
+          })
+        } catch {
+          imageUrl = still
+        }
+      }
 
-      const next: CampaignResult = {
-        angleId,
-        angleTitle: angle.title,
+      setResult({
         imageUrl,
-        hooks: hooks.slice(0, 5),
-        headlines: headlines.slice(0, 4),
-        primaryText,
-        cta,
-        social: [
-          {
-            platform: 'Instagram',
-            adaptation: `${hooks[0]} — Feed/Reels cut with ${angle.visual.toLowerCase()}`,
-          },
-          {
-            platform: 'TikTok',
-            adaptation: `Hook-first 9:16 · open on “${hooks[0]}” then reveal ${selected.name}.`,
-          },
-          {
-            platform: 'Facebook',
-            adaptation: `${headlines[0]} · primary text + clear “${cta}” for paid placement.`,
-          },
+        primaryText: copy.primaryText,
+        headline: copy.headline,
+        caption: copy.caption,
+        hook: copy.hook,
+        cta: copy.cta,
+        hashtags: copy.hashtags,
+        captions: [copy.caption, copy.primaryText, `${copy.headline}\n\n${copy.hashtags}`],
+        hooks: [
+          copy.hook,
+          `Still thinking about ${productName}?`,
+          /perfume|fragrance|scent|oud|rose/i.test(productName)
+            ? 'One spray. Instant presence.'
+            : `Make ${productName} impossible to ignore.`,
         ],
-        usedAiImage,
-        usedAiCopy,
-      }
-      setResult(next)
+        headlines: [copy.headline, `Meet ${productName}`, copy.hook].filter(
+          (v, i, arr) => arr.indexOf(v) === i,
+        ),
+        ctas: [copy.cta, ...CTA_OPTIONS.filter((x) => x !== copy.cta)].slice(0, 5),
+        usedAi,
+      })
       window.setTimeout(() => {
-        document.getElementById('adlab-creatives')?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        })
-      }, 60)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not generate campaign.')
+        document.getElementById('ads-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 40)
+      if (!useAi && gate.needsPaywall) {
+        window.setTimeout(() => setPaywallOpen(true), 1200)
+      }
     } finally {
+      window.clearInterval(tick)
       setBusy(false)
       setBusyLabel('')
     }
   }
 
-  async function onMainGenerate() {
-    if (!selectedAngle) {
-      setError('Pick a marketing angle first — then generate the campaign.')
-      document.getElementById('adlab-angles')?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      })
-      return
-    }
-    await generateForAngle(selectedAngle)
-  }
-
-  async function onSave() {
+  async function saveResult() {
     if (!user || !result) return
-    try {
-      const campaignId = `adlab-${Date.now()}`
-      const items: MockOutput[] = [
-        {
-          id: 'creative',
-          assetType: 'ad_creative',
-          label: `${result.angleTitle} creative`,
-          kind: 'image',
-          imageUrl: result.imageUrl,
-        },
-        {
-          id: 'copy',
-          assetType: 'ad_copy',
-          label: 'Ad copy',
-          kind: 'copy',
-          text: [result.primaryText, `CTA: ${result.cta}`, ...result.hooks].join('\n\n'),
-        },
-      ]
-      for (const output of items) {
-        await saveAssetToLibrary({
-          userId: user.uid,
-          campaignId,
-          productName: selected.name,
-          output,
-        })
-      }
-      setError(null)
-      setBusyLabel('Saved to Library')
-      window.setTimeout(() => setBusyLabel(''), 1800)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save.')
+    const campaignId = `ads-${Date.now()}`
+    const outputs: MockOutput[] = [
+      {
+        id: 'img',
+        kind: 'image',
+        assetType: 'ad_creative',
+        label: 'Ad',
+        imageUrl: result.imageUrl,
+      },
+      {
+        id: 'cap',
+        kind: 'copy',
+        assetType: 'caption',
+        label: 'Caption',
+        text: result.caption,
+      },
+      { id: 'hook', kind: 'copy', assetType: 'hook', label: 'Hook', text: result.hook },
+      { id: 'cta', kind: 'copy', assetType: 'cta', label: 'CTA', text: result.cta },
+    ]
+    for (const output of outputs) {
+      await saveAssetToLibrary({
+        userId: user.uid,
+        campaignId,
+        productName,
+        output,
+      })
     }
+    setSavedOk(true)
   }
 
-  if (!loading && !user) return <Navigate to="/login" replace />
+  function download() {
+    if (!result) return
+    const a = document.createElement('a')
+    a.href = result.imageUrl
+    a.download = 'luce-ad.jpg'
+    a.click()
+  }
+
+  if (loading) return null
+  if (!user) return <Navigate to="/login" replace />
 
   return (
     <AppLayout>
       <PaywallModal
         open={paywallOpen}
-        title="Unlock Ad Lab"
+        title="Unlock Ads & Social"
+        reason={paywallReason}
         onClose={() => setPaywallOpen(false)}
       />
 
-      <main className="app-main adlab-page">
-        <header className="adlab-hero">
+      <main className="app-main adsv-page">
+        <header className="adsv-hero">
           <div>
-            <h1>Ad Lab</h1>
-            <p className="adlab-lead">
-              Find the message that will make your product impossible to ignore.
-            </p>
+            <h1>Ads & Social</h1>
+            <p className="adsv-lead">Turn your product into scroll-stopping content.</p>
           </div>
+          <p className="adsv-doodle" aria-hidden>
+            <span>↗</span> Same product. More possibilities.
+          </p>
         </header>
 
-        <div className="adlab-layout">
-          <div className="adlab-main">
-            {/* Product */}
-            <section className="adlab-product">
-              <img src={selected.imageUrl || DEMO_PRODUCT.imageUrl} alt="" />
-              <div>
-                <strong>{selected.name}</strong>
-                <span>{selected.brand || selected.category || 'Product'}</span>
-              </div>
-              <button type="button" className="adlab-change" onClick={() => setPickerOpen((v) => !v)}>
-                Change
-              </button>
-            </section>
+        {/* 1 — Upload only */}
+        <section className="adsv-panel">
+          <div className="adsv-panel-top">
+            <span className="adsv-step">1</span>
+            <h2>Upload your image</h2>
+          </div>
 
-            {pickerOpen ? (
-              <div className="adlab-picker">
-                <button
-                  type="button"
-                  className={selected.id === DEMO_PRODUCT.id ? 'is-on' : undefined}
-                  onClick={() => {
-                    setProduct(DEMO_PRODUCT)
-                    setPickerOpen(false)
-                    setResult(null)
-                  }}
-                >
-                  <img src={DEMO_PRODUCT.imageUrl} alt="" />
-                  {DEMO_PRODUCT.name}
-                </button>
-                {products.map((p) => (
+          {!asset ? (
+            <button
+              type="button"
+              className="adsv-upload"
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault()
+                void onUpload(e.dataTransfer.files?.[0] ?? null)
+              }}
+            >
+              <span className="adsv-upload-ico">
+                <Icon name="upload" size={26} />
+              </span>
+              <strong>+ Upload image</strong>
+              <span>Photo or video from your device</span>
+            </button>
+          ) : (
+            <div className="adsv-uploaded">
+              <div className="adsv-uploaded-media">
+                {asset.kind === 'video' ? (
+                  <video src={asset.url} muted playsInline />
+                ) : (
+                  <img src={asset.url} alt="" />
+                )}
+                <span className="adsv-uploaded-badge">
+                  <Icon name={asset.kind === 'video' ? 'video' : 'image'} size={12} />
+                </span>
+              </div>
+              <div className="adsv-uploaded-meta">
+                <strong>{asset.name}</strong>
+                <span>Ready to turn into an ad</span>
+                <div className="adsv-uploaded-actions">
+                  <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
+                    Replace
+                  </button>
                   <button
-                    key={p.id}
                     type="button"
-                    className={selected.id === p.id ? 'is-on' : undefined}
+                    className="btn"
                     onClick={() => {
-                      setProduct(p)
-                      setPickerOpen(false)
+                      setAsset(null)
                       setResult(null)
                     }}
                   >
-                    {p.imageUrl ? <img src={p.imageUrl} alt="" /> : <span />}
-                    {p.name}
+                    Remove
                   </button>
-                ))}
-                {products.length === 0 ? (
-                  <p>
-                    No products yet · <Link to="/app/products">Add one</Link>
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {/* 1. Brief */}
-            <section className="adlab-card" aria-labelledby="adlab-brief-title">
-              <div className="adlab-card-head">
-                <span className="adlab-step">1</span>
-                <div>
-                  <h2 id="adlab-brief-title">Campaign Brief</h2>
-                  <p>Tell LUCE what you&apos;re trying to achieve. We&apos;ll help with the strategy.</p>
                 </div>
               </div>
-
-              <div className="adlab-field">
-                <span className="adlab-label">Goal</span>
-                <div className="adlab-goals" role="radiogroup" aria-label="Goal">
-                  {GOALS.map((g) => (
-                    <button
-                      key={g.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={goal === g.id}
-                      className={goal === g.id ? 'is-on' : undefined}
-                      onClick={() => {
-                        setGoal(g.id)
-                        setResult(null)
-                      }}
-                    >
-                      <GoalIcon name={g.icon} />
-                      {g.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="adlab-field">
-                <span className="adlab-label">Audience</span>
-                <div className="adlab-audience">
-                  <label className={`adlab-suggest${luceAudience ? ' is-on' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={luceAudience}
-                      onChange={(e) => {
-                        setLuceAudience(e.target.checked)
-                        if (e.target.checked) setEditingAudience(false)
-                      }}
-                    />
-                    <span>Let LUCE suggest</span>
-                  </label>
-                  <div className="adlab-audience-box">
-                    {editingAudience ? (
-                      <textarea
-                        rows={2}
-                        value={audienceEdit || strategy.audienceDetail}
-                        onChange={(e) => setAudienceEdit(e.target.value)}
-                        onBlur={() => {
-                          setEditingAudience(false)
-                          setLuceAudience(false)
-                        }}
-                      />
-                    ) : (
-                      <>
-                        <p>{audienceText}</p>
-                        <button type="button" onClick={() => setEditingAudience(true)}>
-                          Edit
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="adlab-field">
-                <span className="adlab-label">
-                  Offer <em>optional</em>
-                </span>
-                <input
-                  className="adlab-input"
-                  value={offer}
-                  onChange={(e) => setOffer(e.target.value)}
-                  placeholder="e.g. 20% off, free shipping, bundle…"
-                />
-              </div>
-            </section>
-
-            {/* 2. Strategy */}
-            <section className="adlab-card" aria-labelledby="adlab-strategy-title">
-              <div className="adlab-card-head">
-                <span className="adlab-step">2</span>
-                <div>
-                  <h2 id="adlab-strategy-title">
-                    Marketing Strategy
-                    <span className="adlab-ai-badge">AI Generated</span>
-                  </h2>
-                  <p>Based on your product and goal, here&apos;s what LUCE recommends.</p>
-                </div>
-              </div>
-
-              <div className="adlab-strategy-grid">
-                {(
-                  [
-                    ['Target Customer', strategy.customer],
-                    ['Core Problem', strategy.problem],
-                    ['Buying Motivation', strategy.motivation],
-                    ['Best Angle', strategy.bestAngle],
-                    ['Key Message', strategy.keyMessage],
-                  ] as const
-                ).map(([title, body]) => (
-                  <article key={title} className="adlab-insight">
-                    <h3>{title}</h3>
-                    <p>{body}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            {/* 3. Angles */}
-            <section
-              className="adlab-card"
-              id="adlab-angles"
-              aria-labelledby="adlab-angles-title"
-            >
-              <div className="adlab-card-head">
-                <span className="adlab-step">3</span>
-                <div>
-                  <h2 id="adlab-angles-title">Test 3 Angles</h2>
-                  <p>Explore different ways to market the same product — then generate one.</p>
-                </div>
-              </div>
-
-              <div className="adlab-angles">
-                {angles.map((a) => (
-                  <article
-                    key={a.id}
-                    className={`adlab-angle${selectedAngle === a.id ? ' is-selected' : ''}`}
-                  >
-                    <div className="adlab-angle-top">
-                      <img src={selected.imageUrl || DEMO_PRODUCT.imageUrl} alt="" />
-                      <div>
-                        <h3>{a.title}</h3>
-                        <p>{a.description}</p>
-                      </div>
-                    </div>
-                    <dl className="adlab-angle-meta">
-                      <div>
-                        <dt>Hook</dt>
-                        <dd>{a.hook}</dd>
-                      </div>
-                      <div>
-                        <dt>Visual</dt>
-                        <dd>{a.visual}</dd>
-                      </div>
-                      <div>
-                        <dt>Headline</dt>
-                        <dd>{a.headline}</dd>
-                      </div>
-                      <div>
-                        <dt>CTA</dt>
-                        <dd>{a.cta}</dd>
-                      </div>
-                    </dl>
-                    <button
-                      type="button"
-                      className="btn btn-grad adlab-angle-btn"
-                      disabled={busy}
-                      onClick={() => void generateForAngle(a.id)}
-                    >
-                      {busy && selectedAngle === a.id
-                        ? busyLabel || 'Generating…'
-                        : 'Generate this angle →'}
-                    </button>
-                  </article>
-                ))}
-              </div>
-            </section>
-
-            {error ? (
-              <p className="auth-error" role="alert">
-                {error}
-              </p>
-            ) : null}
-
-            {/* Creatives — only after generation */}
-            {result && !busy ? (
-              <section
-                className="adlab-card adlab-creatives"
-                id="adlab-creatives"
-                aria-labelledby="adlab-creatives-title"
-              >
-                <div className="adlab-card-head">
-                  <span className="adlab-step">4</span>
-                  <div>
-                    <h2 id="adlab-creatives-title">Campaign Creative</h2>
-                    <p>
-                      Built from <strong>{result.angleTitle}</strong>
-                      {result.usedAiImage || result.usedAiCopy ? ' · AI assisted' : ' · Preview kit'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="adlab-creative-grid">
-                  <figure className="adlab-visual">
-                    <img src={result.imageUrl} alt="" />
-                    <figcaption>
-                      Visual · {result.angleTitle}
-                      <Link to="/app/studio/photos">Open Image Studio</Link>
-                    </figcaption>
-                  </figure>
-
-                  <div className="adlab-copy-panel">
-                    <h3>Ad Copy</h3>
-                    <p className="adlab-primary">{result.primaryText}</p>
-                    <div>
-                      <h4>Hooks</h4>
-                      <ol>
-                        {result.hooks.map((h) => (
-                          <li key={h}>{h}</li>
-                        ))}
-                      </ol>
-                    </div>
-                    <div>
-                      <h4>Headlines</h4>
-                      <ol>
-                        {result.headlines.map((h) => (
-                          <li key={h}>{h}</li>
-                        ))}
-                      </ol>
-                    </div>
-                    <p className="adlab-cta-line">
-                      CTA · <strong>{result.cta}</strong>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="adlab-video-row">
-                  <div>
-                    <h3>Video</h3>
-                    <p>
-                      Continue this angle in Video Studio for a 9:16 Reel / Short that matches the
-                      same hook.
-                    </p>
-                  </div>
-                  <Link className="btn btn-ghost" to="/app/studio/videos?style=ugc">
-                    Open Video Studio →
-                  </Link>
-                </div>
-
-                <div className="adlab-social-adapt">
-                  <h3>Social adaptations</h3>
-                  <ul>
-                    {result.social.map((s) => (
-                      <li key={s.platform}>
-                        <strong>{s.platform}</strong>
-                        <span>{s.adaptation}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="adlab-creative-actions">
-                  <button type="button" className="btn btn-ghost" onClick={() => void onSave()}>
-                    Save to Library
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => selectedAngle && void generateForAngle(selectedAngle)}
-                  >
-                    Regenerate
-                  </button>
-                  <Link className="btn btn-grad" to="/app/campaigns/new">
-                    Continue in Full Campaign
-                  </Link>
-                </div>
-              </section>
-            ) : null}
-          </div>
-
-          {/* Recommends sidebar */}
-          <aside className="adlab-side" aria-label="LUCE recommends">
-            <div className="adlab-side-inner">
-              <h2>What LUCE recommends</h2>
-              <p className="adlab-side-sub">Based on your product and goal.</p>
-
-              <div className="adlab-rec">
-                <span>Audience</span>
-                <p>{audienceText}</p>
-              </div>
-              <div className="adlab-rec">
-                <span>Best Platform</span>
-                <p>
-                  <strong>{strategy.platform}</strong>
-                  <em>{strategy.platformDetail}</em>
-                </p>
-              </div>
-              <div className="adlab-rec">
-                <span>Best Format</span>
-                <p>
-                  <strong>{strategy.format}</strong>
-                  <em>{strategy.formatDetail}</em>
-                </p>
-              </div>
-              <div className="adlab-rec adlab-rec-hook">
-                <span>Recommended Hook</span>
-                <blockquote>{strategy.recommendedHook}</blockquote>
-                <button type="button" onClick={() => void copyHook()}>
-                  {hookCopied ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-
-              <button
-                type="button"
-                className="btn btn-grad adlab-side-cta"
-                disabled={busy}
-                onClick={() => void onMainGenerate()}
-              >
-                {busy ? busyLabel || 'Generating…' : '✨ Generate Campaign'}
-              </button>
-              <p className="adlab-side-note">
-                {selectedAngle
-                  ? `Using “${angles.find((a) => a.id === selectedAngle)?.title}”.`
-                  : 'Select an angle below, then generate.'}
-              </p>
-              <p className="adlab-why">Smarter marketing. Better results.</p>
             </div>
-          </aside>
-        </div>
+          )}
+
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,video/*"
+            hidden
+            onChange={(e) => {
+              void onUpload(e.target.files?.[0] ?? null)
+              e.target.value = ''
+            }}
+          />
+        </section>
+
+        {/* 2 — What to create (real format images) */}
+        <section className="adsv-panel">
+          <div className="adsv-panel-top">
+            <span className="adsv-step">2</span>
+            <h2>What do you want to create?</h2>
+          </div>
+          <div className="adsv-kinds">
+            {CREATE_OPTIONS.map((opt) => {
+              const on = createKind === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`adsv-kind${on ? ' is-on' : ''}`}
+                  onClick={() => {
+                    setCreateKind(opt.id)
+                    setResult(null)
+                  }}
+                >
+                  <div className="adsv-kind-pic">
+                    <img src={opt.image} alt="" />
+                  </div>
+                  <strong>{opt.title}</strong>
+                  <span>{opt.sub}</span>
+                  {on ? (
+                    <span className="adsv-kind-check">
+                      <Icon name="check" size={12} />
+                    </span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        {/* 3 — Platform */}
+        <section className="adsv-panel">
+          <div className="adsv-panel-top">
+            <span className="adsv-step">3</span>
+            <h2>Choose platform</h2>
+          </div>
+          <div className="adsv-platforms">
+            {PLATFORMS.map((p) => {
+              const on = platforms.includes(p.id)
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`adsv-plat${on ? ' is-on' : ''}`}
+                  onClick={() => togglePlatform(p.id)}
+                >
+                  <span className="adsv-plat-ico">
+                    <Icon name={p.id} />
+                  </span>
+                  <strong>{p.label}</strong>
+                  {on ? (
+                    <span className="adsv-plat-check">
+                      <Icon name="check" size={12} />
+                    </span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        {/* 4 — Prompt + reference */}
+        <section className="adsv-panel">
+          <div className="adsv-panel-top">
+            <span className="adsv-step">4</span>
+            <h2>Prompt & reference</h2>
+            <em className="adsv-opt">Optional</em>
+          </div>
+          <div className="adsv-duo">
+            <div className="adsv-box">
+              <h3>Prompt</h3>
+              <textarea
+                rows={4}
+                maxLength={300}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="e.g. Make it luxurious, add 20% OFF and a Shop Now CTA…"
+              />
+              <div className="adsv-count">{prompt.length}/300</div>
+            </div>
+            <div className="adsv-box">
+              <h3>Reference</h3>
+              <p className="adsv-hint">Inspiration only — keeps your product</p>
+              {referenceUrl?.startsWith('data:image/') ? (
+                <div className="adsv-ref">
+                  <img src={referenceUrl} alt="" />
+                  <button type="button" onClick={() => setReferenceUrl(null)}>
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="adsv-ref-drop"
+                  onClick={() => refFileRef.current?.click()}
+                >
+                  <Icon name="plus" size={20} />
+                  <strong>+ Add reference</strong>
+                </button>
+              )}
+              <input
+                ref={refFileRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => {
+                  void onReference(e.target.files?.[0] ?? null)
+                  e.target.value = ''
+                }}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* 5 — CTA */}
+        <section className="adsv-panel">
+          <div className="adsv-panel-top">
+            <span className="adsv-step">5</span>
+            <h2>CTA</h2>
+          </div>
+          <div className="adsv-ctas">
+            {CTA_OPTIONS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={!useCustomCta && cta === c ? 'is-on' : undefined}
+                onClick={() => {
+                  setCta(c)
+                  setUseCustomCta(false)
+                }}
+              >
+                {c}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`adsv-cta-custom${useCustomCta ? ' is-on' : ''}`}
+              onClick={() => setUseCustomCta(true)}
+            >
+              + Custom
+            </button>
+          </div>
+          {useCustomCta ? (
+            <input
+              className="adsv-input"
+              value={customCta}
+              onChange={(e) => setCustomCta(e.target.value)}
+              placeholder="Your CTA…"
+              autoFocus
+            />
+          ) : null}
+        </section>
+
+        <button
+          type="button"
+          className="btn btn-grad adsv-go"
+          disabled={busy || !asset}
+          onClick={() => void generate()}
+        >
+          <Icon name="spark" size={18} />
+          {busy ? busyLabel || 'Creating…' : 'Create Ad'}
+        </button>
+        {error ? <p className="adsv-error">{error}</p> : null}
+
+        {result ? (
+          <section className="adsv-panel adsv-result" id="ads-result">
+            <div className="adsv-panel-top">
+              <span className="adsv-step">✓</span>
+              <h2>Your result</h2>
+              <span className="adsv-result-meta">
+                {createLabel(createKind)} · {platforms.join(' · ')}
+              </span>
+            </div>
+
+            <div className="adsv-result-tabs">
+              {(
+                [
+                  ['ad', 'Ad / Post'],
+                  ['captions', 'Captions'],
+                  ['hooks', 'Hooks'],
+                  ['headlines', 'Headlines'],
+                  ['ctas', 'CTAs'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={resultTab === id ? 'is-on' : undefined}
+                  onClick={() => setResultTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {resultTab === 'ad' ? (
+              <div className="adsv-result-ad">
+                <figure>
+                  <img src={result.imageUrl} alt="Ad" />
+                </figure>
+                <div className="adsv-result-side">
+                  <div className="adsv-chip-line">
+                    <em>Headline</em>
+                    <p>{result.headline}</p>
+                  </div>
+                  <div className="adsv-chip-line">
+                    <em>CTA</em>
+                    <p>{result.cta}</p>
+                  </div>
+                  <div className="adsv-result-actions">
+                    <button type="button" className="btn" onClick={download}>
+                      Download
+                    </button>
+                    <button type="button" className="btn" onClick={() => void saveResult()}>
+                      {savedOk ? 'Saved' : 'Save'}
+                    </button>
+                    <button type="button" className="btn btn-grad" onClick={() => void generate()}>
+                      Regenerate
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <ul className="adsv-lines">
+                {(resultTab === 'captions'
+                  ? [...result.captions, result.hashtags]
+                  : resultTab === 'hooks'
+                    ? result.hooks
+                    : resultTab === 'headlines'
+                      ? result.headlines
+                      : result.ctas
+                ).map((t, i) => (
+                  <li key={`${resultTab}-${i}`}>
+                    <p>{t}</p>
+                    <button type="button" className="btn" onClick={() => void copyText(t)}>
+                      Copy
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
       </main>
     </AppLayout>
   )
