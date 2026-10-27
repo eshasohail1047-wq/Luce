@@ -9180,6 +9180,7 @@
 }
 
 .product-card-media {
+  position: relative;
   aspect-ratio: 4 / 3;
   background: #f3f1f7;
 }
@@ -9194,14 +9195,86 @@
 .product-card-fallback {
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 8px;
   width: 100%;
   height: 100%;
-  font-size: 0.78rem;
+  color: #5c5670;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(124, 92, 255, 0.16), transparent 55%),
+    linear-gradient(160deg, #f7f5fb, #ebe6f4 55%, #e4dff0);
+}
+
+.product-card-fallback-btn {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.product-card-fallback-btn:hover .product-card-fallback-hint,
+.product-card-fallback-btn:focus-visible .product-card-fallback-hint {
+  color: #5b35d6;
+}
+
+.product-card-fallback-btn:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.product-card-replace {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(20, 18, 28, 0.72);
+  color: #fff;
+  font-size: 0.72rem;
   font-weight: 650;
-  letter-spacing: 0.06em;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.product-card-media:hover .product-card-replace,
+.product-card-media:focus-within .product-card-replace {
+  opacity: 1;
+}
+
+.product-card-replace:disabled {
+  cursor: wait;
+  opacity: 1;
+}
+
+.product-card-upload-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.78rem;
+}
+
+.product-card-initial {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(109, 77, 255, 0.14);
+  color: #5b35d6;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.product-card-fallback-hint {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #7c748c;
-  background: linear-gradient(160deg, #f6f4fa, #ebe7f3);
 }
 
 .product-card-body {
@@ -10555,6 +10628,23 @@ html[data-theme='dark'] .dash-hero-card-simple,
 html[data-theme='dark'] .dash-hero-card-simple .dash-hero-card-copy,
 html[data-theme='dark'] .dash-panel,
 html[data-theme='dark'] .dash-panel-simple,
+html[data-theme='dark'] .product-card-fallback {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(124, 92, 255, 0.22), transparent 55%),
+    linear-gradient(160deg, #1c1a24, #16141e);
+  color: #c8c2d8;
+}
+
+html[data-theme='dark'] .product-card-initial {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(155, 124, 255, 0.28);
+  color: #c4b5fd;
+}
+
+html[data-theme='dark'] .product-card-fallback-hint {
+  color: #9a93ab;
+}
+
 html[data-theme='dark'] .product-card,
 html[data-theme='dark'] .results-preview,
 html[data-theme='dark'] .results-card,

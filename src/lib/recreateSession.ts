@@ -80,3 +80,25 @@ export async function dataUrlToFile(
     return null
   }
 }
+
+/** Turn a product catalog image (HTTPS or data URL) into an upload File for Studio reuse. */
+export async function imageUrlToFile(
+  imageUrl: string,
+  filename = 'product.jpg',
+): Promise<File | null> {
+  const src = imageUrl.trim()
+  if (!src) return null
+  if (src.startsWith('data:image/')) return dataUrlToFile(src, filename)
+  if (!/^https?:\/\//i.test(src)) return null
+  try {
+    const res = await fetch(src)
+    if (!res.ok) return null
+    const blob = await res.blob()
+    const type = blob.type || 'image/jpeg'
+    const ext = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg'
+    const name = filename.includes('.') ? filename : `${filename}.${ext}`
+    return new File([blob], name, { type })
+  } catch {
+    return null
+  }
+}

@@ -12,7 +12,7 @@ import {
   where,
   type Timestamp,
 } from 'firebase/firestore'
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
+import { getDownloadURL, listAll, ref, uploadBytes } from 'firebase/storage'
 import { requireDb, requireStorage } from './firebase'
 import {
   sanitizeCreativeDirection,
@@ -33,7 +33,9 @@ import {
 } from './deliverables'
 import {
   clearCampaignStash,
+  compressImageDataUrl,
   deleteLocalCampaign,
+  fileToDataUrl,
   isLocalCampaignId,
 } from './localDemoCampaign'
 
@@ -139,6 +141,175 @@ function extFromFile(file: File) {
   return 'jpg'
 }
 
+/** Compress upload for Storage reliability; keep a small thumb for Firestore fallback. */
+async function prepareProductImageUpload(file: File): Promise<{
+  blob: Blob
+  ext: string
+  contentType: string
+  thumbDataUrl?: string
+}> {
+  try {
+    const dataUrl = await fileToDataUrl(file)
+    const compressed = await compressImageDataUrl(dataUrl, 1600, 0.82)
+    const thumb = await compressImageDataUrl(dataUrl, 640, 0.68)
+    const res = await fetch(compressed)
+    const blob = await res.blob()
+    return {
+      blob,
+      ext: 'jpg',
+      contentType: blob.type || 'image/jpeg',
+      thumbDataUrl:
+        thumb.startsWith('data:image/') && thumb.length < 700_000 ? thumb : undefined,
+    }
+  } catch {
+    return {
+      blob: file,
+      ext: extFromFile(file),
+      contentType: file.type || 'image/jpeg',
+    }
+  }
+}
+
+function firstImageUrl(value: unknown): string | undefined {
+  const urls = Array.isArray(value) ? value : []
+  const first = typeof urls[0] === 'string' ? urls[0].trim() : ''
+  if (!first) return undefined
+  if (/^https?:\/\//i.test(first) || first.startsWith('data:image/')) return first
+  return undefined
+}
+
+function firstImagePath(value: unknown): string | undefined {
+  const paths = Array.isArray(value) ? value : []
+  const first = typeof paths[0] === 'string' ? paths[0].trim() : ''
+  return first || undefined
+}
+
+async function backfillProductImageFields(
+  productId: string,
+  fields: { imageUrls?: string[]; imagePaths?: string[] },
+) {
+  try {
+    await updateDoc(doc(requireDb(), 'products', productId), {
+      ...fields,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (err) {
+    console.warn('[campaigns] product image backfill failed', productId, err)
+  }
+}
+
+/** Prefer stored URL; heal from imagePaths or by listing the product Storage folder. */
+async function healProductImageUrl(
+  productId: string,
+  data: { imageUrls?: unknown; imagePaths?: unknown; userId?: unknown },
+): Promise<string | undefined> {
+  const existing = firstImageUrl(data.imageUrls)
+  if (existing) return existing
+
+  const path = firstImagePath(data.imagePaths)
+  if (path) {
+    try {
+      const url = await getDownloadURL(ref(requireStorage(), path))
+      void backfillProductImageFields(productId, {
+        imagePaths: [path],
+        imageUrls: [url],
+      })
+      return url
+    } catch (err) {
+      console.warn('[campaigns] getDownloadURL failed', productId, err)
+    }
+  }
+
+  // Older creates left empty imagePaths even when a file might exist under the product folder.
+  const userId = typeof data.userId === 'string' ? data.userId.trim() : ''
+  if (!userId) return undefined
+  try {
+    const folder = ref(requireStorage(), `users/${userId}/products/${productId}`)
+    const listed = await listAll(folder)
+    const fileRef = listed.items[0]
+    if (!fileRef) return undefined
+    const url = await getDownloadURL(fileRef)
+    void backfillProductImageFields(productId, {
+      imagePaths: [fileRef.fullPath],
+      imageUrls: [url],
+    })
+    return url
+  } catch (err) {
+    console.warn('[campaigns] storage list heal failed', productId, err)
+    return undefined
+  }
+}
+
+/** Persist a recovered cover (HTTPS or small data thumb) onto the product doc. */
+export async function backfillProductImageUrl(
+  productId: string,
+  imageUrl: string,
+): Promise<void> {
+  const id = productId.trim()
+  const url = imageUrl.trim()
+  if (!id || !url) return
+  if (/^https?:\/\//i.test(url)) {
+    await backfillProductImageFields(id, { imageUrls: [url] })
+    return
+  }
+  if (url.startsWith('data:image/') && url.length < 700_000) {
+    await backfillProductImageFields(id, { imageUrls: [url] })
+  }
+}
+
+/** Replace / attach a product photo from the Products catalog. */
+export async function updateProductPhoto(input: {
+  userId: string
+  productId: string
+  imageFile: File
+}): Promise<{ imageUrl: string; storageWarning?: string }> {
+  const productId = input.productId.trim()
+  if (!input.userId || !productId) throw new Error('Missing product.')
+  assertImageFile(input.imageFile, true)
+
+  const snap = await getDoc(doc(requireDb(), 'products', productId))
+  if (!snap.exists()) throw new Error('Product not found.')
+  if (String(snap.data().userId ?? '') !== input.userId) {
+    throw new Error('You do not have access to this product.')
+  }
+
+  const prepared = await prepareProductImageUpload(input.imageFile)
+  const path = `users/${input.userId}/products/${productId}/source.${prepared.ext}`
+
+  try {
+    const storageRef = ref(requireStorage(), path)
+    await uploadBytes(storageRef, prepared.blob, {
+      contentType: prepared.contentType,
+      customMetadata: {
+        originalName: input.imageFile.name.slice(0, 120),
+      },
+    })
+    const url = await getDownloadURL(storageRef)
+    await updateDoc(doc(requireDb(), 'products', productId), {
+      imagePaths: [path],
+      imageUrls: [url],
+      sourceType: 'upload',
+      updatedAt: serverTimestamp(),
+    })
+    return { imageUrl: url }
+  } catch (err) {
+    console.error('[campaigns] updateProductPhoto upload failed', err)
+    if (prepared.thumbDataUrl) {
+      await updateDoc(doc(requireDb(), 'products', productId), {
+        imageUrls: [prepared.thumbDataUrl],
+        sourceType: 'upload',
+        updatedAt: serverTimestamp(),
+      })
+      return {
+        imageUrl: prepared.thumbDataUrl,
+        storageWarning:
+          'Photo saved as a catalog thumb. Cloud storage upload failed — try again later.',
+      }
+    }
+    throw new Error('Could not upload product photo. Try a smaller JPG or PNG.')
+  }
+}
+
 /** Flat string[] only — nested arrays / objects trigger Firestore nested-entity errors. */
 export function asFlatStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
@@ -218,14 +389,15 @@ async function createProductRecord(input: {
   let imageUrls: string[] = []
   let storageWarning: string | null = null
 
-  // Await upload so Generate has a real product URL (stash alone often fails on large photos).
+  // Await upload so Products / Generate have a real product URL (stash alone is browser-local).
   if (input.sourceType === 'upload' && input.imageFile) {
-    const path = `users/${input.userId}/products/${productRef.id}/source.${extFromFile(input.imageFile)}`
     const file = input.imageFile
+    const prepared = await prepareProductImageUpload(file)
+    const path = `users/${input.userId}/products/${productRef.id}/source.${prepared.ext}`
     try {
       const storageRef = ref(requireStorage(), path)
-      await uploadBytes(storageRef, file, {
-        contentType: file.type || 'image/jpeg',
+      await uploadBytes(storageRef, prepared.blob, {
+        contentType: prepared.contentType,
         customMetadata: {
           originalName: file.name.slice(0, 120),
         },
@@ -241,13 +413,25 @@ async function createProductRecord(input: {
     } catch (err) {
       console.error('[campaigns] storage upload failed', err)
       storageWarning =
-        'Photo could not be uploaded to cloud storage. Generation will use a local copy if available.'
-      // Fallback: keep trying in background in case it was a transient blip
+        'Photo could not be uploaded to cloud storage. Using a local catalog thumb when possible.'
+      // Durable fallback so Products never show empty "Photo pending" for this create.
+      if (prepared.thumbDataUrl) {
+        imageUrls = [prepared.thumbDataUrl]
+        try {
+          await updateDoc(productRef, {
+            imageUrls,
+            updatedAt: serverTimestamp(),
+          })
+        } catch (thumbErr) {
+          console.error('[campaigns] thumb fallback write failed', thumbErr)
+        }
+      }
+      // Retry Storage in background; replace thumb with HTTPS URL when it lands.
       void (async () => {
         try {
           const storageRef = ref(requireStorage(), path)
-          await uploadBytes(storageRef, file, {
-            contentType: file.type || 'image/jpeg',
+          await uploadBytes(storageRef, prepared.blob, {
+            contentType: prepared.contentType,
             customMetadata: {
               originalName: file.name.slice(0, 120),
             },
@@ -511,9 +695,11 @@ export type ProductSummary = {
   name: string
   category: string
   brand?: string
+  description?: string
   sourceType?: ProductSourceType
   sourceUrl?: string
   imageUrl?: string
+  imagePath?: string
   campaignCount?: number
   updatedAt?: Timestamp
 }
@@ -528,28 +714,62 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
     countByProduct.set(c.productId, (countByProduct.get(c.productId) ?? 0) + 1)
   }
 
-  const rows: ProductSummary[] = snap.docs.map((d) => {
-    const data = d.data()
-    const urls = Array.isArray(data.imageUrls) ? data.imageUrls : []
-    const firstUrl = typeof urls[0] === 'string' ? urls[0] : undefined
-    return {
-      id: d.id,
-      name: String(data.name ?? 'Product'),
-      category: String(data.category ?? '').trim(),
-      brand: String(data.brand ?? '').trim() || undefined,
-      sourceType: data.sourceType === 'url' ? 'url' : 'upload',
-      sourceUrl: data.sourceUrl ? String(data.sourceUrl) : undefined,
-      imageUrl: firstUrl,
-      campaignCount: countByProduct.get(d.id) ?? 0,
-      updatedAt: data.updatedAt as Timestamp | undefined,
-    }
-  })
+  const rows: ProductSummary[] = await Promise.all(
+    snap.docs.map(async (d) => {
+      const data = d.data()
+      const imageUrl = await healProductImageUrl(d.id, data)
+      return {
+        id: d.id,
+        name: String(data.name ?? 'Product'),
+        category: String(data.category ?? '').trim(),
+        brand: String(data.brand ?? '').trim() || undefined,
+        description: String(data.description ?? '').trim() || undefined,
+        sourceType: data.sourceType === 'url' ? 'url' : 'upload',
+        sourceUrl: data.sourceUrl ? String(data.sourceUrl) : undefined,
+        imageUrl,
+        imagePath: firstImagePath(data.imagePaths),
+        campaignCount: countByProduct.get(d.id) ?? 0,
+        updatedAt: data.updatedAt as Timestamp | undefined,
+      }
+    }),
+  )
 
   return rows.sort((a, b) => {
     const aTime = a.updatedAt?.toMillis?.() ?? 0
     const bTime = b.updatedAt?.toMillis?.() ?? 0
     return bTime - aTime
   })
+}
+
+/** Load one product for Studio / Full Campaign reuse from Products CTAs. */
+export async function getProductById(
+  productId: string,
+  userId?: string,
+): Promise<ProductSummary | null> {
+  const id = productId.trim()
+  if (!id) return null
+  try {
+    const snap = await getDoc(doc(requireDb(), 'products', id))
+    if (!snap.exists()) return null
+    const data = snap.data()
+    if (userId && String(data.userId ?? '') !== userId) return null
+    const imageUrl = await healProductImageUrl(id, data)
+    return {
+      id,
+      name: String(data.name ?? 'Product'),
+      category: String(data.category ?? '').trim(),
+      brand: String(data.brand ?? '').trim() || undefined,
+      description: String(data.description ?? '').trim() || undefined,
+      sourceType: data.sourceType === 'url' ? 'url' : 'upload',
+      sourceUrl: data.sourceUrl ? String(data.sourceUrl) : undefined,
+      imageUrl,
+      imagePath: firstImagePath(data.imagePaths),
+      updatedAt: data.updatedAt as Timestamp | undefined,
+    }
+  } catch (err) {
+    console.error('[campaigns] getProductById failed', id, err)
+    return null
+  }
 }
 
 /** Firestore sentinels / special objects must not be walked with Object.entries. */
@@ -723,13 +943,14 @@ export async function getProductsByIds(ids: string[]): Promise<Map<string, Produ
         const snap = await getDoc(doc(requireDb(), 'products', id))
         if (!snap.exists()) return
         const data = snap.data()
-        const urls = Array.isArray(data.imageUrls) ? data.imageUrls : []
-        const firstUrl = typeof urls[0] === 'string' ? urls[0] : undefined
+        const imageUrl = await healProductImageUrl(id, data)
         map.set(id, {
           id,
           name: String(data.name ?? 'Product'),
           category: String(data.category ?? '').trim(),
-          imageUrl: firstUrl,
+          brand: String(data.brand ?? '').trim() || undefined,
+          imageUrl,
+          imagePath: firstImagePath(data.imagePaths),
         })
       } catch (err) {
         console.error('[campaigns] product load failed', id, err)

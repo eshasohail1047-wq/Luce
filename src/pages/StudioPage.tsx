@@ -16,6 +16,7 @@ import {
 import {
   createStudioProject,
   friendlyFirestoreError,
+  getProductById,
   type ProductSourceType,
 } from '../lib/campaigns'
 import type {
@@ -49,6 +50,7 @@ import {
   loadLocalCampaign,
   stashCampaignImageSafe,
   stashProductImageSafe,
+  resolveProductImage,
   loadStashedCampaignImage,
   stashCampaignOutputs,
   stashCampaignRefImageSafe,
@@ -77,6 +79,7 @@ import { canGenerate, type GenerateAction } from '../lib/planAccess'
 import {
   clearRecreateSession,
   dataUrlToFile,
+  imageUrlToFile,
   loadRecreateSession,
   type RecreateSession,
 } from '../lib/recreateSession'
@@ -163,10 +166,8 @@ export default function StudioPage({
   }
 
   useEffect(() => {
-    if (!imageFile) {
-      setPreviewUrl(null)
-      return
-    }
+    // Don't clear on null — productId / recreate may hydrate a remote preview without a File yet.
+    if (!imageFile) return
     const url = URL.createObjectURL(imageFile)
     setPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
@@ -253,6 +254,35 @@ export default function StudioPage({
           `Recreate “${session.label}”.\nWhat I want changed: `,
         )
         return
+      }
+
+      const fromProductId = searchParams.get('productId')?.trim()
+      if (fromProductId) {
+        const product = await getProductById(fromProductId, user.uid)
+        if (cancelled) return
+        if (product) {
+          setProductName(product.name)
+          setShowDetails(true)
+          if (product.brand) setBrand(product.brand)
+          if (product.description) setDescription(product.description)
+          if (product.sourceType === 'url' && product.sourceUrl) {
+            setSourceType('url')
+            setProductUrl(product.sourceUrl)
+          }
+          const imageUrl = await resolveProductImage(product.id, product.imageUrl)
+          if (cancelled) return
+          if (imageUrl) {
+            setSourceType('upload')
+            setPreviewUrl(imageUrl)
+            const file = await imageUrlToFile(
+              imageUrl,
+              `${product.name || 'product'}.jpg`,
+            )
+            if (!cancelled && file) setImageFile(file)
+            void stashProductImageSafe(product.id, imageUrl)
+          }
+          return
+        }
       }
 
       const pending = await consumePendingProduct()
@@ -751,6 +781,9 @@ export default function StudioPage({
         await stashCampaignImageSafe(result.campaignId, productStill)
         await stashProductImageSafe(result.productId, productStill)
       }
+      if (result.storageWarning) {
+        setWarning(result.storageWarning)
+      }
       if (kind === 'videos') {
         stashCampaignVideoDurations(
           result.campaignId,
@@ -1121,7 +1154,10 @@ export default function StudioPage({
                         <button
                           type="button"
                           className="btn btn-ghost"
-                          onClick={() => setImageFile(null)}
+                          onClick={() => {
+                            setImageFile(null)
+                            setPreviewUrl(null)
+                          }}
                           disabled={busy}
                         >
                           Remove

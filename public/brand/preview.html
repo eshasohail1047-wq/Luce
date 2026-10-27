@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>LUCE brand logos</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500&display=swap" rel="stylesheet" />
+    <style>
+      body {
+        margin: 0;
+        padding: 48px;
+        font-family: Outfit, system-ui, sans-serif;
+        background: #f3f2f7;
+        color: #14121c;
+      }
+      h1 { font-size: 18px; font-weight: 500; margin: 0 0 24px; opacity: 0.6; }
+      .row { display: grid; gap: 24px; grid-template-columns: 1.4fr 0.7fr; margin-bottom: 24px; }
+      .card {
+        background: #fff;
+        border-radius: 20px;
+        padding: 40px;
+        display: grid;
+        place-items: center;
+        min-height: 180px;
+        box-shadow: 0 10px 30px rgba(20, 18, 28, 0.06);
+      }
+      .card.dark { background: #0b0b10; }
+      img { width: 100%; max-width: 420px; height: auto; display: block; }
+      .card.icon img { max-width: 140px; }
+      .label { margin-top: 14px; font-size: 13px; opacity: 0.55; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <h1>LUCE — your existing wordmark as logo files</h1>
+    <div class="row">
+      <div class="card">
+        <img src="./luce-logo.svg" alt="LUCE wordmark" />
+        <div class="label">Wordmark (light)</div>
+      </div>
+      <div class="card icon">
+        <img src="./luce-icon.svg" alt="LUCE icon" />
+        <div class="label">Icon (U + orb)</div>
+      </div>
+    </div>
+    <div class="card dark">
+      <img src="./luce-logo-dark.svg" alt="LUCE dark wordmark" style="max-width:420px;width:100%" />
+      <div class="label" style="color:#fff">Wordmark (dark)</div>
+    </div>
+  </body>
+</html>

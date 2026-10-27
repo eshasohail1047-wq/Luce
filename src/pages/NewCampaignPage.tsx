@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import CreativeDirectionFields from '../components/CreativeDirectionFields'
 import FormatPickGrid from '../components/FormatPickGrid'
@@ -7,8 +7,10 @@ import { useAuth } from '../auth/AuthProvider'
 import {
   createCampaignWithProduct,
   friendlyFirestoreError,
+  getProductById,
   type ProductSourceType,
 } from '../lib/campaigns'
+import { imageUrlToFile } from '../lib/recreateSession'
 import { canGenerate } from '../lib/planAccess'
 import { getPlanLimits } from '../lib/planLimits'
 import PaywallModal from '../components/PaywallModal'
@@ -32,6 +34,7 @@ import {
   fileToDataUrl,
   loadLocalCampaign,
   newLocalId,
+  resolveProductImage,
   saveLocalCampaign,
   stashCampaignImageSafe,
   stashProductImageSafe,
@@ -42,6 +45,7 @@ import {
 export default function NewCampaignPage() {
   const { user, plan, freeImageUsed, loading } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [sourceType, setSourceType] = useState<ProductSourceType>('upload')
@@ -82,10 +86,8 @@ export default function NewCampaignPage() {
   const limits = getPlanLimits(plan)
 
   useEffect(() => {
-    if (!imageFile) {
-      setPreviewUrl(null)
-      return
-    }
+    // Don't clear on null — productId hydration may set a remote/data preview without a File yet.
+    if (!imageFile) return
     const url = URL.createObjectURL(imageFile)
     setPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
@@ -134,6 +136,36 @@ export default function NewCampaignPage() {
       /* ignore */
     }
   }, [])
+
+  useEffect(() => {
+    if (!user) return
+    const productId = searchParams.get('productId')?.trim()
+    if (!productId) return
+    let cancelled = false
+    void (async () => {
+      const product = await getProductById(productId, user.uid)
+      if (cancelled || !product) return
+      setProductName(product.name)
+      setShowDetails(true)
+      if (product.brand) setBrand(product.brand)
+      if (product.description) setDescription(product.description)
+      if (product.category) setCategory(product.category)
+      if (product.sourceType === 'url' && product.sourceUrl) {
+        setSourceType('url')
+        setProductUrl(product.sourceUrl)
+      }
+      const imageUrl = await resolveProductImage(product.id, product.imageUrl)
+      if (cancelled || !imageUrl) return
+      setSourceType('upload')
+      setPreviewUrl(imageUrl)
+      const file = await imageUrlToFile(imageUrl, `${product.name || 'product'}.jpg`)
+      if (!cancelled && file) setImageFile(file)
+      void stashProductImageSafe(product.id, imageUrl)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [user, searchParams])
 
   if (loading) {
     return (
@@ -314,6 +346,9 @@ export default function NewCampaignPage() {
         await stashCampaignImageSafe(result.campaignId, productStill)
         await stashProductImageSafe(result.productId, productStill)
       }
+      if (result.storageWarning) {
+        setWarning(result.storageWarning)
+      }
       if (referenceFile) {
         try {
           stashCampaignRefImage(
@@ -462,7 +497,10 @@ export default function NewCampaignPage() {
                         <button
                           type="button"
                           className="btn btn-ghost"
-                          onClick={() => setImageFile(null)}
+                          onClick={() => {
+                            setImageFile(null)
+                            setPreviewUrl(null)
+                          }}
                           disabled={busy}
                         >
                           Remove

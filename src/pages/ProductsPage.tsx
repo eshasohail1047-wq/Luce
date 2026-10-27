@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
 import {
+  backfillProductImageUrl,
   listUserCampaigns,
   listUserProducts,
+  updateProductPhoto,
   type ProductSummary,
 } from '../lib/campaigns'
 import {
@@ -14,39 +16,121 @@ import {
 } from '../lib/localDemoCampaign'
 import { relativeTime } from '../lib/workspaceUi'
 
-function ProductCard({ product }: { product: ProductSummary }) {
+function productInitial(name: string) {
+  const letter = name.trim().charAt(0)
+  return letter ? letter.toUpperCase() : 'P'
+}
+
+function ProductCard({
+  product,
+  userId,
+  onPhotoUpdated,
+}: {
+  product: ProductSummary
+  userId: string
+  onPhotoUpdated: (productId: string, imageUrl: string) => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  const studioTo = `/app/studio/photos?productId=${encodeURIComponent(product.id)}`
+  const campaignTo = `/app/campaigns/new?productId=${encodeURIComponent(product.id)}`
+
+  async function onPickPhoto(file: File | null) {
+    if (!file) return
+    setUploadError(null)
+    setUploading(true)
+    try {
+      const result = await updateProductPhoto({
+        userId,
+        productId: product.id,
+        imageFile: file,
+      })
+      await stashProductImageSafe(product.id, result.imageUrl)
+      onPhotoUpdated(product.id, result.imageUrl)
+      if (result.storageWarning) setUploadError(result.storageWarning)
+    } catch (err) {
+      console.error(err)
+      setUploadError(err instanceof Error ? err.message : 'Could not upload photo.')
+    } finally {
+      setUploading(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
   return (
     <article className="product-card">
       <div className="product-card-media">
         {product.imageUrl ? (
           <img src={product.imageUrl} alt="" />
         ) : (
-          <span className="product-card-fallback" aria-hidden="true">
-            Photo pending
-          </span>
+          <button
+            type="button"
+            className="product-card-fallback product-card-fallback-btn"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            aria-label={`Add photo for ${product.name}`}
+          >
+            <span className="product-card-initial">{productInitial(product.name)}</span>
+            <span className="product-card-fallback-hint">
+              {uploading ? 'Uploading…' : 'Add photo'}
+            </span>
+          </button>
         )}
+        {product.imageUrl ? (
+          <button
+            type="button"
+            className="product-card-replace"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? 'Uploading…' : 'Replace photo'}
+          </button>
+        ) : null}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/*"
+          hidden
+          onChange={(e) => void onPickPhoto(e.target.files?.[0] ?? null)}
+        />
       </div>
       <div className="product-card-body">
         <h2>{product.name}</h2>
         <p>
-          {product.brand || product.category || (product.sourceType === 'url' ? 'From URL' : 'Uploaded photo')}
-          {product.campaignCount ? ` · ${product.campaignCount} project${product.campaignCount === 1 ? '' : 's'}` : ''}
+          {product.brand ||
+            product.category ||
+            (product.sourceType === 'url' ? 'From URL' : 'Uploaded photo')}
+          {product.campaignCount
+            ? ` · ${product.campaignCount} project${product.campaignCount === 1 ? '' : 's'}`
+            : ''}
         </p>
+        {uploadError ? (
+          <p className="product-card-upload-error" role="alert">
+            {uploadError}
+          </p>
+        ) : null}
         <div className="product-card-meta">
           <span>{relativeTime({ updatedAt: product.updatedAt })}</span>
           {product.sourceUrl ? (
-            <a href={product.sourceUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+            <a
+              href={product.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+            >
               Source
             </a>
           ) : null}
         </div>
         <div className="product-card-actions">
-          <Link className="dash-create-btn dash-create-btn-sm" to="/app/studio/photos">
+          <Link className="dash-create-btn dash-create-btn-sm" to={studioTo}>
             New images
           </Link>
           <Link
             className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
-            to="/app/campaigns/new"
+            to={campaignTo}
           >
             Full campaign
           </Link>
@@ -88,13 +172,18 @@ export default function ProductsPage() {
               const linked = campaignsByProduct.get(product.id) ?? []
               for (const campaignId of linked) {
                 imageUrl = await resolveCampaignCover(campaignId, product.imageUrl)
-                if (imageUrl) {
-                  void stashProductImageSafe(product.id, imageUrl)
-                  break
-                }
+                if (imageUrl) break
               }
             }
-            return imageUrl ? { ...product, imageUrl } : product
+            if (imageUrl) {
+              void stashProductImageSafe(product.id, imageUrl)
+              // Persist recovered covers so other devices/browsers see them too.
+              if (!product.imageUrl || product.imageUrl !== imageUrl) {
+                void backfillProductImageUrl(product.id, imageUrl)
+              }
+              return { ...product, imageUrl }
+            }
+            return product
           }),
         )
 
@@ -128,8 +217,8 @@ export default function ProductsPage() {
           <div>
             <h1>Products</h1>
             <p>
-              Your product catalog — each card uses the real product photo when available. Start a
-              new image or full campaign from here.
+              Your product catalog — click Add photo on any card missing an image, then start new
+              images or a full campaign from here.
             </p>
           </div>
           <Link className="dash-create-btn" to="/app/studio/photos">
@@ -163,7 +252,16 @@ export default function ProductsPage() {
         ) : (
           <div className="product-grid">
             {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
+              <ProductCard
+                key={product.id}
+                product={product}
+                userId={user.uid}
+                onPhotoUpdated={(productId, imageUrl) => {
+                  setProducts((prev) =>
+                    prev.map((p) => (p.id === productId ? { ...p, imageUrl } : p)),
+                  )
+                }}
+              />
             ))}
           </div>
         )}
