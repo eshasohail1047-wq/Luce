@@ -311,36 +311,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </div>
 
         <div className="studio-rail-footer">
-          <div className={`studio-promo studio-promo-card${paid ? ' is-paid' : ''}`}>
-            <div className="studio-promo-brand">
-              <Logo href={null} />
-            </div>
-            {paid ? (
-              <>
-                <strong>{formatPlanLabel(plan)} workspace</strong>
-                <p>You’re on a paid plan — start a full campaign anytime.</p>
-                <Link className="studio-promo-btn" to="/app/campaigns/new">
-                  New campaign
-                </Link>
-              </>
-            ) : (
-              <>
-                <strong>LUCE free trial</strong>
-                <p>Try Image Studio free. Upgrade when you’re ready for video &amp; campaigns.</p>
-                <div className="studio-promo-meter" aria-hidden="true">
-                  <span className="studio-promo-meter-fill" style={{ width: '40%' }} />
-                </div>
-                <div className="studio-promo-meter-meta">
-                  <span>Free images</span>
-                  <span>Upgrade unlocks more</span>
-                </div>
-                <Link className="studio-promo-btn studio-promo-btn-solid" to="/app/settings#plan">
-                  <NavIcon name="crown" />
-                  Upgrade Plan
-                </Link>
-              </>
-            )}
-          </div>
+          {!paid ? (
+            <Link className="studio-rail-upgrade-link" to="/app/settings#plan">
+              <NavIcon name="crown" />
+              <span>Upgrade plan</span>
+            </Link>
+          ) : null}
         </div>
       </aside>
 

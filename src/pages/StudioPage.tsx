@@ -3,10 +3,14 @@ import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-
 import AppLayout from '../components/AppLayout'
 import CreativeDirectionFields from '../components/CreativeDirectionFields'
 import FormatPickGrid from '../components/FormatPickGrid'
+import StudioStagePanel, {
+  type StudioStagePhase,
+} from '../components/StudioStagePanel'
 import { useAuth } from '../auth/AuthProvider'
 import { getPlanLimits } from '../lib/planLimits'
 import {
   DEFAULT_VIDEO_DURATION,
+  clampVideoDuration,
   expandFormatQuantities,
   syncDurationsToQuantities,
   totalQuantity,
@@ -62,18 +66,24 @@ import {
 import {
   isImageAssetKind,
   requestGenerateImages,
+  type ImageAssetKind,
 } from '../lib/generateImages'
 import {
   extractVideoFrameDataUrl,
   isVideoAssetKind,
   playableVideoUrl,
   requestGenerateVideos,
+  type VideoAssetKind,
 } from '../lib/generateVideos'
 import {
   isCopyAssetKind,
   requestGenerateCopy,
 } from '../lib/generateCopy'
-import { recreateMockOutput, type MockOutput } from '../lib/mockCampaign'
+import {
+  buildMockOutputs,
+  recreateMockOutput,
+  type MockOutput,
+} from '../lib/mockCampaign'
 import { consumePendingProduct } from '../lib/pendingProduct'
 import { canGenerate, type GenerateAction } from '../lib/planAccess'
 import {
@@ -144,7 +154,14 @@ export default function StudioPage({
   const [recreate, setRecreate] = useState<RecreateSession | null>(null)
   const [paywallOpen, setPaywallOpen] = useState(false)
   const [paywallReason, setPaywallReason] = useState<string | undefined>()
+  const [stagePhase, setStagePhase] = useState<StudioStagePhase>('idle')
+  const [stageProgress, setStageProgress] = useState(0)
+  const [stageMessage, setStageMessage] = useState<string | null>(null)
+  const [stageOutputs, setStageOutputs] = useState<MockOutput[]>([])
+  const [stageCampaignId, setStageCampaignId] = useState<string | null>(null)
+  const [activeOutputId, setActiveOutputId] = useState<string | null>(null)
   const isRecreate = Boolean(recreate) || searchParams.get('recreate') === '1'
+  const isSplitStudio = kind === 'photos' || kind === 'videos'
   const limits = getPlanLimits(plan)
   const photoTotalMax = Math.max(1, limits.maxImages)
   const videoTotalMax =
@@ -211,7 +228,13 @@ export default function StudioPage({
           if (cancelled) return
           setUrlImages(page.images)
           if (page.title && !productName.trim()) setProductName(page.title)
-          if (page.description && !description.trim()) setDescription(page.description)
+          if (
+            page.description &&
+            !description.trim() &&
+            !/single image file/i.test(page.description)
+          ) {
+            setDescription(page.description)
+          }
           const first = page.images[0]
           if (first) await applyProductUrlImage(first)
         } catch (err) {
@@ -238,6 +261,13 @@ export default function StudioPage({
     setSelectedUrlImage(imageUrl)
     setPreviewUrl(imageUrl)
     setError(null)
+    // Changing product clears previous results so we never show another SKU.
+    setStageOutputs([])
+    setActiveOutputId(null)
+    setStageCampaignId(null)
+    setStagePhase('idle')
+    setStageProgress(0)
+    setStageMessage(null)
     try {
       const media = await requestFetchRemoteMedia(imageUrl, 'image')
       const file = await remoteMediaToFile(media, 'product.jpg')
@@ -749,6 +779,248 @@ export default function StudioPage({
     navigate(`/app/campaigns/${session.campaignId}`, { replace: true })
   }
 
+  async function runStudioGenerate(opts: {
+    campaignId: string
+    productName: string
+    productImage: string
+    selectedAssets: Array<PhotoStyleId | VideoStyleId | AdStyleId>
+    videoDurations?: Record<string, number>
+    referenceDataUrl?: string
+    /** Only mark free try after at least one AI asset succeeds */
+    chargeFreeTry?: boolean
+  }) {
+    if (!kind || (kind !== 'photos' && kind !== 'videos')) return
+    setStageCampaignId(opts.campaignId)
+    setStagePhase('preparing')
+    setStageProgress(8)
+    setStageMessage('Preparing your project…')
+    setStageOutputs([])
+    setActiveOutputId(null)
+    let aiSuccessCount = 0
+
+    await new Promise((r) => setTimeout(r, 350))
+    setStagePhase('analyzing')
+    setStageProgress(22)
+    setStageMessage(
+      opts.referenceDataUrl
+        ? 'Analyzing product + reference look…'
+        : 'Analyzing product packaging…',
+    )
+    await new Promise((r) => setTimeout(r, 450))
+
+    setStagePhase('generating')
+    setStageProgress(40)
+    setStageMessage(
+      kind === 'videos' ? 'Generating videos…' : 'Generating images…',
+    )
+
+    let nextOutputs = buildMockOutputs({
+      productName: opts.productName,
+      productImageUrl: opts.productImage,
+      selectedAssets: opts.selectedAssets,
+      studioKind: kind,
+      mode: 'studio',
+      videoDurations: opts.videoDurations,
+    })
+
+    const imageOutputs = nextOutputs.filter((o) => isImageAssetKind(o.assetType))
+    const videoOutputs = nextOutputs.filter((o) => isVideoAssetKind(o.assetType))
+    let warn: string | null = null
+
+    if (imageOutputs.length > 0) {
+      let failCount = 0
+      for (let i = 0; i < imageOutputs.length; i++) {
+        const item = imageOutputs[i]!
+        setStageProgress(42 + Math.round(((i + 1) / imageOutputs.length) * 35))
+        setStageMessage(
+          `Generating image ${i + 1} of ${imageOutputs.length}: ${item.label}…`,
+        )
+        try {
+          const ai = await requestGenerateImages({
+            productName: opts.productName,
+            productImage: opts.productImage,
+            referenceImage:
+              opts.referenceDataUrl?.startsWith('data:image/')
+                ? opts.referenceDataUrl
+                : undefined,
+            creativeDirection: {
+              prompt: prompt || undefined,
+              lighting: lighting || undefined,
+              background: background || undefined,
+              mood: mood || undefined,
+              styleTheme: styleTheme || undefined,
+            },
+            assets: [item.assetType as ImageAssetKind],
+            recreateNote: opts.referenceDataUrl
+              ? 'Match the reference look; keep product packaging exact.'
+              : undefined,
+          })
+          const generated = ai.assets[0]
+          if (generated?.imageDataUrl) {
+            aiSuccessCount += 1
+            nextOutputs = nextOutputs.map((o) =>
+              o.id === item.id
+                ? {
+                    ...o,
+                    imageUrl: generated.imageDataUrl,
+                    note: 'AI generated in Studio',
+                  }
+                : o,
+            )
+            setStageOutputs([...nextOutputs])
+            setActiveOutputId(item.id)
+          } else {
+            throw new Error('No image returned')
+          }
+        } catch (err) {
+          failCount += 1
+          console.warn('[Studio] image failed', item.id, err)
+          nextOutputs = nextOutputs.map((o) =>
+            o.id === item.id
+              ? {
+                  ...o,
+                  imageUrl: opts.productImage,
+                  note: 'AI failed — product photo kept',
+                }
+              : o,
+          )
+        }
+      }
+      if (failCount) {
+        warn = `Some AI images failed (${failCount}); your product photo was kept for those.`
+      }
+    }
+
+    if (videoOutputs.length > 0) {
+      let referenceFrameImage: string | undefined
+      if (opts.referenceDataUrl?.startsWith('data:image/')) {
+        referenceFrameImage = opts.referenceDataUrl
+      } else if (opts.referenceDataUrl?.startsWith('data:video/')) {
+        try {
+          referenceFrameImage = await extractVideoFrameDataUrl(opts.referenceDataUrl)
+        } catch {
+          /* optional */
+        }
+      }
+
+      let failCount = 0
+      for (let i = 0; i < videoOutputs.length; i++) {
+        const item = videoOutputs[i]!
+        setStageProgress(48 + Math.round(((i + 1) / videoOutputs.length) * 40))
+        setStageMessage(
+          `Generating video ${i + 1} of ${videoOutputs.length}: ${item.label}…`,
+        )
+        try {
+          const durationSeconds = clampVideoDuration(
+            item.durationSeconds ??
+              opts.videoDurations?.[item.assetType] ??
+              DEFAULT_VIDEO_DURATION,
+          )
+          const ai = await requestGenerateVideos({
+            productName: opts.productName,
+            productImage: opts.productImage,
+            referenceFrameImage,
+            creativeDirection: {
+              prompt: prompt || undefined,
+              lighting: lighting || undefined,
+              background: background || undefined,
+              mood: mood || undefined,
+              styleTheme: styleTheme || undefined,
+            },
+            assets: [item.assetType as VideoAssetKind],
+            durationSeconds,
+          })
+          const clipUrl = playableVideoUrl(ai.assets[0])
+          if (clipUrl) {
+            aiSuccessCount += 1
+            nextOutputs = nextOutputs.map((o) =>
+              o.id === item.id
+                ? {
+                    ...o,
+                    kind: 'video' as const,
+                    videoUrl: clipUrl,
+                    imageUrl: opts.productImage,
+                    durationSeconds,
+                    note: `AI video · ${durationSeconds}s`,
+                  }
+                : o,
+            )
+            setStageOutputs([...nextOutputs])
+            setActiveOutputId(item.id)
+          } else {
+            throw new Error('No clip returned')
+          }
+        } catch (err) {
+          failCount += 1
+          console.warn('[Studio] video failed', item.id, err)
+          nextOutputs = nextOutputs.map((o) =>
+            o.id === item.id
+              ? {
+                  ...o,
+                  kind: 'video' as const,
+                  videoUrl: undefined,
+                  imageUrl: opts.productImage,
+                  note: 'AI video failed — product still kept',
+                }
+              : o,
+          )
+        }
+      }
+      if (failCount) {
+        warn = warn
+          ? `${warn} Some videos also failed (${failCount}).`
+          : `Some AI videos failed (${failCount}); product stills were kept.`
+      }
+    }
+
+    setStagePhase('checking')
+    setStageProgress(94)
+    setStageMessage('Checking quality & packaging fidelity…')
+    await new Promise((r) => setTimeout(r, 500))
+
+    stashCampaignOutputs(opts.campaignId, nextOutputs)
+    if (isLocalCampaignId(opts.campaignId)) {
+      updateLocalCampaign(opts.campaignId, {
+        status: 'ready',
+        outputs: nextOutputs,
+        imageUrl: opts.productImage.startsWith('data:')
+          ? undefined
+          : opts.productImage,
+      })
+    } else {
+      try {
+        await updateCampaignStatus(opts.campaignId, 'ready', {
+          demoPack: true,
+          outputsLocal: true,
+          outputCount: nextOutputs.length,
+        })
+      } catch (err) {
+        console.warn('[Studio] status update failed', err)
+      }
+    }
+
+    setStageOutputs(nextOutputs)
+    setActiveOutputId(nextOutputs[0]?.id || null)
+    setStagePhase('ready')
+    setStageProgress(100)
+    setStageMessage(
+      nextOutputs.length === 1
+        ? '1 creative ready'
+        : `${nextOutputs.length} creatives ready`,
+    )
+    if (warn) setWarning(warn)
+    // Only spend the free try when AI actually returned at least one asset.
+    if (opts.chargeFreeTry && aiSuccessCount > 0) {
+      await markFreeImageUsed()
+    } else if (opts.chargeFreeTry && aiSuccessCount === 0) {
+      setWarning(
+        (warn ? `${warn} ` : '') +
+          'Free credit was not used because generation did not return new creatives.',
+      )
+    }
+    setBusy(false)
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!user || !kind) return
@@ -921,15 +1193,43 @@ export default function StudioPage({
           /* optional */
         }
       }
-      // Reserve the free image try when the project is started
+      const productImage = imageDataUrl || cloudImage
+      if (isSplitStudio && productImage) {
+        try {
+          await runStudioGenerate({
+            campaignId: result.campaignId,
+            productName: displayName,
+            productImage,
+            selectedAssets,
+            videoDurations:
+              kind === 'videos'
+                ? (syncDurationsToQuantities(
+                    videoQuantities,
+                    videoDurations,
+                  ) as Record<string, number>)
+                : undefined,
+            referenceDataUrl: refDataUrl,
+            chargeFreeTry: isFreeTry,
+          })
+        } catch (genErr) {
+          console.error(genErr)
+          setStagePhase('error')
+          setStageMessage('Generation stopped')
+          setError(
+            genErr instanceof Error
+              ? genErr.message
+              : 'Generation failed. Try again.',
+          )
+          setBusy(false)
+        }
+        return
+      }
       if (isFreeTry) await markFreeImageUsed()
       navigate(`/app/campaigns/${result.campaignId}`, {
         replace: true,
         state: {
           autoGenerate: true,
-          ...(imageDataUrl || cloudImage
-            ? { productImage: imageDataUrl || cloudImage }
-            : {}),
+          ...(productImage ? { productImage } : {}),
           ...(refDataUrl ? { referenceImage: refDataUrl } : {}),
         },
       })
@@ -1006,6 +1306,30 @@ export default function StudioPage({
             /* optional */
           }
         }
+        if (isSplitStudio && imageUrl) {
+          try {
+            await runStudioGenerate({
+              campaignId: id,
+              productName: displayName,
+              productImage: imageUrl,
+              selectedAssets,
+              videoDurations: syncedDurations,
+              referenceDataUrl: refDataUrl,
+              chargeFreeTry: isFreeTry,
+            })
+          } catch (genErr) {
+            console.error(genErr)
+            setStagePhase('error')
+            setStageMessage('Generation stopped')
+            setError(
+              genErr instanceof Error
+                ? genErr.message
+                : 'Generation failed. Try again.',
+            )
+            setBusy(false)
+          }
+          return
+        }
         if (isFreeTry) await markFreeImageUsed()
         navigate(`/app/campaigns/${id}`, {
           replace: true,
@@ -1034,11 +1358,6 @@ export default function StudioPage({
 
   const isUgcFocus = kind === 'videos' && searchParams.get('style') === 'ugc'
   const usingDefaults = selectionCount() === 0
-  const heroSteps = isRecreate
-    ? (['Confirm product', 'Describe changes', 'Apply'] as const)
-    : kind === 'videos' || kind === 'photos'
-      ? (['Product', 'Prompt', 'Formats or reference', 'Generate'] as const)
-      : (['Product', 'Direction', 'Outputs', 'Generate'] as const)
 
   const baseMeta =
     kind === 'photos'
@@ -1115,52 +1434,18 @@ export default function StudioPage({
         }
       : baseMeta
 
-  return (
-    <AppLayout>
-      <PaywallModal
-        open={paywallOpen}
-        title={
-          kind === 'videos'
-            ? 'Unlock Video Studio generation'
-            : kind === 'ads'
-              ? 'Unlock Ads & Social generation'
-              : 'Upgrade for more images'
-        }
-        reason={paywallReason}
-        onClose={() => setPaywallOpen(false)}
-      />
-      <main className={`app-main campaign-create studio-page studio-page-${studioMeta.accent}`}>
-        {plan === 'free' && kind !== 'photos' ? (
-          <p className="studio-paid-banner" role="status">
-            Explore the full {kind === 'videos' ? 'video' : 'ads'} workflow — upgrade is only
-            required when you generate.
-          </p>
-        ) : null}
-        <header className={`studio-hero tone-${studioMeta.accent}`}>
-          <div className="studio-hero-copy">
-            <p className="studio-hero-kicker">{studioMeta.kicker}</p>
-            <h1>{studioMeta.title}</h1>
-            <p className="studio-hero-lead">{studioMeta.lead}</p>
-            {isRecreate && recreate ? (
-              <p className="studio-free-banner" role="status">
-                Editing from your campaign — describe changes below, then apply
-              </p>
-            ) : null}
-            {tryFree && kind === 'photos' && !isRecreate && (
-              <p className="studio-free-banner" role="status">
-                Free trial — first image pack included, no card required
-              </p>
-            )}
-            <ol className="studio-hero-steps" aria-label="How it works">
-              {heroSteps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
+  const formBody = (
+        <form className="app-form campaign-form create-panel studio-panel" onSubmit={onSubmit}>
+          <header className="studio-workbench-head">
+            <div>
+              <p className="studio-workbench-kicker">{studioMeta.kicker}</p>
+              <h1>{studioMeta.title}</h1>
+              <p>{studioMeta.lead}</p>
+            </div>
             {isRecreate && recreate ? (
               <button
                 type="button"
                 className="btn btn-ghost"
-                style={{ marginTop: 12 }}
                 onClick={() => {
                   clearRecreateSession()
                   navigate(`/app/campaigns/${recreate.campaignId}`)
@@ -1169,14 +1454,7 @@ export default function StudioPage({
                 ← Back to campaign
               </button>
             ) : null}
-          </div>
-          <div className="studio-hero-media" aria-hidden="true">
-            <img src={studioMeta.image} alt="" />
-            <div className="studio-hero-glow" />
-          </div>
-        </header>
-
-        <form className="app-form campaign-form create-panel studio-panel" onSubmit={onSubmit}>
+          </header>
           <section className="form-section">
             <div className="form-section-head">
               <h2>1. Product</h2>
@@ -1300,7 +1578,11 @@ export default function StudioPage({
                 ) : null}
                 {urlImages.length > 0 ? (
                   <div className="url-image-picker" role="listbox" aria-label="Product photos from URL">
-                    <p className="field-hint">Pick the product photo to use</p>
+                    <p className="field-hint">
+                      {urlImages.length === 1
+                        ? '1 photo found — pick it, or paste the product page URL for the full gallery'
+                        : `Pick the product photo to use (${urlImages.length} found)`}
+                    </p>
                     <div className="url-image-grid">
                       {urlImages.map((src) => (
                         <button
@@ -1521,11 +1803,50 @@ export default function StudioPage({
             {busy
               ? isRecreate
                 ? 'Applying…'
-                : 'Creating…'
+                : stagePhase !== 'idle' && stagePhase !== 'ready' && stagePhase !== 'error'
+                  ? 'Generating…'
+                  : 'Creating…'
               : studioMeta.cta}
             <span aria-hidden="true">→</span>
           </button>
         </form>
+  )
+
+  return (
+    <AppLayout>
+      <PaywallModal
+        open={paywallOpen}
+        title={
+          kind === 'videos'
+            ? 'Unlock Video Studio generation'
+            : kind === 'ads'
+              ? 'Unlock Ads & Social generation'
+              : 'Upgrade for more images'
+        }
+        reason={paywallReason}
+        onClose={() => setPaywallOpen(false)}
+      />
+      <main
+        className={`app-main campaign-create studio-page studio-page-${studioMeta.accent}${isSplitStudio ? ' studio-page-split' : ''}`}
+      >
+        {isSplitStudio ? (
+          <div className="studio-split">
+            <div className="studio-split-controls">{formBody}</div>
+            <StudioStagePanel
+              kind={kind}
+              phase={stagePhase}
+              progress={stageProgress}
+              message={stageMessage}
+              previewUrl={previewUrl}
+              outputs={stageOutputs}
+              campaignId={stageCampaignId}
+              activeOutputId={activeOutputId}
+              onSelectOutput={setActiveOutputId}
+            />
+          </div>
+        ) : (
+          formBody
+        )}
       </main>
     </AppLayout>
   )
