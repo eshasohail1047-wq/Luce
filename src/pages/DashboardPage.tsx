@@ -12,26 +12,32 @@ import {
 } from '../lib/campaigns'
 import { isPaidPlan } from '../lib/plans'
 
-const CREATE_PATHS = [
+const RECOMMENDED = [
   {
     to: '/app/studio/photos',
-    label: 'Images',
-    hint: 'Product photos',
-    image: '/images/audience-beauty.jpg',
+    title: 'Create product images',
+    description: 'Packshots, lifestyle, and promo frames from one product photo.',
+    image: '/images/fidelity-studio.jpg',
+    cta: 'Try it',
+    accent: true,
     pro: false,
   },
   {
     to: '/app/studio/videos',
-    label: 'Videos',
-    hint: 'Clips & UGC',
-    image: '/images/campaign-home-lifestyle.jpg',
+    title: 'Generate product videos',
+    description: 'Turn your product photo into UGC-style and demo clips.',
+    image: '/images/video-poster-ugc.jpg',
+    cta: 'Try it',
+    accent: false,
     pro: true,
   },
   {
     to: '/app/campaigns/new',
-    label: 'Campaign',
-    hint: 'Full pack',
+    title: 'Launch a full campaign',
+    description: 'One product → images, videos, captions, and ads together.',
     image: '/images/campaign-beauty-flatlay.jpg',
+    cta: 'Try it',
+    accent: false,
     pro: true,
   },
 ] as const
@@ -42,6 +48,11 @@ export default function DashboardPage() {
   const [productsById, setProductsById] = useState<Map<string, ProductSummary>>(new Map())
   const [listError, setListError] = useState<string | null>(null)
   const [listing, setListing] = useState(true)
+  const paid = isPaidPlan(plan)
+  const firstName =
+    user?.displayName?.trim()?.split(/\s+/)[0] ||
+    user?.email?.split('@')[0] ||
+    'there'
 
   useEffect(() => {
     if (!user) return
@@ -82,36 +93,44 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <main className="dash dash-simple dash-minimal">
-        <header className="dash-minimal-header">
-          <div>
-            <h1>Dashboard</h1>
-            <p>Start a project or open recent work.</p>
-          </div>
-          <Link className="dash-create-btn" to="/app/studio/photos">
-            <span aria-hidden="true">+</span>{' '}
-            {isPaidPlan(plan) ? 'New images' : 'Try free'}
+      <main className="dash dash-simple dash-home">
+        <header className="dash-welcome">
+          <p className="dash-welcome-kicker">Welcome to LUCE</p>
+          <h1>Hi {firstName} — generate product creatives that stay on-brand.</h1>
+          <p>Start from a product photo, then pick formats or upload your own reference.</p>
+          <Link className="dash-welcome-cta" to="/app/studio/photos">
+            {paid ? 'Create images' : 'Try images free'}
+            <span aria-hidden="true">→</span>
           </Link>
         </header>
 
-        <section className="dash-create-block" aria-label="Create">
-          <div className="dash-paths dash-paths-essential">
-            {CREATE_PATHS.map((path) => {
-              const paidHint = path.pro && !isPaidPlan(plan)
-              return (
-                <Link key={path.to + path.label} className="dash-path" to={path.to}>
-                  <img className="dash-path-img" src={path.image} alt="" />
-                  <span className="dash-path-shade" aria-hidden="true" />
-                  <span className="dash-path-copy">
-                    <strong>
-                      {path.label}
-                      {paidHint ? <span className="dash-path-pro">Paid</span> : null}
-                    </strong>
-                    <span>{path.hint}</span>
-                  </span>
-                </Link>
-              )
-            })}
+        <section className="dash-recommended" aria-labelledby="dash-rec-title">
+          <div className="dash-recommended-head">
+            <h2 id="dash-rec-title">Recommended features</h2>
+            <Link to="/app/studio/photos">See all studios</Link>
+          </div>
+          <div className="dash-rec-grid">
+            {RECOMMENDED.map((item) => (
+              <article key={item.to} className="dash-rec-card">
+                <div className="dash-rec-media">
+                  <img src={item.image} alt="" loading="lazy" />
+                </div>
+                <div className="dash-rec-body">
+                  <h3>
+                    {item.title}
+                    {item.pro && !paid ? <span className="dash-path-pro">Paid</span> : null}
+                  </h3>
+                  <p>{item.description}</p>
+                  <Link
+                    className={`dash-rec-cta${item.accent ? ' is-accent' : ''}`}
+                    to={item.to}
+                  >
+                    {item.cta}
+                    <span aria-hidden="true">→</span>
+                  </Link>
+                </div>
+              </article>
+            ))}
           </div>
         </section>
 
@@ -131,7 +150,10 @@ export default function DashboardPage() {
             <p className="dash-muted">Loading…</p>
           ) : recent.length === 0 ? (
             <div className="dash-empty">
-              <p>No projects yet.</p>
+              <p>No projects yet — start with Image Studio.</p>
+              <Link className="btn btn-grad" to="/app/studio/photos">
+                Create images
+              </Link>
             </div>
           ) : (
             <ul className="campaign-media-grid">

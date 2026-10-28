@@ -7,24 +7,38 @@ import { listUserCampaigns, listUserProducts, type CampaignDoc, type ProductSumm
 import { isPaidPlan, planLabel as formatPlanLabel } from '../lib/plans'
 import { campaignModeLabel } from '../lib/workspaceUi'
 
-const MAIN_NAV = [
-  { to: '/app', label: 'Dashboard', end: true, icon: 'home' as const },
-  { to: '/app/products', label: 'Products', end: false, icon: 'box' as const },
-  { to: '/app/campaigns', label: 'Campaigns', end: false, icon: 'layers' as const },
-  { to: '/app/library', label: 'Saved', end: false, icon: 'folder' as const },
-]
+type NavIconName =
+  | 'home'
+  | 'box'
+  | 'layers'
+  | 'folder'
+  | 'settings'
+  | 'help'
+  | 'logout'
+  | 'image'
+  | 'video'
+  | 'tag'
+  | 'spark'
+  | 'plus'
+  | 'crown'
 
-type CreateNavItem = {
+type NavItem = {
   to: string
   label: string
-  icon: 'image' | 'video' | 'tag' | 'spark'
-  pro: boolean
+  end?: boolean
+  icon: NavIconName
+  pro?: boolean
   comingSoon?: boolean
 }
 
-const CREATE_NAV: CreateNavItem[] = [
-  { to: '/app/studio/photos', label: 'Image Studio', icon: 'image', pro: false },
+const MAIN_MENU: NavItem[] = [
+  { to: '/app', label: 'Home', end: true, icon: 'home' },
+  { to: '/app/studio/photos', label: 'Image Studio', icon: 'image' },
   { to: '/app/studio/videos', label: 'Video Studio', icon: 'video', pro: true },
+  { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark', pro: true },
+  { to: '/app/products', label: 'Products', icon: 'box' },
+  { to: '/app/campaigns', label: 'Campaigns', icon: 'layers' },
+  { to: '/app/library', label: 'Library', icon: 'folder' },
   {
     to: '/app/studio/ads',
     label: 'Ads & Social',
@@ -32,25 +46,10 @@ const CREATE_NAV: CreateNavItem[] = [
     pro: true,
     comingSoon: true,
   },
-  { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark', pro: true },
+  { to: '/app/settings', label: 'Settings', icon: 'settings' },
 ]
 
-function NavIcon({
-  name,
-}: {
-  name:
-    | 'home'
-    | 'box'
-    | 'layers'
-    | 'folder'
-    | 'settings'
-    | 'help'
-    | 'logout'
-    | 'image'
-    | 'video'
-    | 'tag'
-    | 'spark'
-}) {
+function NavIcon({ name }: { name: NavIconName }) {
   const common = {
     width: 18,
     height: 18,
@@ -144,6 +143,18 @@ function NavIcon({
           <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
         </svg>
       )
+    case 'plus':
+      return (
+        <svg {...common}>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      )
+    case 'crown':
+      return (
+        <svg {...common}>
+          <path d="m3 8 4 3 5-6 5 6 4-3v10H3V8Z" />
+        </svg>
+      )
   }
 }
 
@@ -176,7 +187,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
     try {
       await signOut()
     } finally {
-      // Full navigation so app routes don't redirect to /login first
       window.location.replace('/')
     }
   }
@@ -252,32 +262,23 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="studio-shell">
-      <aside className="studio-rail">
-        <Link to="/app" className="studio-rail-brand" aria-label="LUCE home">
-          <Logo href={null} />
-        </Link>
+      <aside className="studio-rail studio-rail-ayari">
+        <div className="studio-rail-top">
+          <Link to="/app" className="studio-rail-brand" aria-label="LUCE home">
+            <Logo href={null} />
+          </Link>
+
+          <Link className="studio-rail-create" to="/app/studio/photos">
+            <NavIcon name="plus" />
+            <span>Create New</span>
+          </Link>
+        </div>
 
         <div className="studio-rail-scroll">
-          <nav className="studio-rail-nav" aria-label="Workspace">
-            {MAIN_NAV.map((item) => (
-              <NavLink
-                key={item.to + item.label}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  `studio-rail-link${isActive ? ' is-active' : ''}`
-                }
-              >
-                <NavIcon name={item.icon} />
-                <span>{item.label}</span>
-              </NavLink>
-            ))}
-          </nav>
-
           <div className="studio-rail-group">
-            <p className="studio-rail-label">Create</p>
-            <nav className="studio-rail-nav" aria-label="Create">
-              {CREATE_NAV.map((item) =>
+            <p className="studio-rail-label">Main Menu</p>
+            <nav className="studio-rail-nav" aria-label="Main menu">
+              {MAIN_MENU.map((item) =>
                 item.comingSoon ? (
                   <span
                     key={item.to + item.label}
@@ -292,6 +293,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   <NavLink
                     key={item.to + item.label}
                     to={item.to}
+                    end={item.end}
                     className={({ isActive }) =>
                       `studio-rail-link${isActive ? ' is-active' : ''}`
                     }
@@ -306,56 +308,35 @@ export default function AppLayout({ children }: AppLayoutProps) {
               )}
             </nav>
           </div>
-
-          <div className="studio-rail-group">
-            <p className="studio-rail-label">General</p>
-            <nav className="studio-rail-nav" aria-label="General">
-              <NavLink
-                to="/app/settings"
-                className={({ isActive }) =>
-                  `studio-rail-link${isActive ? ' is-active' : ''}`
-                }
-              >
-                <NavIcon name="settings" />
-                <span>Settings</span>
-              </NavLink>
-              <NavLink
-                to="/app/settings#help"
-                className="studio-rail-link"
-              >
-                <NavIcon name="help" />
-                <span>Help</span>
-              </NavLink>
-              <button
-                type="button"
-                className="studio-rail-link studio-rail-logout"
-                onClick={() => {
-                  void handleLogout()
-                }}
-              >
-                <NavIcon name="logout" />
-                <span>Logout</span>
-              </button>
-            </nav>
-          </div>
         </div>
 
         <div className="studio-rail-footer">
-          <div className="studio-promo">
+          <div className={`studio-promo studio-promo-card${paid ? ' is-paid' : ''}`}>
+            <div className="studio-promo-brand">
+              <Logo href={null} />
+            </div>
             {paid ? (
               <>
-                <strong>Start a full campaign</strong>
-                <p>One product → images, video &amp; ads</p>
+                <strong>{formatPlanLabel(plan)} workspace</strong>
+                <p>You’re on a paid plan — start a full campaign anytime.</p>
                 <Link className="studio-promo-btn" to="/app/campaigns/new">
-                  Create
+                  New campaign
                 </Link>
               </>
             ) : (
               <>
-                <strong>Free image try</strong>
-                <p>Browse every studio — upgrade when you generate</p>
-                <Link className="studio-promo-btn" to="/app/studio/photos">
-                  Try images free
+                <strong>LUCE free trial</strong>
+                <p>Try Image Studio free. Upgrade when you’re ready for video &amp; campaigns.</p>
+                <div className="studio-promo-meter" aria-hidden="true">
+                  <span className="studio-promo-meter-fill" style={{ width: '40%' }} />
+                </div>
+                <div className="studio-promo-meter-meta">
+                  <span>Free images</span>
+                  <span>Upgrade unlocks more</span>
+                </div>
+                <Link className="studio-promo-btn studio-promo-btn-solid" to="/app/settings#plan">
+                  <NavIcon name="crown" />
+                  Upgrade Plan
                 </Link>
               </>
             )}
@@ -376,7 +357,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <input
                   id={searchId}
                   type="search"
-                  placeholder="Search products, campaigns…"
+                  placeholder="Search…"
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value)
@@ -391,6 +372,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     }
                   }}
                 />
+                <kbd className="studio-topbar-kbd">⌘F</kbd>
               </label>
               {searchOpen && searchQuery.trim() ? (
                 <div className="studio-search-menu" role="listbox" aria-label="Search results">
@@ -499,12 +481,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <span className="studio-topbar-meta">
                   <strong className="studio-topbar-name">{displayName}</strong>
                   <span className={`studio-topbar-plan${paid ? ' is-pro' : ''}`}>
-                    {paid ? (
-                      <span className="studio-topbar-plan-badge">
-                        {formatPlanLabel(plan).toUpperCase()}
-                      </span>
-                    ) : null}
-                    {planLabel}
+                    {user?.email || planLabel}
                   </span>
                 </span>
               </button>
