@@ -286,7 +286,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   >
                     <NavIcon name={item.icon} />
                     <span>{item.label}</span>
-                    <span className="studio-rail-soon">Coming soon</span>
+                    <span className="studio-rail-soon">Soon</span>
                   </span>
                 ) : (
                   <NavLink

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import type { FormatOption } from '../lib/deliverables'
 import {
   DEFAULT_VIDEO_DURATION,
@@ -37,6 +37,15 @@ type FormatPickGridProps<T extends string> = {
   ariaLabel: string
   videoAspect?: boolean
   onLimitHit?: () => void
+  /** First card: upload your own reference instead of a preset format */
+  referenceSlot?: {
+    kind: 'image' | 'video'
+    previewUrl?: string | null
+    error?: string | null
+    busy?: boolean
+    onPickFile: (file: File | null) => void
+    onPickUrl?: (url: string) => void | Promise<void>
+  }
 }
 
 function FormatVideoCard({
@@ -116,15 +125,29 @@ export default function FormatPickGrid<T extends string>({
   ariaLabel,
   videoAspect,
   onLimitHit,
+  referenceSlot,
 }: FormatPickGridProps<T>) {
   const qtyMode = Boolean(onQuantitiesChange)
   const qtyMap = quantities || {}
   const durationMap = durations || {}
   const durationEnabled = Boolean(showDuration && onDurationsChange)
   const total = qtyMode ? totalQuantity(qtyMap) : selected.length
-  const usingDefaults = qtyMode ? total === 0 : selected.length === 0
+  const hasReference = Boolean(referenceSlot?.previewUrl)
+  const usingDefaults = !hasReference && (qtyMode ? total === 0 : selected.length === 0)
+  const refInputRef = useRef<HTMLInputElement>(null)
+  const [refMode, setRefMode] = useState<'file' | 'url'>('file')
+  const [refLink, setRefLink] = useState('')
+
+  function clearFormatsForReference() {
+    onQuantitiesChange?.({})
+    if (durationEnabled) onDurationsChange?.({})
+    if (onChange) onChange([])
+  }
 
   function applyQuantities(nextQty: FormatQuantities) {
+    if (hasReference && totalQuantity(nextQty) > 0) {
+      referenceSlot?.onPickFile(null)
+    }
     onQuantitiesChange?.(nextQty)
     if (durationEnabled) {
       onDurationsChange?.(syncDurationsToQuantities(nextQty, durationMap))
@@ -133,6 +156,7 @@ export default function FormatPickGrid<T extends string>({
 
   function toggleLegacy(id: T) {
     if (!onChange) return
+    if (hasReference) referenceSlot?.onPickFile(null)
     if (selected.includes(id)) {
       onChange(selected.filter((x) => x !== id))
       return
@@ -181,12 +205,216 @@ export default function FormatPickGrid<T extends string>({
     onDurationsChange(setFormatDuration(durationMap, id, seconds))
   }
 
+  function onReferenceInput(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] || null
+    if (file) clearFormatsForReference()
+    referenceSlot?.onPickFile(file)
+    e.target.value = ''
+  }
+
+  const isVideoRef = referenceSlot?.kind === 'video'
+  const refBusy = Boolean(referenceSlot?.busy)
+
+  async function applyReferenceLink() {
+    const url = refLink.trim()
+    if (!url || !referenceSlot?.onPickUrl || disabled || refBusy) return
+    clearFormatsForReference()
+    await referenceSlot.onPickUrl(url)
+  }
+
+  function onReferenceLinkKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return
+    // Nested inside Studio's <form> — never let Enter submit the outer form.
+    e.preventDefault()
+    e.stopPropagation()
+    void applyReferenceLink()
+  }
+
   return (
     <div
       className={`format-pick-grid${videoAspect ? ' format-pick-grid-video format-pick-grid-fastlane' : ''}`}
       role="group"
       aria-label={ariaLabel}
     >
+      {referenceSlot ? (
+        <div
+          className={`format-pick format-pick-reference${videoAspect ? ' format-pick-fastlane' : ''}${hasReference ? ' is-checked' : ''}`}
+          title={
+            isVideoRef
+              ? 'Add your own reference video instead of a preset format'
+              : 'Add your own reference photo instead of a preset format'
+          }
+        >
+          <input
+            ref={refInputRef}
+            type="file"
+            accept={
+              isVideoRef
+                ? 'video/mp4,video/webm,video/quicktime'
+                : 'image/jpeg,image/png,image/webp,image/gif'
+            }
+            hidden
+            onChange={onReferenceInput}
+            disabled={disabled || refBusy}
+          />
+          {hasReference ? (
+            <>
+              <div
+                className={`format-pick-media format-pick-media-ref${videoAspect ? ' format-pick-media-video' : ''}`}
+              >
+                {isVideoRef ? (
+                  <video
+                    src={referenceSlot.previewUrl!}
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                ) : (
+                  <img src={referenceSlot.previewUrl!} alt="" />
+                )}
+                <span className="format-pick-tag">Yours</span>
+                {videoAspect ? (
+                  <span className="format-pick-name">Your reference</span>
+                ) : null}
+                <span className="format-pick-check" aria-hidden="true">
+                  ✓
+                </span>
+              </div>
+              {videoAspect ? null : (
+                <span className="format-pick-body">
+                  <strong>Your reference</strong>
+                  <span>We’ll match this look</span>
+                </span>
+              )}
+              <div className="format-pick-ref-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={disabled || refBusy}
+                  onClick={() => {
+                    setRefMode('file')
+                    refInputRef.current?.click()
+                  }}
+                >
+                  Replace
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={disabled || refBusy}
+                  onClick={() => {
+                    setRefLink('')
+                    setRefMode('file')
+                    referenceSlot.onPickFile(null)
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="format-pick-ref-panel">
+              <div
+                className={`format-pick-media format-pick-media-blank${videoAspect ? ' format-pick-media-video' : ''}`}
+              >
+                <div className="format-pick-ref-hero">
+                  <span className="format-pick-ref-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none">
+                      <path
+                        d="M12 5v10m0 0l-3.5-3.5M12 15l3.5-3.5M5 19h14"
+                        stroke="currentColor"
+                        strokeWidth="1.7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <strong>{isVideoRef ? 'Your reference clip' : 'Your reference'}</strong>
+                  <span>
+                    {isVideoRef
+                      ? 'Match pace & framing'
+                      : 'Match lighting & mood'}
+                  </span>
+                </div>
+                <span className="format-pick-tag">Custom</span>
+              </div>
+
+              <div className="format-pick-ref-controls">
+                <div
+                  className="format-pick-ref-toggle"
+                  role="tablist"
+                  aria-label="Reference source"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={refMode === 'file'}
+                    className={refMode === 'file' ? 'is-active' : ''}
+                    disabled={disabled || refBusy}
+                    onClick={() => setRefMode('file')}
+                  >
+                    Upload
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={refMode === 'url'}
+                    className={refMode === 'url' ? 'is-active' : ''}
+                    disabled={disabled || refBusy || !referenceSlot.onPickUrl}
+                    onClick={() => setRefMode('url')}
+                  >
+                    Paste link
+                  </button>
+                </div>
+
+                {refMode === 'url' && referenceSlot.onPickUrl ? (
+                  <div className="format-pick-ref-url">
+                    <label className="sr-only" htmlFor="format-ref-url">
+                      {isVideoRef ? 'Reference video URL' : 'Reference image URL'}
+                    </label>
+                    <input
+                      id="format-ref-url"
+                      type="text"
+                      inputMode="url"
+                      autoComplete="url"
+                      value={refLink}
+                      onChange={(e) => setRefLink(e.target.value)}
+                      onKeyDown={onReferenceLinkKeyDown}
+                      placeholder={
+                        isVideoRef ? 'https://…/clip.mp4' : 'https://…/look.jpg'
+                      }
+                      disabled={disabled || refBusy}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={disabled || refBusy || !refLink.trim()}
+                      onClick={() => void applyReferenceLink()}
+                    >
+                      {refBusy ? 'Loading…' : 'Use'}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="format-pick-ref-upload-btn"
+                    disabled={disabled || refBusy}
+                    onClick={() => refInputRef.current?.click()}
+                  >
+                    {isVideoRef ? 'Choose video' : 'Choose photo'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {referenceSlot.error ? (
+            <p className="format-pick-ref-error" role="alert">
+              {referenceSlot.error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {items.map((item) => {
         const count = qtyMode ? qtyMap[item.id] || 0 : selected.includes(item.id) ? 1 : 0
         const checked = count > 0
@@ -194,7 +422,7 @@ export default function FormatPickGrid<T extends string>({
         return (
           <div
             key={item.id}
-            className={`format-pick${videoAspect ? ' format-pick-fastlane' : ''}${checked ? ' is-checked' : ''}${softDefault ? ' is-default' : ''}`}
+            className={`format-pick${videoAspect ? ' format-pick-fastlane' : ''}${checked ? ' is-checked' : ''}${softDefault ? ' is-default' : ''}${hasReference ? ' is-ref-dimmed' : ''}`}
             title={item.description}
           >
             <button

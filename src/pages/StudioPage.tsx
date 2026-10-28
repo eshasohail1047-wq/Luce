@@ -77,6 +77,11 @@ import { recreateMockOutput, type MockOutput } from '../lib/mockCampaign'
 import { consumePendingProduct } from '../lib/pendingProduct'
 import { canGenerate, type GenerateAction } from '../lib/planAccess'
 import {
+  remoteMediaToFile,
+  requestFetchProductPage,
+  requestFetchRemoteMedia,
+} from '../lib/fetchProduct'
+import {
   clearRecreateSession,
   dataUrlToFile,
   imageUrlToFile,
@@ -116,6 +121,11 @@ export default function StudioPage({
     null,
   )
   const [referenceError, setReferenceError] = useState<string | null>(null)
+  const [referenceUrlBusy, setReferenceUrlBusy] = useState(false)
+  const [urlImages, setUrlImages] = useState<string[]>([])
+  const [urlFetchBusy, setUrlFetchBusy] = useState(false)
+  const [urlFetchError, setUrlFetchError] = useState<string | null>(null)
+  const [selectedUrlImage, setSelectedUrlImage] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showDetails, setShowDetails] = useState(true)
   const [photoQuantities, setPhotoQuantities] = useState<FormatQuantities>({})
@@ -141,6 +151,8 @@ export default function StudioPage({
     limits.maxVideos > 0 ? limits.maxVideos : VIDEO_STUDIO_FORMAT_COUNT
   const photoOutputCount = totalQuantity(photoQuantities)
   const videoOutputCount = totalQuantity(videoQuantities)
+  /** Reference look drives the shoot — skip format picker to avoid fighting the ref. */
+  const hasReference = Boolean(referenceFile || referencePreviewUrl)
 
   function generateActionForKind(): GenerateAction {
     if (isRecreate) {
@@ -174,19 +186,76 @@ export default function StudioPage({
   }, [imageFile])
 
   useEffect(() => {
-    if (!referenceFile) {
-      setReferencePreviewUrl(null)
-      return
-    }
+    if (!referenceFile) return
     const url = URL.createObjectURL(referenceFile)
     setReferencePreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [referenceFile])
 
+  useEffect(() => {
+    if (sourceType !== 'url') return
+    const trimmed = productUrl.trim()
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setUrlImages([])
+      setSelectedUrlImage(null)
+      setUrlFetchError(null)
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setUrlFetchBusy(true)
+        setUrlFetchError(null)
+        try {
+          const page = await requestFetchProductPage(trimmed)
+          if (cancelled) return
+          setUrlImages(page.images)
+          if (page.title && !productName.trim()) setProductName(page.title)
+          if (page.description && !description.trim()) setDescription(page.description)
+          const first = page.images[0]
+          if (first) await applyProductUrlImage(first)
+        } catch (err) {
+          if (cancelled) return
+          setUrlImages([])
+          setSelectedUrlImage(null)
+          setUrlFetchError(
+            err instanceof Error ? err.message : 'Could not fetch product photos.',
+          )
+        } finally {
+          if (!cancelled) setUrlFetchBusy(false)
+        }
+      })()
+    }, 650)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+    // Intentionally only re-fetch when the URL / source tab changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceType, productUrl])
+
+  async function applyProductUrlImage(imageUrl: string) {
+    setSelectedUrlImage(imageUrl)
+    setPreviewUrl(imageUrl)
+    setError(null)
+    try {
+      const media = await requestFetchRemoteMedia(imageUrl, 'image')
+      const file = await remoteMediaToFile(media, 'product.jpg')
+      setImageFile(file)
+    } catch (err) {
+      // Keep HTTPS preview even if download fails — generation can still use the URL.
+      console.warn('[Studio] product URL image download failed', err)
+      setImageFile(null)
+      const viaHttps = await imageUrlToFile(imageUrl, 'product.jpg')
+      if (viaHttps) setImageFile(viaHttps)
+    }
+  }
+
   function pickReferenceFile(file: File | null) {
     setReferenceError(null)
     if (!file) {
       setReferenceFile(null)
+      setReferencePreviewUrl(null)
       return
     }
     const wantsVideo = kind === 'videos'
@@ -210,6 +279,29 @@ export default function StudioPage({
       }
     }
     setReferenceFile(file)
+  }
+
+  async function applyReferenceUrl(rawUrl: string) {
+    setReferenceError(null)
+    setReferenceUrlBusy(true)
+    try {
+      let url = rawUrl.trim()
+      if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`
+      const prefer = kind === 'videos' ? 'video' : 'image'
+      const media = await requestFetchRemoteMedia(url, prefer)
+      const file = await remoteMediaToFile(
+        media,
+        kind === 'videos' ? 'reference.mp4' : 'reference.jpg',
+      )
+      setReferenceFile(file)
+      setReferencePreviewUrl(media.dataUrl)
+    } catch (err) {
+      setReferenceError(
+        err instanceof Error ? err.message : 'Could not load that reference link.',
+      )
+    } finally {
+      setReferenceUrlBusy(false)
+    }
   }
 
   useEffect(() => {
@@ -689,10 +781,14 @@ export default function StudioPage({
 
     if (kind === 'videos') {
       if (!imageFile && !previewUrl) {
-        setError('Add a product photo — we turn it into the video formats you pick.')
+        setError(
+          hasReference
+            ? 'Add a product photo — we animate it using your reference.'
+            : 'Add a product photo — we turn it into the video formats you pick.',
+        )
         return
       }
-      if (videoOutputCount === 0) {
+      if (!hasReference && videoOutputCount === 0) {
         setError('Pick at least one video format (set how many variants you want on each card).')
         return
       }
@@ -700,12 +796,12 @@ export default function StudioPage({
       setError('Add a product photo to continue.')
       return
     }
-    if (sourceType === 'url' && !productUrl.trim() && kind !== 'videos') {
+    if (sourceType === 'url' && !productUrl.trim()) {
       setError('Add a product URL to continue.')
       return
     }
-    if (sourceType === 'url' && !productUrl.trim() && kind === 'videos' && !imageFile) {
-      setError('Add a product photo (required for video) or a product URL with a photo.')
+    if (sourceType === 'url' && !imageFile && !selectedUrlImage && !previewUrl) {
+      setError('Pick a product photo from the URL, or upload one.')
       return
     }
     if (!assertCanGenerate()) return
@@ -717,24 +813,39 @@ export default function StudioPage({
     try {
       if (imageFile) {
         imageDataUrl = await compressImageDataUrl(await fileToDataUrl(imageFile))
+      } else if (selectedUrlImage || (previewUrl && /^https?:\/\//i.test(previewUrl))) {
+        const src = selectedUrlImage || previewUrl!
+        try {
+          const media = await requestFetchRemoteMedia(src, 'image')
+          imageDataUrl = await compressImageDataUrl(media.dataUrl)
+        } catch {
+          imageDataUrl = src
+        }
       }
     } catch {
       /* optional */
     }
 
-    const clampedPhotos = resolvePhotoStyles(
-      expandFormatQuantities(photoQuantities, photoTotalMax) as PhotoStyleId[],
-    )
-    const clampedVideos = resolveVideoStudioStyles(
-      expandFormatQuantities(videoQuantities, videoTotalMax) as VideoStyleId[],
-      videoTotalMax,
-    )
+    // With a reference, follow the ref look only — one default output, no format mix.
+    const clampedPhotos = hasReference
+      ? (['photo_studio_packshot'] as PhotoStyleId[])
+      : resolvePhotoStyles(
+          expandFormatQuantities(photoQuantities, photoTotalMax) as PhotoStyleId[],
+        )
+    const clampedVideos = hasReference
+      ? (['video_ugc_selfie'] as VideoStyleId[])
+      : resolveVideoStudioStyles(
+          expandFormatQuantities(videoQuantities, videoTotalMax) as VideoStyleId[],
+          videoTotalMax,
+        )
     const selectedAssets =
       kind === 'photos'
         ? clampedPhotos
         : kind === 'videos'
           ? clampedVideos
-          : resolveAdStyles(adStyles)
+          : hasReference
+            ? resolveAdStyles([])
+            : resolveAdStyles(adStyles)
     const displayName =
       productName.trim() ||
       (imageFile ? imageFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '') ||
@@ -742,17 +853,23 @@ export default function StudioPage({
 
     const isFreeTry = kind === 'photos' && plan === 'free' && !freeImageUsed
 
+    let fileForCreate = imageFile
+    if (!fileForCreate && imageDataUrl?.startsWith('data:image/')) {
+      fileForCreate = await dataUrlToFile(imageDataUrl, 'product.jpg')
+    }
+
     try {
       const result = await withTimeout(
         createStudioProject({
           userId: user.uid,
           kind,
-          sourceType,
-          productUrl: sourceType === 'url' ? productUrl.trim() : undefined,
+          // Prefer upload when we resolved a photo from the product page so Storage gets a durable image.
+          sourceType: fileForCreate || imageDataUrl ? 'upload' : sourceType,
+          productUrl: productUrl.trim() || undefined,
           productName: productName.trim() || undefined,
           description: description.trim() || undefined,
           brand: brand.trim() || undefined,
-          imageFile: sourceType === 'upload' ? imageFile : null,
+          imageFile: fileForCreate,
           photoStyles: clampedPhotos,
           videoStyles: clampedVideos,
           adStyles,
@@ -917,6 +1034,11 @@ export default function StudioPage({
 
   const isUgcFocus = kind === 'videos' && searchParams.get('style') === 'ugc'
   const usingDefaults = selectionCount() === 0
+  const heroSteps = isRecreate
+    ? (['Confirm product', 'Describe changes', 'Apply'] as const)
+    : kind === 'videos' || kind === 'photos'
+      ? (['Product', 'Prompt', 'Formats or reference', 'Generate'] as const)
+      : (['Product', 'Direction', 'Outputs', 'Generate'] as const)
 
   const baseMeta =
     kind === 'photos'
@@ -924,51 +1046,54 @@ export default function StudioPage({
           kicker: 'Image Studio',
           title: tryFree ? 'Your free product images' : 'Craft product images',
           lead: tryFree
-            ? 'Add your product, optional reference + prompt, then pick formats — set how many variants you want on each card.'
-            : 'Product photo or URL → optional reference + prompt → pick formats and how many variants each. Results follow your reference when provided.',
+            ? 'Add your product, optional prompt, then pick formats — or upload your own reference on the first card.'
+            : 'Product photo or URL → optional prompt → pick formats, or upload your own reference as the first card.',
           image: '/images/audience-beauty.jpg',
           accent: 'photos' as const,
-          cta:
-            photoOutputCount > 0
+          cta: hasReference
+            ? 'Generate from reference'
+            : photoOutputCount > 0
               ? `Generate ${photoOutputCount} image${photoOutputCount === 1 ? '' : 's'}`
               : tryFree
                 ? 'Generate free images'
                 : 'Generate images',
-          stylesTitle: 'Pick formats & variants',
-          stylesHint: `Tap a format, then use + / − for variants (e.g. 3 studio shoots). Plan max ${photoTotalMax}.`,
+          stylesTitle: 'Formats or your reference',
+          stylesHint: `First card = your reference. Or tap formats and set variants · max ${photoTotalMax}.`,
         }
       : kind === 'videos' && isUgcFocus
         ? {
             kicker: 'UGC Studio',
             title: 'Creator-style product videos',
-            lead: 'Product photo → optional prompt/ref → pick formats and how many of each (e.g. 3 UGC clips).',
+            lead: 'Product photo → optional prompt → pick formats, or upload your own reference clip on the first card.',
             image: '/images/video-poster-ugc.jpg',
             accent: 'videos' as const,
-            cta:
-              videoOutputCount > 0
+            cta: hasReference
+              ? 'Generate from reference'
+              : videoOutputCount > 0
                 ? `Generate ${videoOutputCount} video${videoOutputCount === 1 ? '' : 's'}`
                 : 'Generate videos',
-            stylesTitle: 'Pick formats & variants',
-            stylesHint: `Any formats · variants + length (5–15s) · up to ${videoTotalMax} on your plan.`,
+            stylesTitle: 'Formats or your reference',
+            stylesHint: `First card = your vibe clip. Or pick formats · up to ${videoTotalMax}.`,
           }
         : kind === 'videos'
           ? {
               kicker: 'Video Studio',
               title: 'Product photo → formats → videos',
-              lead: 'Upload your product, optionally add a prompt or reference clip, then choose any formats and how many variants each.',
+              lead: 'Upload your product, optional prompt, then pick formats — or upload your own reference on the first card.',
               image: '/images/video-poster-table-talk.jpg',
               accent: 'videos' as const,
-              cta:
-                videoOutputCount > 0
+              cta: hasReference
+                ? 'Generate from reference'
+                : videoOutputCount > 0
                   ? `Generate ${videoOutputCount} video${videoOutputCount === 1 ? '' : 's'}`
                   : 'Generate videos',
-              stylesTitle: 'Pick formats & variants',
-              stylesHint: `Pick formats, set variants + length (5–15s, presets or custom) · max ${videoTotalMax} total.`,
+              stylesTitle: 'Formats or your reference',
+              stylesHint: `First card = your reference. Or pick formats + length · max ${videoTotalMax}.`,
             }
           : {
               kicker: 'Ads & Social',
               title: 'Build ad-ready creatives',
-              lead: 'Upload your product, then generate paid visuals and conversion-focused copy for Meta, TikTok, and more.',
+              lead: 'Upload your product, then generate paid visuals and conversion-focused copy.',
               image: '/images/output-social.jpg',
               accent: 'ads' as const,
               cta: 'Generate ads',
@@ -1027,33 +1152,9 @@ export default function StudioPage({
               </p>
             )}
             <ol className="studio-hero-steps" aria-label="How it works">
-              {kind === 'videos' && !isRecreate ? (
-                <>
-                  <li>Upload product photo</li>
-                  <li>Optional ref + prompt</li>
-                  <li>Formats + variants</li>
-                  <li>Generate videos</li>
-                </>
-              ) : kind === 'photos' && !isRecreate ? (
-                <>
-                  <li>Product photo or URL</li>
-                  <li>Optional ref + prompt</li>
-                  <li>Formats + variants</li>
-                  <li>Generate images</li>
-                </>
-              ) : (
-                <>
-                  <li>
-                    {isRecreate
-                      ? 'Confirm product'
-                      : sourceType === 'url'
-                        ? 'Confirm product'
-                        : 'Upload product'}
-                  </li>
-                  <li>{isRecreate ? 'Describe changes' : 'Set creative direction'}</li>
-                  <li>{isRecreate ? 'Apply' : 'Generate'}</li>
-                </>
-              )}
+              {heroSteps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
             </ol>
             {isRecreate && recreate ? (
               <button
@@ -1189,6 +1290,39 @@ export default function StudioPage({
                   placeholder="https://yourstore.com/products/…"
                   disabled={busy}
                 />
+                {urlFetchBusy ? (
+                  <p className="field-hint">Fetching photos from that page…</p>
+                ) : null}
+                {urlFetchError ? (
+                  <p className="auth-error" role="alert">
+                    {urlFetchError}
+                  </p>
+                ) : null}
+                {urlImages.length > 0 ? (
+                  <div className="url-image-picker" role="listbox" aria-label="Product photos from URL">
+                    <p className="field-hint">Pick the product photo to use</p>
+                    <div className="url-image-grid">
+                      {urlImages.map((src) => (
+                        <button
+                          key={src}
+                          type="button"
+                          role="option"
+                          aria-selected={selectedUrlImage === src}
+                          className={`url-image-thumb${selectedUrlImage === src ? ' is-selected' : ''}`}
+                          onClick={() => void applyProductUrlImage(src)}
+                          disabled={busy || urlFetchBusy}
+                        >
+                          <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                        </button>
+                      ))}
+                    </div>
+                    {previewUrl ? (
+                      <div className="upload-preview url-image-selected">
+                        <img src={previewUrl} alt="Selected product" referrerPolicy="no-referrer" />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -1246,15 +1380,11 @@ export default function StudioPage({
 
           <section className="form-section">
             <div className="form-section-head">
-              <h2>
-                {kind === 'videos' ? '2. Creative direction' : '2. Creative direction'}
-              </h2>
+              <h2>2. Creative direction</h2>
               <p>
                 {isRecreate
                   ? 'Required — write what you want changed'
-                  : kind === 'videos'
-                    ? 'Optional — prompt and vibe clip refine your product videos'
-                    : 'Optional — shape lighting, mood, and scene'}
+                  : 'Optional prompt — formats or your reference come next'}
               </p>
             </div>
             <CreativeDirectionFields
@@ -1270,12 +1400,8 @@ export default function StudioPage({
               onStyleThemeChange={setStyleTheme}
               disabled={busy}
               compact={!isRecreate}
-              referencePreviewUrl={referencePreviewUrl}
-              onReferenceFile={pickReferenceFile}
-              referenceError={referenceError}
-              referenceKind={kind === 'videos' ? 'video' : 'image'}
               videoStudioMode={kind === 'videos' && !isRecreate}
-              embedded={kind === 'videos' && !isRecreate}
+              embedded
               promptPlaceholder={
                 isRecreate
                   ? 'e.g. Brighter lighting, white background, less glitter, keep packaging sharp…'
@@ -1292,29 +1418,46 @@ export default function StudioPage({
             <div className="form-section-head">
               <h2>3. {studioMeta.stylesTitle}</h2>
               <p>
-                {kind === 'photos'
-                  ? usingDefaults
-                    ? `Tap formats · set variants with + / − · max ${photoTotalMax} images`
-                    : `${photoOutputCount} / ${photoTotalMax} images`
-                  : kind === 'videos'
-                    ? usingDefaults
-                      ? `Tap formats · set variants · max ${videoTotalMax} videos`
-                      : `${videoOutputCount} / ${videoTotalMax} videos`
-                    : usingDefaults
-                      ? studioMeta.stylesHint
-                      : `${selectionCount()} selected`}
+                {kind === 'photos' || kind === 'videos'
+                  ? hasReference
+                    ? 'Using your reference — pick a format card to switch back'
+                    : kind === 'photos'
+                      ? usingDefaults
+                        ? `First card = your reference · or tap formats · max ${photoTotalMax}`
+                        : `${photoOutputCount} / ${photoTotalMax} images`
+                      : usingDefaults
+                        ? `First card = your reference · or tap formats · max ${videoTotalMax}`
+                        : `${videoOutputCount} / ${videoTotalMax} videos`
+                  : usingDefaults
+                    ? studioMeta.stylesHint
+                    : `${selectionCount()} selected`}
               </p>
             </div>
+
+            {(kind === 'photos' || kind === 'videos') && (
+              <p className="studio-formats-intro">
+                Upload your own reference on the blank card, or pick preset formats.
+                Choosing one clears the other.
+              </p>
+            )}
 
             {kind === 'photos' && (
               <FormatPickGrid
                 items={PHOTO_STYLES}
                 quantities={photoQuantities}
                 onQuantitiesChange={setPhotoQuantities}
-                defaultIds={DEFAULT_PHOTO_STYLES}
+                defaultIds={hasReference ? [] : DEFAULT_PHOTO_STYLES}
                 max={photoTotalMax}
                 disabled={busy}
                 ariaLabel="Photo formats"
+                referenceSlot={{
+                  kind: 'image',
+                  previewUrl: referencePreviewUrl,
+                  error: referenceError,
+                  busy: referenceUrlBusy,
+                  onPickFile: pickReferenceFile,
+                  onPickUrl: applyReferenceUrl,
+                }}
                 onLimitHit={() =>
                   setWarning(
                     `Your plan allows up to ${photoTotalMax} images total (all formats combined).`,
@@ -1336,6 +1479,14 @@ export default function StudioPage({
                 disabled={busy}
                 videoAspect
                 ariaLabel="Video formats"
+                referenceSlot={{
+                  kind: 'video',
+                  previewUrl: referencePreviewUrl,
+                  error: referenceError,
+                  busy: referenceUrlBusy,
+                  onPickFile: pickReferenceFile,
+                  onPickUrl: applyReferenceUrl,
+                }}
                 onLimitHit={() =>
                   setWarning(
                     `Your plan allows up to ${videoTotalMax} videos total (all formats combined).`,

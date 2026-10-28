@@ -162,6 +162,71 @@ function localApiRoutes(): Plugin {
           return
         }
 
+        if (url === '/api/fetch-product') {
+          if (req.method !== 'POST') {
+            res.statusCode = 405
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Method not allowed' }))
+            return
+          }
+          try {
+            const body = await readJsonBody(req)
+            const { fetchProductPage } = await import(
+              './api/_lib/fetchProductPage.ts'
+            )
+            const result = await fetchProductPage(String(body.url ?? ''))
+            if (!result.ok) {
+              res.statusCode = result.status
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ error: result.error }))
+              return
+            }
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ok: true, ...result.data }))
+          } catch (err) {
+            console.error('[vite] fetch-product failed', err)
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Could not fetch product page.' }))
+          }
+          return
+        }
+
+        if (url === '/api/fetch-media') {
+          if (req.method !== 'POST') {
+            res.statusCode = 405
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Method not allowed' }))
+            return
+          }
+          try {
+            const body = await readJsonBody(req)
+            const preferRaw = String(body.prefer ?? 'any')
+            const prefer =
+              preferRaw === 'image' || preferRaw === 'video' ? preferRaw : 'any'
+            const { fetchRemoteMedia } = await import(
+              './api/_lib/fetchRemoteMedia.ts'
+            )
+            const result = await fetchRemoteMedia(String(body.url ?? ''), prefer)
+            if (!result.ok) {
+              res.statusCode = result.status
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ error: result.error }))
+              return
+            }
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ok: true, ...result.data }))
+          } catch (err) {
+            console.error('[vite] fetch-media failed', err)
+            res.statusCode = 500
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error: 'Could not fetch media.' }))
+          }
+          return
+        }
+
         if (url === '/api/ai-status') {
           if (req.method !== 'GET') {
             res.statusCode = 405

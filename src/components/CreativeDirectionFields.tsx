@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   BACKGROUND_OPTIONS,
   LIGHTING_OPTIONS,
@@ -28,6 +28,9 @@ type CreativeDirectionFieldsProps = {
   /** Optional mood/style reference (not the product) */
   referencePreviewUrl?: string | null
   onReferenceFile?: (file: File | null) => void
+  /** Paste a public image/video URL as the style reference */
+  onReferenceUrl?: (url: string) => void | Promise<void>
+  referenceUrlBusy?: boolean
   referenceError?: string | null
   /** Image studio uses photo refs; video studio uses video refs */
   referenceKind?: 'image' | 'video'
@@ -37,6 +40,8 @@ type CreativeDirectionFieldsProps = {
   sectionHint?: string
   /** When true, skip outer section chrome (parent already provides the heading). */
   embedded?: boolean
+  /** Reference is set — formats are skipped; copy should say match-the-look. */
+  referenceActive?: boolean
 }
 
 export default function CreativeDirectionFields({
@@ -55,6 +60,8 @@ export default function CreativeDirectionFields({
   compact = false,
   referencePreviewUrl,
   onReferenceFile,
+  onReferenceUrl,
+  referenceUrlBusy = false,
   referenceError,
   referenceKind = 'image',
   videoStudioMode = false,
@@ -62,10 +69,14 @@ export default function CreativeDirectionFields({
   sectionHint,
   /** When true, skip outer section chrome (parent already provides the heading). */
   embedded = false,
+  referenceActive = false,
 }: CreativeDirectionFieldsProps) {
   const refInput = useRef<HTMLInputElement>(null)
+  const [refMode, setRefMode] = useState<'file' | 'url'>('file')
+  const [refLink, setRefLink] = useState('')
   const isVideoRef = referenceKind === 'video'
-  const refFirst = false
+  /** Once a reference is active, lead with it — it drives the look. */
+  const refFirst = referenceActive
 
   function onPickRef(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] || null
@@ -73,23 +84,60 @@ export default function CreativeDirectionFields({
     e.target.value = ''
   }
 
+  async function onSubmitRefLink(e: FormEvent) {
+    e.preventDefault()
+    const url = refLink.trim()
+    if (!url || !onReferenceUrl) return
+    await onReferenceUrl(url)
+  }
+
   const referenceBlock = onReferenceFile ? (
-    <div className="ref-upload-block">
+    <div className={`ref-upload-block${referenceActive ? ' is-active-ref' : ''}`}>
       <div className="ref-upload-head">
         <div>
           <strong>
             {isVideoRef ? 'Reference video' : 'Reference photo'}
-            {' · optional'}
+            {referenceActive ? ' · driving the look' : ' · optional'}
           </strong>
           <p>
-            {videoStudioMode
-              ? 'Optional vibe clip — your product photo is the main input. We animate that product into each format you pick.'
-              : isVideoRef
-                ? 'Optional — a short clip of the vibe you want (pace, framing, energy). Your product photo stays the packaging source of truth.'
-                : 'Product = packaging. Reference = look/mood. Format = shot type (packshot, flatlay, window…). Results blend all three.'}
+            {referenceActive
+              ? isVideoRef
+                ? 'We’ll match this clip’s pace and framing. Format picking is skipped.'
+                : 'We’ll match this look. Format picking is skipped — remove the reference to choose formats instead.'
+              : videoStudioMode
+                ? 'Add a vibe clip to match its look, or skip and pick formats below.'
+                : isVideoRef
+                  ? 'Optional vibe clip — or skip and pick formats below.'
+                  : 'Add a look to match, or skip and pick formats below. Don’t mix both.'}
           </p>
         </div>
       </div>
+      {onReferenceUrl ? (
+        <div className="source-toggle ref-source-toggle" role="tablist" aria-label="Reference source">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={refMode === 'file'}
+            className={refMode === 'file' ? 'is-active' : ''}
+            onClick={() => setRefMode('file')}
+            disabled={disabled || referenceUrlBusy}
+          >
+            <span className="source-toggle-title">
+              {isVideoRef ? 'Upload video' : 'Upload photo'}
+            </span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={refMode === 'url'}
+            className={refMode === 'url' ? 'is-active' : ''}
+            onClick={() => setRefMode('url')}
+            disabled={disabled || referenceUrlBusy}
+          >
+            <span className="source-toggle-title">Paste link</span>
+          </button>
+        </div>
+      ) : null}
       <input
         ref={refInput}
         type="file"
@@ -113,21 +161,57 @@ export default function CreativeDirectionFields({
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => refInput.current?.click()}
-              disabled={disabled}
+              onClick={() => {
+                if (refMode === 'url') setRefMode('url')
+                else refInput.current?.click()
+              }}
+              disabled={disabled || referenceUrlBusy}
             >
               Replace
             </button>
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => onReferenceFile(null)}
-              disabled={disabled}
+              onClick={() => {
+                onReferenceFile(null)
+                setRefLink('')
+              }}
+              disabled={disabled || referenceUrlBusy}
             >
               Remove
             </button>
           </div>
         </div>
+      ) : refMode === 'url' && onReferenceUrl ? (
+        <form className="ref-url-form" onSubmit={(e) => void onSubmitRefLink(e)}>
+          <label htmlFor="creative-ref-url">
+            {isVideoRef ? 'Reference video URL' : 'Reference image URL'}
+          </label>
+          <div className="ref-url-row">
+            <input
+              id="creative-ref-url"
+              type="url"
+              value={refLink}
+              onChange={(e) => setRefLink(e.target.value)}
+              placeholder={
+                isVideoRef
+                  ? 'https://…/reference.mp4'
+                  : 'https://…/reference.jpg'
+              }
+              disabled={disabled || referenceUrlBusy}
+            />
+            <button
+              type="submit"
+              className="btn btn-ghost"
+              disabled={disabled || referenceUrlBusy || !refLink.trim()}
+            >
+              {referenceUrlBusy ? 'Loading…' : 'Use link'}
+            </button>
+          </div>
+          <p className="field-hint">
+            Public direct link to {isVideoRef ? 'an MP4/WebM' : 'a JPG/PNG/WebP'} works best.
+          </p>
+        </form>
       ) : (
         <button
           type="button"
@@ -136,12 +220,12 @@ export default function CreativeDirectionFields({
           disabled={disabled}
         >
           <span className="ref-upload-empty-title">
-            {isVideoRef ? 'Add a reference video' : 'Add a reference photo'}
+            {isVideoRef ? 'Drop a reference video' : 'Drop a reference photo'}
           </span>
           <span className="ref-upload-empty-copy">
             {isVideoRef
-              ? 'MP4 / WebM / MOV · up to 40MB · short clips work best'
-              : 'e.g. a shoot look you like · JPG / PNG · up to 12MB'}
+              ? 'Match pace & framing · MP4 / WebM · up to 40MB'
+              : 'Match lighting & mood · JPG / PNG · up to 12MB'}
           </span>
         </button>
       )}
@@ -156,7 +240,7 @@ export default function CreativeDirectionFields({
   const promptBlock = (
     <div className="auth-field">
       <label htmlFor="creative-prompt">
-        Your prompt{videoStudioMode ? ' · optional' : ''}
+        Prompt · optional
       </label>
       <textarea
         id="creative-prompt"
@@ -166,11 +250,13 @@ export default function CreativeDirectionFields({
         placeholder={promptPlaceholder}
         disabled={disabled}
       />
-      {videoStudioMode ? (
-        <p className="field-hint">
-          Optional — refine scene, dialogue, or offer. Your product photo + chosen formats lead.
-        </p>
-      ) : null}
+      <p className="field-hint">
+        {referenceActive
+          ? 'Optional notes on top of the reference look.'
+          : videoStudioMode
+            ? 'Optional — scene, dialogue, or offer. Next: formats or your own reference.'
+            : 'Optional — lighting, scene, or mood. Next: formats or your own reference.'}
+      </p>
     </div>
   )
 

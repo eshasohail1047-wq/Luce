@@ -389,8 +389,8 @@ async function createProductRecord(input: {
   let imageUrls: string[] = []
   let storageWarning: string | null = null
 
-  // Await upload so Products / Generate have a real product URL (stash alone is browser-local).
-  if (input.sourceType === 'upload' && input.imageFile) {
+  // Await upload whenever we have a photo (page-URL flow may also resolve one).
+  if (input.imageFile) {
     const file = input.imageFile
     const prepared = await prepareProductImageUpload(file)
     const path = `users/${input.userId}/products/${productRef.id}/source.${prepared.ext}`
@@ -512,7 +512,7 @@ export async function createCampaignWithProduct(input: CreateCampaignInput) {
       brand: input.brand,
       price: input.price,
       category: input.category,
-      imageFile: sourceType === 'upload' ? input.imageFile : null,
+      imageFile: input.imageFile ?? null,
     })
 
     const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})
@@ -602,7 +602,7 @@ export async function createStudioProject(input: CreateStudioInput) {
       displayName,
       description: input.description,
       brand: input.brand,
-      imageFile: sourceType === 'upload' ? input.imageFile : null,
+      imageFile: input.imageFile ?? null,
     })
 
     const creativeDirection = sanitizeCreativeDirection(input.creativeDirection ?? {})

@@ -10,7 +10,12 @@ import {
   getProductById,
   type ProductSourceType,
 } from '../lib/campaigns'
-import { imageUrlToFile } from '../lib/recreateSession'
+import { dataUrlToFile, imageUrlToFile } from '../lib/recreateSession'
+import {
+  remoteMediaToFile,
+  requestFetchProductPage,
+  requestFetchRemoteMedia,
+} from '../lib/fetchProduct'
 import { canGenerate } from '../lib/planAccess'
 import { getPlanLimits } from '../lib/planLimits'
 import PaywallModal from '../components/PaywallModal'
@@ -62,6 +67,11 @@ export default function NewCampaignPage() {
     null,
   )
   const [referenceError, setReferenceError] = useState<string | null>(null)
+  const [referenceUrlBusy, setReferenceUrlBusy] = useState(false)
+  const [urlImages, setUrlImages] = useState<string[]>([])
+  const [urlFetchBusy, setUrlFetchBusy] = useState(false)
+  const [urlFetchError, setUrlFetchError] = useState<string | null>(null)
+  const [selectedUrlImage, setSelectedUrlImage] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showDetails, setShowDetails] = useState(true)
   const [photoStyles, setPhotoStyles] = useState<PhotoStyleId[]>([])
@@ -94,19 +104,74 @@ export default function NewCampaignPage() {
   }, [imageFile])
 
   useEffect(() => {
-    if (!referenceFile) {
-      setReferencePreviewUrl(null)
-      return
-    }
+    if (!referenceFile) return
     const url = URL.createObjectURL(referenceFile)
     setReferencePreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [referenceFile])
 
+  useEffect(() => {
+    if (sourceType !== 'url') return
+    const trimmed = productUrl.trim()
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setUrlImages([])
+      setSelectedUrlImage(null)
+      setUrlFetchError(null)
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setUrlFetchBusy(true)
+        setUrlFetchError(null)
+        try {
+          const page = await requestFetchProductPage(trimmed)
+          if (cancelled) return
+          setUrlImages(page.images)
+          if (page.title && !productName.trim()) setProductName(page.title)
+          if (page.description && !description.trim()) setDescription(page.description)
+          const first = page.images[0]
+          if (first) await applyProductUrlImage(first)
+        } catch (err) {
+          if (cancelled) return
+          setUrlImages([])
+          setSelectedUrlImage(null)
+          setUrlFetchError(
+            err instanceof Error ? err.message : 'Could not fetch product photos.',
+          )
+        } finally {
+          if (!cancelled) setUrlFetchBusy(false)
+        }
+      })()
+    }, 650)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceType, productUrl])
+
+  async function applyProductUrlImage(imageUrl: string) {
+    setSelectedUrlImage(imageUrl)
+    setPreviewUrl(imageUrl)
+    setError(null)
+    try {
+      const media = await requestFetchRemoteMedia(imageUrl, 'image')
+      const file = await remoteMediaToFile(media, 'product.jpg')
+      setImageFile(file)
+    } catch (err) {
+      console.warn('[NewCampaign] product URL image download failed', err)
+      setImageFile(null)
+      const viaHttps = await imageUrlToFile(imageUrl, 'product.jpg')
+      if (viaHttps) setImageFile(viaHttps)
+    }
+  }
+
   function pickReferenceFile(file: File | null) {
     setReferenceError(null)
     if (!file) {
       setReferenceFile(null)
+      setReferencePreviewUrl(null)
       return
     }
     if (!file.type.startsWith('image/')) {
@@ -118,6 +183,23 @@ export default function NewCampaignPage() {
       return
     }
     setReferenceFile(file)
+  }
+
+  async function applyReferenceUrl(rawUrl: string) {
+    setReferenceError(null)
+    setReferenceUrlBusy(true)
+    try {
+      const media = await requestFetchRemoteMedia(rawUrl, 'image')
+      const file = await remoteMediaToFile(media, 'reference.jpg')
+      setReferenceFile(file)
+      setReferencePreviewUrl(media.dataUrl)
+    } catch (err) {
+      setReferenceError(
+        err instanceof Error ? err.message : 'Could not load that reference link.',
+      )
+    } finally {
+      setReferenceUrlBusy(false)
+    }
   }
 
   useEffect(() => {
@@ -294,6 +376,10 @@ export default function NewCampaignPage() {
       setError('Enter a product URL to continue.')
       return
     }
+    if (sourceType === 'url' && !imageFile && !selectedUrlImage && !previewUrl) {
+      setError('Pick a product photo from the URL, or upload one.')
+      return
+    }
     if (!assertCanCreate()) return
     setBusy(true)
     setError(null)
@@ -303,23 +389,36 @@ export default function NewCampaignPage() {
     try {
       if (imageFile) {
         imageDataUrl = await compressImageDataUrl(await fileToDataUrl(imageFile))
+      } else if (selectedUrlImage || (previewUrl && /^https?:\/\//i.test(previewUrl))) {
+        const src = selectedUrlImage || previewUrl!
+        try {
+          const media = await requestFetchRemoteMedia(src, 'image')
+          imageDataUrl = await compressImageDataUrl(media.dataUrl)
+        } catch {
+          imageDataUrl = src
+        }
       }
     } catch {
       /* optional preview */
+    }
+
+    let fileForCreate = imageFile
+    if (!fileForCreate && imageDataUrl?.startsWith('data:image/')) {
+      fileForCreate = await dataUrlToFile(imageDataUrl, 'product.jpg')
     }
 
     try {
       const result = await withTimeout(
         createCampaignWithProduct({
           userId: user.uid,
-          sourceType,
+          sourceType: fileForCreate || imageDataUrl ? 'upload' : sourceType,
           productName: productName.trim() || undefined,
           productUrl: productUrl.trim() || undefined,
           description: description.trim() || undefined,
           brand: brand.trim() || undefined,
           price: price.trim() || undefined,
           category: category.trim() || undefined,
-          imageFile: sourceType === 'upload' ? imageFile : null,
+          imageFile: fileForCreate,
           photoStyles,
           videoStyles,
           includeHooks,
@@ -532,6 +631,39 @@ export default function NewCampaignPage() {
                   placeholder="https://yourstore.com/products/…"
                   disabled={busy}
                 />
+                {urlFetchBusy ? (
+                  <p className="field-hint">Fetching photos from that page…</p>
+                ) : null}
+                {urlFetchError ? (
+                  <p className="auth-error" role="alert">
+                    {urlFetchError}
+                  </p>
+                ) : null}
+                {urlImages.length > 0 ? (
+                  <div className="url-image-picker" role="listbox" aria-label="Product photos from URL">
+                    <p className="field-hint">Pick the product photo to use</p>
+                    <div className="url-image-grid">
+                      {urlImages.map((src) => (
+                        <button
+                          key={src}
+                          type="button"
+                          role="option"
+                          aria-selected={selectedUrlImage === src}
+                          className={`url-image-thumb${selectedUrlImage === src ? ' is-selected' : ''}`}
+                          onClick={() => void applyProductUrlImage(src)}
+                          disabled={busy || urlFetchBusy}
+                        >
+                          <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                        </button>
+                      ))}
+                    </div>
+                    {previewUrl ? (
+                      <div className="upload-preview url-image-selected">
+                        <img src={previewUrl} alt="Selected product" referrerPolicy="no-referrer" />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -626,6 +758,8 @@ export default function NewCampaignPage() {
             compact
             referencePreviewUrl={referencePreviewUrl}
             onReferenceFile={pickReferenceFile}
+            onReferenceUrl={applyReferenceUrl}
+            referenceUrlBusy={referenceUrlBusy}
             referenceError={referenceError}
             promptPlaceholder="e.g. Soft morning light, keep packaging exact, quiet premium mood…"
           />
