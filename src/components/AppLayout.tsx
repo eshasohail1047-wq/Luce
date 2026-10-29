@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import Logo from '../Logo'
 import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../auth/AuthProvider'
@@ -204,6 +204,8 @@ type AppLayoutProps = {
 }
 
 export default function AppLayout({ children }: AppLayoutProps) {
+  const location = useLocation()
+  const isDashboardHome = location.pathname === '/app' || location.pathname === '/app/'
   const { user, plan, signOut } = useAuth()
   const displayName = user?.displayName?.trim() || user?.email?.split('@')[0] || 'Account'
   const initial = displayName.slice(0, 1).toUpperCase()
@@ -344,130 +346,247 @@ export default function AppLayout({ children }: AppLayoutProps) {
         </div>
       </aside>
 
-      <div className="studio-stage">
-        <header className="studio-topbar studio-topbar-compact">
-          <div className="studio-topbar-spacer" />
-          <div className="studio-topbar-actions">
-            {!paid ? (
-              <Link className="studio-topbar-upgrade" to="/app/settings#plan">
-                Upgrade
-              </Link>
-            ) : null}
-            <ThemeToggle />
-            <div className="studio-topbar-notif" ref={notifRef}>
-              <button
-                type="button"
-                className={`studio-topbar-icon${notifOpen ? ' is-open' : ''}`}
-                aria-label="Notifications"
-                aria-expanded={notifOpen}
-                aria-controls={notifId}
-                onClick={() => {
-                  setNotifOpen((v) => !v)
-                  setMenuOpen(false)
-                }}
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  aria-hidden="true"
+      <div className={`studio-stage${isDashboardHome ? ' studio-stage-dashboard' : ''}`}>
+        {isDashboardHome ? (
+          <header className="studio-dash-topbar" aria-label="Dashboard controls">
+            <div className="studio-dash-topbar-actions">
+              {!paid ? (
+                <Link className="studio-topbar-upgrade" to="/app/settings#plan">
+                  Upgrade
+                </Link>
+              ) : null}
+              <ThemeToggle />
+              <div className="studio-topbar-notif" ref={notifRef}>
+                <button
+                  type="button"
+                  className={`studio-topbar-icon${notifOpen ? ' is-open' : ''}`}
+                  aria-label="Notifications"
+                  aria-expanded={notifOpen}
+                  aria-controls={notifId}
+                  onClick={() => {
+                    setNotifOpen((v) => !v)
+                    setMenuOpen(false)
+                  }}
                 >
-                  <path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" />
-                  <path d="M10 20a2 2 0 0 0 4 0" />
-                </svg>
-                <span className="studio-topbar-dot" aria-hidden="true" />
-              </button>
-              {notifOpen ? (
-                <div className="studio-notif-menu" id={notifId} role="menu">
-                  <div className="studio-notif-head">
-                    <strong>Notifications</strong>
-                  </div>
-                  <p className="studio-notif-empty">
-                    You’re all caught up. Export alerts will appear here when generation finishes.
-                  </p>
-                  <Link
-                    role="menuitem"
-                    to="/app/settings#help"
-                    className="studio-account-menu-item"
-                    onClick={() => setNotifOpen(false)}
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    aria-hidden="true"
                   >
-                    Help &amp; support
-                  </Link>
-                </div>
-              ) : null}
-            </div>
-            <div className="studio-topbar-account" ref={menuRef}>
-              <button
-                type="button"
-                className={`studio-topbar-user${menuOpen ? ' is-open' : ''}`}
-                aria-label="Account menu"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                aria-controls={menuId}
-                onClick={() => {
-                  setMenuOpen((open) => !open)
-                  setNotifOpen(false)
-                }}
-              >
-                <span className="studio-topbar-avatar" aria-hidden="true">
+                    <path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" />
+                    <path d="M10 20a2 2 0 0 0 4 0" />
+                  </svg>
+                  <span className="studio-topbar-dot" aria-hidden="true" />
+                </button>
+                {notifOpen ? (
+                  <div className="studio-notif-menu" id={notifId} role="menu">
+                    <div className="studio-notif-head">
+                      <strong>Notifications</strong>
+                    </div>
+                    <p className="studio-notif-empty">
+                      You’re all caught up. Export alerts will appear here when generation finishes.
+                    </p>
+                    <Link
+                      role="menuitem"
+                      to="/app/settings#help"
+                      className="studio-account-menu-item"
+                      onClick={() => setNotifOpen(false)}
+                    >
+                      Help &amp; support
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+              <div className="studio-topbar-account" ref={menuRef}>
+                <button
+                  type="button"
+                  className={`studio-float-avatar${menuOpen ? ' is-open' : ''}`}
+                  aria-label="Account menu"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-controls={menuId}
+                  onClick={() => {
+                    setMenuOpen((open) => !open)
+                    setNotifOpen(false)
+                  }}
+                >
                   {user?.photoURL ? <img src={user.photoURL} alt="" /> : initial}
-                </span>
-                <span className="studio-topbar-meta">
-                  <strong className="studio-topbar-name">{displayName}</strong>
-                  <span className={`studio-topbar-plan${paid ? ' is-pro' : ''}`}>
-                    {planLabel}
-                  </span>
-                </span>
-              </button>
+                </button>
 
-              {menuOpen ? (
-                <div className="studio-account-menu" id={menuId} role="menu">
-                  <div className="studio-account-menu-head">
-                    <strong>{displayName}</strong>
-                    <span>{user?.email || planLabel}</span>
+                {menuOpen ? (
+                  <div className="studio-account-menu" id={menuId} role="menu">
+                    <div className="studio-account-menu-head">
+                      <strong>{displayName}</strong>
+                      <span>{user?.email || planLabel}</span>
+                    </div>
+                    <Link
+                      role="menuitem"
+                      to="/app/settings"
+                      className="studio-account-menu-item"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Settings
+                    </Link>
+                    <Link
+                      role="menuitem"
+                      to="/app/settings#plan"
+                      className="studio-account-menu-item"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      {paid ? 'Manage plan' : 'Upgrade plan'}
+                    </Link>
+                    <Link
+                      role="menuitem"
+                      to="/app/settings#help"
+                      className="studio-account-menu-item"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Help &amp; support
+                    </Link>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="studio-account-menu-item studio-account-menu-logout"
+                      onClick={() => {
+                        void handleLogout()
+                      }}
+                    >
+                      Log out
+                    </button>
                   </div>
-                  <Link
-                    role="menuitem"
-                    to="/app/settings"
-                    className="studio-account-menu-item"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Settings
-                  </Link>
-                  <Link
-                    role="menuitem"
-                    to="/app/settings#plan"
-                    className="studio-account-menu-item"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    {paid ? 'Manage plan' : 'Upgrade plan'}
-                  </Link>
-                  <Link
-                    role="menuitem"
-                    to="/app/settings#help"
-                    className="studio-account-menu-item"
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    Help &amp; support
-                  </Link>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="studio-account-menu-item studio-account-menu-logout"
-                    onClick={() => {
-                      void handleLogout()
-                    }}
-                  >
-                    Log out
-                  </button>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
-          </div>
-        </header>
+          </header>
+        ) : (
+          <header className="studio-topbar studio-topbar-compact">
+            <div className="studio-topbar-spacer" />
+            <div className="studio-topbar-actions">
+              {!paid ? (
+                <Link className="studio-topbar-upgrade" to="/app/settings#plan">
+                  Upgrade
+                </Link>
+              ) : null}
+              <ThemeToggle />
+              <div className="studio-topbar-notif" ref={notifRef}>
+                <button
+                  type="button"
+                  className={`studio-topbar-icon${notifOpen ? ' is-open' : ''}`}
+                  aria-label="Notifications"
+                  aria-expanded={notifOpen}
+                  aria-controls={notifId}
+                  onClick={() => {
+                    setNotifOpen((v) => !v)
+                    setMenuOpen(false)
+                  }}
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    aria-hidden="true"
+                  >
+                    <path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" />
+                    <path d="M10 20a2 2 0 0 0 4 0" />
+                  </svg>
+                  <span className="studio-topbar-dot" aria-hidden="true" />
+                </button>
+                {notifOpen ? (
+                  <div className="studio-notif-menu" id={notifId} role="menu">
+                    <div className="studio-notif-head">
+                      <strong>Notifications</strong>
+                    </div>
+                    <p className="studio-notif-empty">
+                      You’re all caught up. Export alerts will appear here when generation finishes.
+                    </p>
+                    <Link
+                      role="menuitem"
+                      to="/app/settings#help"
+                      className="studio-account-menu-item"
+                      onClick={() => setNotifOpen(false)}
+                    >
+                      Help &amp; support
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+              <div className="studio-topbar-account" ref={menuRef}>
+                <button
+                  type="button"
+                  className={`studio-topbar-user${menuOpen ? ' is-open' : ''}`}
+                  aria-label="Account menu"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-controls={menuId}
+                  onClick={() => {
+                    setMenuOpen((open) => !open)
+                    setNotifOpen(false)
+                  }}
+                >
+                  <span className="studio-topbar-avatar" aria-hidden="true">
+                    {user?.photoURL ? <img src={user.photoURL} alt="" /> : initial}
+                  </span>
+                  <span className="studio-topbar-meta">
+                    <strong className="studio-topbar-name">{displayName}</strong>
+                    <span className={`studio-topbar-plan${paid ? ' is-pro' : ''}`}>
+                      {planLabel}
+                    </span>
+                  </span>
+                </button>
+
+                {menuOpen ? (
+                  <div className="studio-account-menu" id={menuId} role="menu">
+                    <div className="studio-account-menu-head">
+                      <strong>{displayName}</strong>
+                      <span>{user?.email || planLabel}</span>
+                    </div>
+                    <Link
+                      role="menuitem"
+                      to="/app/settings"
+                      className="studio-account-menu-item"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Settings
+                    </Link>
+                    <Link
+                      role="menuitem"
+                      to="/app/settings#plan"
+                      className="studio-account-menu-item"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      {paid ? 'Manage plan' : 'Upgrade plan'}
+                    </Link>
+                    <Link
+                      role="menuitem"
+                      to="/app/settings#help"
+                      className="studio-account-menu-item"
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      Help &amp; support
+                    </Link>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="studio-account-menu-item studio-account-menu-logout"
+                      onClick={() => {
+                        void handleLogout()
+                      }}
+                    >
+                      Log out
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </header>
+        )}
         <div className="studio-stage-body">{children}</div>
       </div>
     </div>

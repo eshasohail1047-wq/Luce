@@ -27,16 +27,11 @@ export default function DashboardPage() {
       <main className="dash dash-creatify">
         <section className="dash-creatify-top" aria-labelledby="dash-hero-title">
           <h1 id="dash-hero-title" className="dash-creatify-title">
-            Create, analyze, and scale{' '}
-            <mark>your creatives</mark>
+            Create <mark>your creatives</mark>
             {firstName !== 'there' ? `, ${firstName}` : ''}
           </h1>
 
           <div className="dash-creatify-composer">
-            <p className="dash-creatify-prompt">
-              Make on-brand product images and videos from one photo — keep packaging exact,
-              then export for ads, Reels, and TikTok.
-            </p>
             <div className="dash-creatify-composer-bar">
               <Link className="dash-creatify-action" to="/app/studio/photos">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
@@ -65,7 +60,7 @@ export default function DashboardPage() {
                     strokeLinecap="round"
                   />
                 </svg>
-                Paste product URL
+                Paste URL
               </Link>
               <div className="dash-creatify-composer-spacer" />
               <Link
@@ -84,13 +79,6 @@ export default function DashboardPage() {
                 </svg>
               </Link>
             </div>
-          </div>
-
-          <div className="dash-creatify-shortcuts" aria-label="Quick start">
-            <Link to="/app/studio/photos">Image Studio</Link>
-            <Link to="/app/studio/videos">Video Studio</Link>
-            <Link to="/app/campaigns/new">Full Campaign</Link>
-            <Link to="/app/campaigns">Projects</Link>
           </div>
         </section>
 

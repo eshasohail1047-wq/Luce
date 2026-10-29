@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type ShowcaseItem = {
   id: string
@@ -6,170 +6,175 @@ export type ShowcaseItem = {
   kind: 'image' | 'video'
   src: string
   poster?: string
-  size?: 'hero' | 'md' | 'sm'
 }
 
+/** Five HeyGen clips with format-relative tags */
 const DEFAULT_ITEMS: ShowcaseItem[] = [
   {
-    id: 'product-studio',
-    label: 'Product Images',
-    kind: 'image',
-    src: '/images/fidelity-studio.jpg',
-    size: 'sm',
-  },
-  {
     id: 'heygen-1',
-    label: 'UGC Video',
+    label: 'UGC',
     kind: 'video',
     src: '/videos/creator/heygen-ugc-1.mp4',
     poster: '/images/video-poster-ugc.jpg',
-    size: 'md',
-  },
-  {
-    id: 'miss-rose-ads',
-    label: 'Ad Creative',
-    kind: 'image',
-    src: '/images/outputs/miss-rose-ads.jpg',
-    size: 'sm',
-  },
-  {
-    id: 'cinematic-heygen',
-    label: 'UGC Video',
-    kind: 'video',
-    src: '/videos/showcase/cinematic-heygen.mp4',
-    poster: '/images/video-poster-cinematic.jpg',
-    size: 'hero',
-  },
-  {
-    id: 'social',
-    label: 'Social Content',
-    kind: 'image',
-    src: '/images/outputs/miss-rose-social.jpg',
-    size: 'md',
-  },
-  {
-    id: 'heygen-2',
-    label: 'Full Campaign',
-    kind: 'video',
-    src: '/videos/creator/heygen-ugc-2.mp4',
-    size: 'md',
-  },
-  {
-    id: 'daylight',
-    label: 'Product Images',
-    kind: 'image',
-    src: '/images/fidelity-daylight.jpg',
-    size: 'sm',
   },
   {
     id: 'miss-rose-ugc',
-    label: 'UGC Video',
+    label: 'UGC',
     kind: 'video',
     src: '/videos/creator/miss-rose-ugc.mp4',
-    size: 'md',
+    poster: '/images/ugc-makeup-blush.jpg',
   },
   {
-    id: 'editorial',
+    id: 'image1-ugc',
+    label: 'Table Talk',
+    kind: 'video',
+    src: '/videos/creator/image1-ugc.mp4',
+    poster: '/images/ugc-makeup-lipstick.jpg',
+  },
+  {
+    id: 'heygen-2',
     label: 'Ad Creative',
-    kind: 'image',
-    src: '/images/outputs/miss-rose-editorial.jpg',
-    size: 'sm',
-  },
-  {
-    id: 'unbox',
-    label: 'Social Content',
     kind: 'video',
-    src: '/videos/formats/unboxing.mp4',
-    poster: '/images/video-poster-unbox.jpg',
-    size: 'md',
+    src: '/videos/creator/heygen-ugc-2.mp4',
+    poster: '/images/moisturizer-ugc-poster.jpg',
   },
   {
-    id: 'packshot',
-    label: 'Product Images',
-    kind: 'image',
-    src: '/images/outputs/miss-rose-packshot.jpg',
-    size: 'sm',
-  },
-  {
-    id: 'howto',
-    label: 'Full Campaign',
+    id: 'cinematic-heygen',
+    label: 'Cinematic Shot',
     kind: 'video',
-    src: '/videos/formats/howto.mp4',
-    poster: '/images/video-poster-howto.jpg',
-    size: 'md',
+    src: '/videos/showcase/cinematic-heygen.mp4',
+    poster: '/images/video-poster-cinematic.jpg',
   },
 ]
 
 type CreativeShowcaseProps = {
   items?: ShowcaseItem[]
-  heading?: string
-  supporting?: string
 }
 
-function ShowcaseCard({ item, index }: { item: ShowcaseItem; index: number }) {
-  const size = item.size || 'md'
-  const tilt = index % 7
-  return (
-    <article
-      className={`creative-showcase-card creative-showcase-card-${size} creative-showcase-tilt-${tilt}`}
-      aria-label={item.label}
-    >
-      <header className="creative-showcase-chrome">
-        <span className="creative-showcase-dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-        <span className="creative-showcase-label">{item.label}</span>
-      </header>
-      <div className="creative-showcase-media">
-        {item.kind === 'video' ? (
-          <video
-            src={item.src}
-            poster={item.poster}
-            muted
-            loop
-            playsInline
-            autoPlay
-            preload="metadata"
-          />
-        ) : (
-          <img src={item.src} alt="" loading="lazy" decoding="async" />
-        )}
-      </div>
-    </article>
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const sync = () => setReduced(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+  return reduced
+}
+
+function wrapIndex(index: number, length: number) {
+  return ((index % length) + length) % length
+}
+
+function relativeOffset(index: number, active: number, length: number) {
+  let offset = index - active
+  if (offset > length / 2) offset -= length
+  if (offset < -length / 2) offset += length
+  return offset
+}
+
+function slotClassForOffset(offset: number) {
+  if (offset === 0) return 'is-center'
+  if (offset === -1) return 'is-left'
+  if (offset === 1) return 'is-right'
+  if (offset === -2) return 'is-far-left'
+  if (offset === 2) return 'is-far-right'
+  return 'is-hidden'
+}
+
+export default function CreativeShowcase({ items = DEFAULT_ITEMS }: CreativeShowcaseProps) {
+  const [active, setActive] = useState(0)
+  const reducedMotion = usePrefersReducedMotion()
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const length = items.length
+
+  const goTo = useCallback(
+    (index: number) => {
+      setActive(wrapIndex(index, length))
+    },
+    [length],
   )
-}
 
-export default function CreativeShowcase({
-  items = DEFAULT_ITEMS,
-  heading = 'One product. Endless possibilities.',
-  supporting = 'From product photography to scroll-stopping ads, turn one product into creative assets ready for your next campaign.',
-}: CreativeShowcaseProps) {
-  // Duplicate once for a seamless CSS marquee loop.
-  const track = useMemo(() => [...items, ...items], [items])
+  const goNext = useCallback(() => {
+    setActive((current) => wrapIndex(current + 1, length))
+  }, [length])
+
+  useEffect(() => {
+    const current = items[active]
+    if (!current || reducedMotion || current.kind !== 'video') return
+
+    const video = videoRef.current
+    if (!video) return
+
+    const onEnded = () => goNext()
+    try {
+      video.currentTime = 0
+    } catch {
+      /* ignore */
+    }
+    void video.play().catch(() => {
+      /* autoplay blocked */
+    })
+    video.addEventListener('ended', onEnded)
+    return () => {
+      video.removeEventListener('ended', onEnded)
+    }
+  }, [active, goNext, items, reducedMotion])
+
+  if (!length) return null
 
   return (
-    <section className="creative-showcase" aria-labelledby="creative-showcase-heading">
-      <div className="creative-showcase-copy">
-        <h2 id="creative-showcase-heading">{heading}</h2>
-        <p>{supporting}</p>
+    <section className="creative-showcase" aria-label="Creative showcase">
+      <div className="creative-showcase-stage">
+        {items.map((item, index) => {
+          const offset = relativeOffset(index, active, length)
+          if (Math.abs(offset) > 2) return null
+
+          const isCenter = offset === 0
+          const slotClass = slotClassForOffset(offset)
+
+          return (
+            <article
+              key={item.id}
+              className={`creative-showcase-window ${slotClass}`}
+              aria-hidden={!isCenter}
+            >
+              {/* Tag sits on the top edge of the card — always inside the visible frame */}
+              <div className="creative-showcase-tag" aria-hidden={!isCenter}>
+                {item.label}
+              </div>
+              <button
+                type="button"
+                className="creative-showcase-hit"
+                onClick={() => {
+                  if (isCenter) goNext()
+                  else goTo(index)
+                }}
+                aria-label={
+                  isCenter
+                    ? `Playing ${item.label}. Show next creative`
+                    : `Show ${item.label}`
+                }
+              />
+              <video
+                ref={isCenter ? videoRef : undefined}
+                src={item.src}
+                poster={item.poster}
+                muted
+                playsInline
+                autoPlay={isCenter && !reducedMotion}
+                loop={reducedMotion && isCenter}
+                preload={Math.abs(offset) <= 1 ? 'metadata' : 'none'}
+              />
+            </article>
+          )
+        })}
       </div>
 
-      <div className="creative-showcase-viewport">
-        <div className="creative-showcase-track" aria-hidden="true">
-          {track.map((item, index) => (
-            <ShowcaseCard key={`${item.id}-${index}`} item={item} index={index} />
-          ))}
-        </div>
-        <ul className="creative-showcase-sr">
-          {items.map((item) => (
-            <li key={item.id}>
-              {item.label}: {item.kind}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <p className="creative-showcase-sr" aria-live="polite">
+        Showing {items[active]?.label}
+      </p>
     </section>
   )
 }
