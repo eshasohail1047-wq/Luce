@@ -1,83 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
-import CampaignMediaCard from '../components/CampaignMediaCard'
+import CreativeShowcase from '../components/CreativeShowcase'
 import { useAuth } from '../auth/AuthProvider'
-import { useCampaignCovers } from '../hooks/useCampaignCovers'
-import {
-  getProductsByIds,
-  listUserCampaigns,
-  type CampaignDoc,
-  type ProductSummary,
-} from '../lib/campaigns'
-import { isPaidPlan } from '../lib/plans'
-
-const RECOMMENDED = [
-  {
-    to: '/app/studio/photos',
-    title: 'Create product images',
-    description: 'Packshots, lifestyle, and promo frames from one product photo.',
-    image: '/images/fidelity-studio.jpg',
-    cta: 'Try it',
-    accent: true,
-    pro: false,
-  },
-  {
-    to: '/app/studio/videos',
-    title: 'Generate product videos',
-    description: 'Turn your product photo into UGC-style and demo clips.',
-    image: '/images/video-poster-ugc.jpg',
-    cta: 'Try it',
-    accent: false,
-    pro: true,
-  },
-  {
-    to: '/app/campaigns/new',
-    title: 'Launch a full campaign',
-    description: 'One product → images, videos, captions, and ads together.',
-    image: '/images/campaign-beauty-flatlay.jpg',
-    cta: 'Try it',
-    accent: false,
-    pro: true,
-  },
-] as const
 
 export default function DashboardPage() {
-  const { user, plan, loading } = useAuth()
-  const [campaigns, setCampaigns] = useState<CampaignDoc[]>([])
-  const [productsById, setProductsById] = useState<Map<string, ProductSummary>>(new Map())
-  const [listError, setListError] = useState<string | null>(null)
-  const [listing, setListing] = useState(true)
-  const paid = isPaidPlan(plan)
+  const { user, loading } = useAuth()
   const firstName =
     user?.displayName?.trim()?.split(/\s+/)[0] ||
     user?.email?.split('@')[0] ||
     'there'
-
-  useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const rows = await listUserCampaigns(user.uid)
-        if (cancelled) return
-        setCampaigns(rows)
-        const productMap = await getProductsByIds(rows.map((c) => c.productId))
-        if (!cancelled) setProductsById(productMap)
-      } catch (err) {
-        console.error(err)
-        if (!cancelled) setListError('Could not load your workspace.')
-      } finally {
-        if (!cancelled) setListing(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [user])
-
-  const recent = useMemo(() => campaigns.slice(0, 5), [campaigns])
-  const covers = useCampaignCovers(recent, productsById)
 
   if (loading) {
     return (
@@ -93,78 +24,77 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <main className="dash dash-simple dash-home">
-        <header className="dash-welcome">
-          <p className="dash-welcome-kicker">Welcome to LUCE</p>
-          <h1>Hi {firstName} — generate product creatives that stay on-brand.</h1>
-          <p>Start from a product photo, then pick formats or upload your own reference.</p>
-          <Link className="dash-welcome-cta" to="/app/studio/photos">
-            {paid ? 'Create images' : 'Try images free'}
-            <span aria-hidden="true">→</span>
-          </Link>
-        </header>
+      <main className="dash dash-creatify">
+        <section className="dash-creatify-top" aria-labelledby="dash-hero-title">
+          <h1 id="dash-hero-title" className="dash-creatify-title">
+            Create, analyze, and scale{' '}
+            <mark>your creatives</mark>
+            {firstName !== 'there' ? `, ${firstName}` : ''}
+          </h1>
 
-        <section className="dash-recommended" aria-labelledby="dash-rec-title">
-          <div className="dash-recommended-head">
-            <h2 id="dash-rec-title">Recommended features</h2>
-            <Link to="/app/studio/photos">See all studios</Link>
-          </div>
-          <div className="dash-rec-grid">
-            {RECOMMENDED.map((item) => (
-              <article key={item.to} className="dash-rec-card">
-                <div className="dash-rec-media">
-                  <img src={item.image} alt="" loading="lazy" />
-                </div>
-                <div className="dash-rec-body">
-                  <h3>
-                    {item.title}
-                    {item.pro && !paid ? <span className="dash-path-pro">Paid</span> : null}
-                  </h3>
-                  <p>{item.description}</p>
-                  <Link
-                    className={`dash-rec-cta${item.accent ? ' is-accent' : ''}`}
-                    to={item.to}
-                  >
-                    {item.cta}
-                    <span aria-hidden="true">→</span>
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {listError && (
-          <p className="auth-error" role="alert">
-            {listError}
-          </p>
-        )}
-
-        <section className="dash-panel dash-panel-simple" aria-labelledby="dash-recent-title">
-          <div className="dash-panel-head">
-            <h2 id="dash-recent-title">Recent</h2>
-            {campaigns.length > 0 ? <Link to="/app/campaigns">All</Link> : null}
-          </div>
-
-          {listing ? (
-            <p className="dash-muted">Loading…</p>
-          ) : recent.length === 0 ? (
-            <div className="dash-empty">
-              <p>No projects yet — start with Image Studio.</p>
-              <Link className="btn btn-grad" to="/app/studio/photos">
-                Create images
+          <div className="dash-creatify-composer">
+            <p className="dash-creatify-prompt">
+              Make on-brand product images and videos from one photo — keep packaging exact,
+              then export for ads, Reels, and TikTok.
+            </p>
+            <div className="dash-creatify-composer-bar">
+              <Link className="dash-creatify-action" to="/app/studio/photos">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+                  <path
+                    d="M12 16V8m0 0 3 3m-3-3-3 3M5 19h14a2 2 0 0 0 2-2V9.5A2.5 2.5 0 0 0 18.5 7H16l-1.5-2h-5L8 7H5.5A2.5 2.5 0 0 0 3 9.5V17a2 2 0 0 0 2 2Z"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Upload product
+              </Link>
+              <Link className="dash-creatify-action" to="/app/studio/photos?source=url">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+                  <path
+                    d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L11 5"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M14 11a5 5 0 0 0-7.07 0L4.8 13.12a5 5 0 0 0 7.07 7.07L13 19"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                Paste product URL
+              </Link>
+              <div className="dash-creatify-composer-spacer" />
+              <Link
+                className="dash-creatify-send"
+                to="/app/studio/photos"
+                aria-label="Start in Image Studio"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true">
+                  <path
+                    d="M12 19V5m0 0 5 5M12 5l-5 5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </Link>
             </div>
-          ) : (
-            <ul className="campaign-media-grid">
-              {recent.map((c) => (
-                <li key={c.id}>
-                  <CampaignMediaCard campaign={c} imageUrl={covers.get(c.id)} />
-                </li>
-              ))}
-            </ul>
-          )}
+          </div>
+
+          <div className="dash-creatify-shortcuts" aria-label="Quick start">
+            <Link to="/app/studio/photos">Image Studio</Link>
+            <Link to="/app/studio/videos">Video Studio</Link>
+            <Link to="/app/campaigns/new">Full Campaign</Link>
+            <Link to="/app/campaigns">Projects</Link>
+          </div>
         </section>
+
+        <CreativeShowcase />
       </main>
     </AppLayout>
   )

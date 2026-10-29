@@ -31,7 +31,7 @@ export const CAMPAIGN_DELIVERABLES: DeliverableOption[] = [
     id: 'visuals',
     label: 'Product visuals',
     description: 'Studio, lifestyle, and promo formats',
-    assets: ['photo_studio_packshot', 'photo_hand_model', 'photo_promo_offer'],
+    assets: ['photo_studio_packshot', 'photo_hand_model', 'photo_flatlay'],
   },
   {
     id: 'videos',
@@ -111,7 +111,6 @@ const HERO_PRODUCT = {
   evening: '/images/fidelity-evening.jpg',
   hand: '/images/format-perfume-in-hand.jpg',
   flatlay: '/images/format-perfume-flatlay.jpg',
-  promo: '/images/format-perfume-promo.jpg',
 } as const
 
 export const PHOTO_STYLES: FormatOption<PhotoStyleId>[] = [
@@ -149,13 +148,6 @@ export const PHOTO_STYLES: FormatOption<PhotoStyleId>[] = [
     description: 'Overhead styled surface',
     thumb: HERO_PRODUCT.flatlay,
     tag: 'Flatlay',
-  },
-  {
-    id: 'photo_promo_offer',
-    label: 'Promo / ad frame',
-    description: 'Like a Meta ad: product on one side, blank space for “20% off” or Shop',
-    thumb: HERO_PRODUCT.promo,
-    tag: 'Promo',
   },
 ]
 
@@ -258,14 +250,14 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   {
     id: 'video_asmr_spray',
     label: 'Spray ASMR',
-    description: 'Close-up of your product nozzle press and mist',
+    description: 'Close-up spray sounds and product texture',
     thumb: '/images/video-poster-asmr.jpg',
     tag: 'ASMR',
     videoUrl: HERO_VIDEO.asmr,
   },
 ]
 
-/** All Video Studio format cards (table talk → ASMR). */
+/** All Video Studio format cards. */
 export const VIDEO_STUDIO_FORMAT_COUNT = VIDEO_STYLES.length
 
 /** @deprecated Use VIDEO_STUDIO_FORMAT_COUNT — kept for older imports */

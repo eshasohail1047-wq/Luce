@@ -175,7 +175,7 @@ export function buildMockOutputs(input: {
       assets = [
         'photo_studio_packshot',
         'photo_hand_model',
-        'photo_promo_offer',
+        'photo_flatlay',
         'video_table_talk',
         'caption',
         'hook',

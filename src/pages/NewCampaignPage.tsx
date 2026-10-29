@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import CreativeDirectionFields from '../components/CreativeDirectionFields'
 import FormatPickGrid from '../components/FormatPickGrid'
+import StudioStagePanel, {
+  type StudioStagePhase,
+} from '../components/StudioStagePanel'
 import { useAuth } from '../auth/AuthProvider'
 import {
   createCampaignWithProduct,
   friendlyFirestoreError,
   getProductById,
+  updateCampaignStatus,
   type ProductSourceType,
 } from '../lib/campaigns'
 import { dataUrlToFile, imageUrlToFile } from '../lib/recreateSession'
@@ -35,21 +39,40 @@ import {
   type VideoStyleId,
 } from '../lib/deliverables'
 import {
+  isImageAssetKind,
+  requestGenerateImages,
+  type ImageAssetKind,
+} from '../lib/generateImages'
+import {
+  extractVideoFrameDataUrl,
+  isVideoAssetKind,
+  playableVideoUrl,
+  requestGenerateVideos,
+  type VideoAssetKind,
+} from '../lib/generateVideos'
+import { buildMockOutputs, type MockOutput } from '../lib/mockCampaign'
+import {
+  DEFAULT_VIDEO_DURATION,
+  clampVideoDuration,
+} from '../lib/formatQuantities'
+import {
   compressImageDataUrl,
   fileToDataUrl,
+  isLocalCampaignId,
   loadLocalCampaign,
   newLocalId,
   resolveProductImage,
   saveLocalCampaign,
   stashCampaignImageSafe,
+  stashCampaignOutputs,
+  stashCampaignRefImageSafe,
   stashProductImageSafe,
-  stashCampaignRefImage,
+  updateLocalCampaign,
   withTimeout,
 } from '../lib/localDemoCampaign'
 
 export default function NewCampaignPage() {
   const { user, plan, freeImageUsed, loading } = useAuth()
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -68,6 +91,14 @@ export default function NewCampaignPage() {
   )
   const [referenceError, setReferenceError] = useState<string | null>(null)
   const [referenceUrlBusy, setReferenceUrlBusy] = useState(false)
+  const [videoReferenceFile, setVideoReferenceFile] = useState<File | null>(null)
+  const [videoReferencePreviewUrl, setVideoReferencePreviewUrl] = useState<
+    string | null
+  >(null)
+  const [videoReferenceError, setVideoReferenceError] = useState<string | null>(
+    null,
+  )
+  const [videoReferenceUrlBusy, setVideoReferenceUrlBusy] = useState(false)
   const [urlImages, setUrlImages] = useState<string[]>([])
   const [urlFetchBusy, setUrlFetchBusy] = useState(false)
   const [urlFetchError, setUrlFetchError] = useState<string | null>(null)
@@ -93,10 +124,19 @@ export default function NewCampaignPage() {
   const [warning, setWarning] = useState<string | null>(null)
   const [paywallOpen, setPaywallOpen] = useState(false)
   const [paywallReason, setPaywallReason] = useState<string | undefined>()
+  const [stagePhase, setStagePhase] = useState<StudioStagePhase>('idle')
+  const [stageProgress, setStageProgress] = useState(0)
+  const [stageMessage, setStageMessage] = useState<string | null>(null)
+  const [stageOutputs, setStageOutputs] = useState<MockOutput[]>([])
+  const [stageCampaignId, setStageCampaignId] = useState<string | null>(null)
+  const [activeOutputId, setActiveOutputId] = useState<string | null>(null)
   const limits = getPlanLimits(plan)
+  const hasImageReference = Boolean(referenceFile || referencePreviewUrl)
+  const hasVideoReference = Boolean(
+    videoReferenceFile || videoReferencePreviewUrl,
+  )
 
   useEffect(() => {
-    // Don't clear on null — productId hydration may set a remote/data preview without a File yet.
     if (!imageFile) return
     const url = URL.createObjectURL(imageFile)
     setPreviewUrl(url)
@@ -109,6 +149,13 @@ export default function NewCampaignPage() {
     setReferencePreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [referenceFile])
+
+  useEffect(() => {
+    if (!videoReferenceFile) return
+    const url = URL.createObjectURL(videoReferenceFile)
+    setVideoReferencePreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [videoReferenceFile])
 
   useEffect(() => {
     if (sourceType !== 'url') return
@@ -129,7 +176,13 @@ export default function NewCampaignPage() {
           if (cancelled) return
           setUrlImages(page.images)
           if (page.title && !productName.trim()) setProductName(page.title)
-          if (page.description && !description.trim()) setDescription(page.description)
+          if (
+            page.description &&
+            !description.trim() &&
+            !/single image file/i.test(page.description)
+          ) {
+            setDescription(page.description)
+          }
           const first = page.images[0]
           if (first) await applyProductUrlImage(first)
         } catch (err) {
@@ -155,6 +208,12 @@ export default function NewCampaignPage() {
     setSelectedUrlImage(imageUrl)
     setPreviewUrl(imageUrl)
     setError(null)
+    setStageOutputs([])
+    setActiveOutputId(null)
+    setStageCampaignId(null)
+    setStagePhase('idle')
+    setStageProgress(0)
+    setStageMessage(null)
     try {
       const media = await requestFetchRemoteMedia(imageUrl, 'image')
       const file = await remoteMediaToFile(media, 'product.jpg')
@@ -183,16 +242,20 @@ export default function NewCampaignPage() {
       return
     }
     setReferenceFile(file)
+    setPhotoStyles([])
   }
 
   async function applyReferenceUrl(rawUrl: string) {
     setReferenceError(null)
     setReferenceUrlBusy(true)
     try {
-      const media = await requestFetchRemoteMedia(rawUrl, 'image')
+      let url = rawUrl.trim()
+      if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`
+      const media = await requestFetchRemoteMedia(url, 'image')
       const file = await remoteMediaToFile(media, 'reference.jpg')
       setReferenceFile(file)
       setReferencePreviewUrl(media.dataUrl)
+      setPhotoStyles([])
     } catch (err) {
       setReferenceError(
         err instanceof Error ? err.message : 'Could not load that reference link.',
@@ -202,8 +265,46 @@ export default function NewCampaignPage() {
     }
   }
 
+  function pickVideoReferenceFile(file: File | null) {
+    setVideoReferenceError(null)
+    if (!file) {
+      setVideoReferenceFile(null)
+      setVideoReferencePreviewUrl(null)
+      return
+    }
+    if (!file.type.startsWith('video/')) {
+      setVideoReferenceError('Reference must be a video (MP4, WebM, or MOV).')
+      return
+    }
+    if (file.size > 40 * 1024 * 1024) {
+      setVideoReferenceError('Reference video must be under 40MB.')
+      return
+    }
+    setVideoReferenceFile(file)
+    setVideoStyles([])
+  }
+
+  async function applyVideoReferenceUrl(rawUrl: string) {
+    setVideoReferenceError(null)
+    setVideoReferenceUrlBusy(true)
+    try {
+      let url = rawUrl.trim()
+      if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`
+      const media = await requestFetchRemoteMedia(url, 'video')
+      const file = await remoteMediaToFile(media, 'reference.mp4')
+      setVideoReferenceFile(file)
+      setVideoReferencePreviewUrl(media.dataUrl)
+      setVideoStyles([])
+    } catch (err) {
+      setVideoReferenceError(
+        err instanceof Error ? err.message : 'Could not load that reference link.',
+      )
+    } finally {
+      setVideoReferenceUrlBusy(false)
+    }
+  }
+
   useEffect(() => {
-    // Try-free flow lands in Image Studio; only hydrate here if something is left over.
     try {
       if (sessionStorage.getItem('luce.tryFreeImages') === '1') return
       const pendingUrl = sessionStorage.getItem('luce.pendingProductUrl')
@@ -286,6 +387,9 @@ export default function NewCampaignPage() {
       return
     }
     setImageFile(file)
+    setStageOutputs([])
+    setStagePhase('idle')
+    setStageMessage(null)
     if (!productName.trim()) {
       const guess = file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').trim()
       if (guess) setProductName(guess)
@@ -298,14 +402,251 @@ export default function NewCampaignPage() {
     pickFile(e.dataTransfer.files?.[0])
   }
 
-  async function createLocalDemoAndGo(imageDataUrl?: string) {
+  function effectiveFormats() {
+    return {
+      photoStyles: hasImageReference
+        ? (['photo_studio_packshot'] as PhotoStyleId[])
+        : photoStyles,
+      videoStyles: hasVideoReference
+        ? limits.maxVideos > 0
+          ? (['video_ugc_selfie'] as VideoStyleId[])
+          : ([] as VideoStyleId[])
+        : videoStyles,
+    }
+  }
+
+  async function runCampaignGenerate(opts: {
+    campaignId: string
+    productName: string
+    productImage: string
+    selectedAssets: string[]
+    referenceDataUrl?: string
+    videoReferenceDataUrl?: string
+  }) {
+    setStageCampaignId(opts.campaignId)
+    setStagePhase('preparing')
+    setStageProgress(8)
+    setStageMessage('Preparing your campaign…')
+    setStageOutputs([])
+    setActiveOutputId(null)
+
+    await new Promise((r) => setTimeout(r, 350))
+    setStagePhase('analyzing')
+    setStageProgress(22)
+    setStageMessage(
+      opts.referenceDataUrl || opts.videoReferenceDataUrl
+        ? 'Analyzing product + reference look…'
+        : 'Analyzing product packaging…',
+    )
+    await new Promise((r) => setTimeout(r, 450))
+
+    setStagePhase('generating')
+    setStageProgress(40)
+    setStageMessage('Generating campaign creatives…')
+
+    let nextOutputs = buildMockOutputs({
+      productName: opts.productName,
+      productImageUrl: opts.productImage,
+      selectedAssets: opts.selectedAssets,
+      mode: 'campaign',
+    })
+
+    const imageOutputs = nextOutputs.filter((o) => isImageAssetKind(o.assetType))
+    const videoOutputs = nextOutputs.filter((o) => isVideoAssetKind(o.assetType))
+    let warn: string | null = null
+
+    if (imageOutputs.length > 0) {
+      let failCount = 0
+      for (let i = 0; i < imageOutputs.length; i++) {
+        const item = imageOutputs[i]!
+        setStageProgress(42 + Math.round(((i + 1) / imageOutputs.length) * 30))
+        setStageMessage(
+          `Generating image ${i + 1} of ${imageOutputs.length}: ${item.label}…`,
+        )
+        try {
+          const ai = await requestGenerateImages({
+            productName: opts.productName,
+            productImage: opts.productImage,
+            referenceImage: opts.referenceDataUrl?.startsWith('data:image/')
+              ? opts.referenceDataUrl
+              : undefined,
+            creativeDirection: {
+              prompt: prompt || undefined,
+              lighting: lighting || undefined,
+              background: background || undefined,
+              mood: mood || undefined,
+              styleTheme: styleTheme || undefined,
+            },
+            assets: [item.assetType as ImageAssetKind],
+            recreateNote: opts.referenceDataUrl
+              ? 'Match the reference look; keep product packaging exact.'
+              : undefined,
+          })
+          const generated = ai.assets[0]
+          if (generated?.imageDataUrl) {
+            nextOutputs = nextOutputs.map((o) =>
+              o.id === item.id
+                ? {
+                    ...o,
+                    imageUrl: generated.imageDataUrl,
+                    note: 'AI generated in campaign',
+                  }
+                : o,
+            )
+            setStageOutputs([...nextOutputs])
+            setActiveOutputId(item.id)
+          } else {
+            throw new Error('No image returned')
+          }
+        } catch (err) {
+          failCount += 1
+          console.warn('[Campaign] image failed', item.id, err)
+          nextOutputs = nextOutputs.map((o) =>
+            o.id === item.id
+              ? {
+                  ...o,
+                  imageUrl: opts.productImage,
+                  note: 'AI failed — product photo kept',
+                }
+              : o,
+          )
+        }
+      }
+      if (failCount) {
+        warn = `Some AI images failed (${failCount}); your product photo was kept for those.`
+      }
+    }
+
+    if (videoOutputs.length > 0) {
+      let referenceFrameImage: string | undefined
+      const videoRef = opts.videoReferenceDataUrl
+      if (videoRef?.startsWith('data:image/')) {
+        referenceFrameImage = videoRef
+      } else if (videoRef?.startsWith('data:video/') || videoRef?.startsWith('blob:')) {
+        try {
+          referenceFrameImage = await extractVideoFrameDataUrl(videoRef)
+        } catch {
+          /* optional */
+        }
+      } else if (opts.referenceDataUrl?.startsWith('data:image/')) {
+        referenceFrameImage = opts.referenceDataUrl
+      }
+
+      let failCount = 0
+      for (let i = 0; i < videoOutputs.length; i++) {
+        const item = videoOutputs[i]!
+        setStageProgress(72 + Math.round(((i + 1) / videoOutputs.length) * 20))
+        setStageMessage(
+          `Generating video ${i + 1} of ${videoOutputs.length}: ${item.label}…`,
+        )
+        try {
+          const durationSeconds = clampVideoDuration(
+            item.durationSeconds ?? DEFAULT_VIDEO_DURATION,
+          )
+          const ai = await requestGenerateVideos({
+            productName: opts.productName,
+            productImage: opts.productImage,
+            referenceFrameImage,
+            creativeDirection: {
+              prompt: prompt || undefined,
+              lighting: lighting || undefined,
+              background: background || undefined,
+              mood: mood || undefined,
+              styleTheme: styleTheme || undefined,
+            },
+            assets: [item.assetType as VideoAssetKind],
+            durationSeconds,
+          })
+          const clipUrl = playableVideoUrl(ai.assets[0])
+          if (clipUrl) {
+            nextOutputs = nextOutputs.map((o) =>
+              o.id === item.id
+                ? {
+                    ...o,
+                    kind: 'video' as const,
+                    videoUrl: clipUrl,
+                    imageUrl: opts.productImage,
+                    durationSeconds,
+                    note: `AI video · ${durationSeconds}s`,
+                  }
+                : o,
+            )
+            setStageOutputs([...nextOutputs])
+            setActiveOutputId(item.id)
+          } else {
+            throw new Error('No clip returned')
+          }
+        } catch (err) {
+          failCount += 1
+          console.warn('[Campaign] video failed', item.id, err)
+          nextOutputs = nextOutputs.map((o) =>
+            o.id === item.id
+              ? {
+                  ...o,
+                  kind: 'video' as const,
+                  videoUrl: undefined,
+                  imageUrl: opts.productImage,
+                  note: 'AI video failed — product still kept',
+                }
+              : o,
+          )
+        }
+      }
+      if (failCount) {
+        warn = warn
+          ? `${warn} Some videos also failed (${failCount}).`
+          : `Some AI videos failed (${failCount}); product stills were kept.`
+      }
+    }
+
+    setStagePhase('checking')
+    setStageProgress(94)
+    setStageMessage('Checking quality & packaging fidelity…')
+    await new Promise((r) => setTimeout(r, 400))
+
+    stashCampaignOutputs(opts.campaignId, nextOutputs)
+    if (isLocalCampaignId(opts.campaignId)) {
+      updateLocalCampaign(opts.campaignId, {
+        status: 'ready',
+        outputs: nextOutputs,
+        imageUrl: opts.productImage.startsWith('data:')
+          ? undefined
+          : opts.productImage,
+      })
+    } else {
+      try {
+        await updateCampaignStatus(opts.campaignId, 'ready', {
+          demoPack: true,
+          outputsLocal: true,
+          outputCount: nextOutputs.length,
+        })
+      } catch (err) {
+        console.warn('[Campaign] status update failed', err)
+      }
+    }
+
+    setStageOutputs(nextOutputs)
+    setActiveOutputId(nextOutputs[0]?.id || null)
+    setStagePhase('ready')
+    setStageProgress(100)
+    setStageMessage(
+      nextOutputs.length === 1
+        ? '1 creative ready'
+        : `${nextOutputs.length} creatives ready`,
+    )
+    if (warn) setWarning(warn)
+    setBusy(false)
+  }
+
+  async function createLocalDemoAndGenerate(imageDataUrl?: string) {
     const displayName =
       productName.trim() ||
       (imageFile ? imageFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '') ||
       (productUrl.trim() ? 'Product from URL' : 'Untitled product')
+    const formats = effectiveFormats()
     const resolved = resolveCampaignFromFormats({
-      photoStyles,
-      videoStyles,
+      photoStyles: formats.photoStyles,
+      videoStyles: formats.videoStyles,
       includeHooks,
       includeCaptions,
       includeCtas,
@@ -346,22 +687,35 @@ export default function NewCampaignPage() {
         'Could not save this campaign in the browser. Try a smaller photo.',
       )
     }
+    let refDataUrl: string | undefined
     if (referenceFile) {
       try {
-        stashCampaignRefImage(
+        refDataUrl = await stashCampaignRefImageSafe(
           id,
-          await compressImageDataUrl(await fileToDataUrl(referenceFile)),
+          await fileToDataUrl(referenceFile),
         )
       } catch {
         /* optional */
       }
     }
-    navigate(`/app/campaigns/${id}`, {
-      replace: true,
-      state: {
-        autoGenerate: true,
-        ...(imageUrl ? { productImage: imageUrl } : {}),
-      },
+    let videoRefDataUrl: string | undefined
+    if (videoReferenceFile) {
+      try {
+        videoRefDataUrl = await fileToDataUrl(videoReferenceFile)
+      } catch {
+        /* optional */
+      }
+    }
+    if (!imageUrl) {
+      throw new Error('Add a product photo before creating this campaign.')
+    }
+    await runCampaignGenerate({
+      campaignId: id,
+      productName: displayName,
+      productImage: imageUrl,
+      selectedAssets: resolved.selectedAssets,
+      referenceDataUrl: refDataUrl,
+      videoReferenceDataUrl: videoRefDataUrl,
     })
   }
 
@@ -407,6 +761,12 @@ export default function NewCampaignPage() {
       fileForCreate = await dataUrlToFile(imageDataUrl, 'product.jpg')
     }
 
+    const formats = effectiveFormats()
+    const displayName =
+      productName.trim() ||
+      (imageFile ? imageFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '') ||
+      'Untitled product'
+
     try {
       const result = await withTimeout(
         createCampaignWithProduct({
@@ -419,8 +779,8 @@ export default function NewCampaignPage() {
           price: price.trim() || undefined,
           category: category.trim() || undefined,
           imageFile: fileForCreate,
-          photoStyles,
-          videoStyles,
+          photoStyles: formats.photoStyles,
+          videoStyles: formats.videoStyles,
           includeHooks,
           includeCaptions,
           includeCtas,
@@ -448,29 +808,51 @@ export default function NewCampaignPage() {
       if (result.storageWarning) {
         setWarning(result.storageWarning)
       }
+      let refDataUrl: string | undefined
       if (referenceFile) {
         try {
-          stashCampaignRefImage(
+          refDataUrl = await stashCampaignRefImageSafe(
             result.campaignId,
-            await compressImageDataUrl(await fileToDataUrl(referenceFile)),
+            await fileToDataUrl(referenceFile),
           )
         } catch {
           /* optional */
         }
       }
-      navigate(`/app/campaigns/${result.campaignId}`, {
-        replace: true,
-        state: {
-          autoGenerate: true,
-          ...(imageDataUrl || cloudImage
-            ? { productImage: imageDataUrl || cloudImage }
-            : {}),
-        },
+      let videoRefDataUrl: string | undefined
+      if (videoReferenceFile) {
+        try {
+          videoRefDataUrl = await fileToDataUrl(videoReferenceFile)
+        } catch {
+          /* optional */
+        }
+      }
+      if (!productStill) {
+        throw new Error('Add a product photo before creating this campaign.')
+      }
+      const resolved = resolveCampaignFromFormats({
+        photoStyles: formats.photoStyles,
+        videoStyles: formats.videoStyles,
+        includeHooks,
+        includeCaptions,
+        includeCtas,
+        includeHashtags,
+        includeAdCreative,
+        includeAdCopy,
+        includeStrategy,
+      })
+      await runCampaignGenerate({
+        campaignId: result.campaignId,
+        productName: displayName,
+        productImage: productStill,
+        selectedAssets: resolved.selectedAssets,
+        referenceDataUrl: refDataUrl,
+        videoReferenceDataUrl: videoRefDataUrl,
       })
     } catch (err) {
       console.warn('[NewCampaign] falling back to local demo campaign', err)
       try {
-        await createLocalDemoAndGo(imageDataUrl)
+        await createLocalDemoAndGenerate(imageDataUrl)
       } catch (localErr) {
         console.error(localErr)
         setError(
@@ -479,13 +861,456 @@ export default function NewCampaignPage() {
             'Could not create campaign. Try again or use a smaller photo.',
           ),
         )
+        setStagePhase('error')
+        setStageMessage('Generation stopped')
         setBusy(false)
       }
     }
   }
 
-  const photoCount = photoStyles.length || DEFAULT_PHOTO_STYLES.length
-  const videoCount = videoStyles.length || DEFAULT_VIDEO_STYLES.length
+  const formatsPreview = effectiveFormats()
+  const photoCount =
+    formatsPreview.photoStyles.length || DEFAULT_PHOTO_STYLES.length
+  const videoCount =
+    formatsPreview.videoStyles.length ||
+    (limits.maxVideos > 0 ? DEFAULT_VIDEO_STYLES.length : 0)
+
+  const formBody = (
+    <form
+      className="app-form campaign-form create-panel studio-panel"
+      onSubmit={(e) => void onSubmit(e)}
+    >
+      <header className="studio-workbench-head">
+        <div>
+          <p className="studio-workbench-kicker">Full Campaign</p>
+          <h1>Build a complete campaign pack</h1>
+          <p>
+            Same formats as Image &amp; Video Studio — or upload your own reference
+            on the first card.
+          </p>
+        </div>
+      </header>
+
+      <section className="form-section">
+        <div className="form-section-head">
+          <h2>1. Product</h2>
+          <p>Photo or product page URL</p>
+        </div>
+
+        <div className="source-toggle" role="tablist" aria-label="Product source">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={sourceType === 'upload'}
+            className={sourceType === 'upload' ? 'is-active' : ''}
+            onClick={() => {
+              setSourceType('upload')
+              setError(null)
+            }}
+            disabled={busy}
+          >
+            <span className="source-toggle-title">Photo</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={sourceType === 'url'}
+            className={sourceType === 'url' ? 'is-active' : ''}
+            onClick={() => {
+              setSourceType('url')
+              setError(null)
+              setShowDetails(true)
+            }}
+            disabled={busy}
+          >
+            <span className="source-toggle-title">Product URL</span>
+          </button>
+        </div>
+
+        {sourceType === 'upload' ? (
+          <div className="upload-block">
+            <input
+              ref={fileInputRef}
+              id="product-image"
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              hidden
+              onChange={(e) => pickFile(e.target.files?.[0])}
+              disabled={busy}
+            />
+
+            <div
+              className={`upload-drop${dragOver ? ' is-over' : ''}${previewUrl ? ' has-preview' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOver(true)
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+            >
+              {previewUrl ? (
+                <div className="upload-preview">
+                  <img src={previewUrl} alt="Product preview" />
+                  <div className="upload-preview-actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={busy}
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => {
+                        setImageFile(null)
+                        setPreviewUrl(null)
+                      }}
+                      disabled={busy}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="upload-empty"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={busy}
+                >
+                  <span className="upload-empty-title">Drop product photo here</span>
+                  <span className="upload-empty-copy">JPG, PNG, or WebP · up to 12MB</span>
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="url-block">
+            <label htmlFor="product-url">Product page URL</label>
+            <input
+              id="product-url"
+              type="url"
+              required
+              value={productUrl}
+              onChange={(e) => setProductUrl(e.target.value)}
+              placeholder="https://yourstore.com/products/…"
+              disabled={busy}
+            />
+            {urlFetchBusy ? (
+              <p className="field-hint">Fetching photos from that page…</p>
+            ) : null}
+            {urlFetchError ? (
+              <p className="auth-error" role="alert">
+                {urlFetchError}
+              </p>
+            ) : null}
+            {urlImages.length > 0 ? (
+              <div className="url-image-picker" role="listbox" aria-label="Product photos from URL">
+                <p className="field-hint">
+                  {urlImages.length === 1
+                    ? '1 photo found — pick it, or paste the product page URL for the full gallery'
+                    : `Pick the product photo to use (${urlImages.length} found)`}
+                </p>
+                <div className="url-image-grid">
+                  {urlImages.map((src) => (
+                    <button
+                      key={src}
+                      type="button"
+                      role="option"
+                      aria-selected={selectedUrlImage === src}
+                      className={`url-image-thumb${selectedUrlImage === src ? ' is-selected' : ''}`}
+                      onClick={() => void applyProductUrlImage(src)}
+                      disabled={busy || urlFetchBusy}
+                    >
+                      <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" />
+                    </button>
+                  ))}
+                </div>
+                {previewUrl ? (
+                  <div className="upload-preview url-image-selected">
+                    <img src={previewUrl} alt="Selected product" referrerPolicy="no-referrer" />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        <div className="details-head">
+          <div>
+            <h2>Details</h2>
+            <p>Optional</p>
+          </div>
+          <button
+            type="button"
+            className="details-toggle"
+            onClick={() => setShowDetails((v) => !v)}
+            disabled={busy}
+          >
+            {showDetails ? 'Hide' : 'Show'}
+          </button>
+        </div>
+
+        {showDetails && (
+          <div className="details-grid">
+            <div className="auth-field">
+              <label htmlFor="product-name">Product name</label>
+              <input
+                id="product-name"
+                value={productName}
+                onChange={(e) => setProductName(e.target.value)}
+                placeholder="Rose Oud Perfume"
+                disabled={busy}
+              />
+            </div>
+            <div className="auth-field">
+              <label htmlFor="product-brand">Brand</label>
+              <input
+                id="product-brand"
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                placeholder="Maison Luce"
+                disabled={busy}
+              />
+            </div>
+            <div className="auth-field">
+              <label htmlFor="product-price">Price</label>
+              <input
+                id="product-price"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="$48"
+                disabled={busy}
+              />
+            </div>
+            <div className="auth-field">
+              <label htmlFor="product-category">Category</label>
+              <input
+                id="product-category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="Fragrance"
+                disabled={busy}
+              />
+            </div>
+            <div className="auth-field details-span">
+              <label htmlFor="product-desc">Description</label>
+              <textarea
+                id="product-desc"
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Notes, benefits, who it’s for…"
+                disabled={busy}
+              />
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="form-section">
+        <div className="form-section-head">
+          <h2>2. Creative direction</h2>
+          <p>
+            {hasImageReference || hasVideoReference
+              ? 'Your reference card(s) drive that look — formats stay off for those'
+              : 'Optional prompt — formats or your reference come next'}
+          </p>
+        </div>
+        <CreativeDirectionFields
+          prompt={prompt}
+          onPromptChange={setPrompt}
+          lighting={lighting}
+          onLightingChange={setLighting}
+          background={background}
+          onBackgroundChange={setBackground}
+          mood={mood}
+          onMoodChange={setMood}
+          styleTheme={styleTheme}
+          onStyleThemeChange={setStyleTheme}
+          disabled={busy}
+          compact
+          embedded
+          promptPlaceholder="e.g. Soft morning light, keep packaging exact, quiet premium mood…"
+        />
+      </section>
+
+      <section className="form-section">
+        <div className="form-section-head">
+          <h2>3. Image formats or your reference</h2>
+          <p>
+            {hasImageReference
+              ? 'Using your reference — pick a format card to switch back'
+              : photoStyles.length === 0
+                ? `First card = your reference · or pick formats · blank uses ${DEFAULT_PHOTO_STYLES.length} starters`
+                : `${photoStyles.length} selected`}
+          </p>
+        </div>
+        <p className="studio-formats-intro">
+          Upload your own reference on the blank card, or pick the same formats as Image Studio.
+          Choosing one clears the other.
+        </p>
+        <FormatPickGrid
+          items={PHOTO_STYLES}
+          selected={photoStyles}
+          onChange={setPhotoStyles}
+          defaultIds={hasImageReference ? [] : DEFAULT_PHOTO_STYLES}
+          max={Math.max(limits.maxImages, PHOTO_STYLES.length)}
+          disabled={busy}
+          ariaLabel="Image formats"
+          referenceSlot={{
+            kind: 'image',
+            previewUrl: referencePreviewUrl,
+            error: referenceError,
+            busy: referenceUrlBusy,
+            onPickFile: pickReferenceFile,
+            onPickUrl: applyReferenceUrl,
+          }}
+        />
+      </section>
+
+      <section className="form-section">
+        <div className="form-section-head">
+          <h2>4. Video formats or your reference</h2>
+          <p>
+            {limits.maxVideos === 0
+              ? 'Upgrade to unlock video formats'
+              : hasVideoReference
+                ? 'Using your reference — pick a format card to switch back'
+                : videoStyles.length === 0
+                  ? `First card = your reference · or pick formats · blank uses ${DEFAULT_VIDEO_STYLES.length} starters`
+                  : `${videoStyles.length} selected`}
+          </p>
+        </div>
+        <p className="studio-formats-intro">
+          Upload your own reference clip on the blank card, or pick the same formats as Video Studio.
+          Choosing one clears the other.
+        </p>
+        <FormatPickGrid
+          items={VIDEO_STYLES}
+          selected={videoStyles}
+          onChange={setVideoStyles}
+          defaultIds={hasVideoReference ? [] : DEFAULT_VIDEO_STYLES}
+          max={Math.max(limits.maxVideos, VIDEO_STYLES.length)}
+          disabled={busy || limits.maxVideos === 0}
+          videoAspect
+          ariaLabel="Video formats"
+          referenceSlot={{
+            kind: 'video',
+            previewUrl: videoReferencePreviewUrl,
+            error: videoReferenceError,
+            busy: videoReferenceUrlBusy,
+            onPickFile: pickVideoReferenceFile,
+            onPickUrl: applyVideoReferenceUrl,
+          }}
+        />
+      </section>
+
+      <section className="form-section">
+        <div className="form-section-head">
+          <h2>5. Ads &amp; copy extras</h2>
+          <p>Add hooks, captions, CTAs and ad creatives to the same campaign</p>
+        </div>
+        <div className="campaign-extra-toggles" role="group" aria-label="Campaign extras">
+          <label className={`extra-toggle${includeHooks ? ' is-on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={includeHooks}
+              onChange={(e) => setIncludeHooks(e.target.checked)}
+              disabled={busy}
+            />
+            <span>Hooks</span>
+          </label>
+          <label className={`extra-toggle${includeCaptions ? ' is-on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={includeCaptions}
+              onChange={(e) => setIncludeCaptions(e.target.checked)}
+              disabled={busy}
+            />
+            <span>Captions</span>
+          </label>
+          <label className={`extra-toggle${includeCtas ? ' is-on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={includeCtas}
+              onChange={(e) => setIncludeCtas(e.target.checked)}
+              disabled={busy}
+            />
+            <span>CTAs</span>
+          </label>
+          <label className={`extra-toggle${includeHashtags ? ' is-on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={includeHashtags}
+              onChange={(e) => setIncludeHashtags(e.target.checked)}
+              disabled={busy}
+            />
+            <span>Hashtags</span>
+          </label>
+          <label className={`extra-toggle${includeAdCreative ? ' is-on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={includeAdCreative}
+              onChange={(e) => setIncludeAdCreative(e.target.checked)}
+              disabled={busy}
+            />
+            <span>Ad creative</span>
+          </label>
+          <label className={`extra-toggle${includeAdCopy ? ' is-on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={includeAdCopy}
+              onChange={(e) => setIncludeAdCopy(e.target.checked)}
+              disabled={busy}
+            />
+            <span>Ad copy</span>
+          </label>
+          <label className={`extra-toggle${includeStrategy ? ' is-on' : ''}`}>
+            <input
+              type="checkbox"
+              checked={includeStrategy}
+              onChange={(e) => setIncludeStrategy(e.target.checked)}
+              disabled={busy}
+            />
+            <span>Strategy notes</span>
+          </label>
+        </div>
+        <p className="dash-muted" style={{ marginTop: 10 }}>
+          Pack preview: ~{photoCount} images
+          {limits.maxVideos > 0 ? ` · ~${videoCount} videos` : ''}
+          {includeHooks ? ' · hooks' : ''}
+          {includeCaptions ? ' · captions' : ''}
+          {includeCtas ? ' · CTAs' : ''}
+          {includeAdCreative || includeAdCopy ? ' · ads' : ''}
+        </p>
+      </section>
+
+      {error && (
+        <p className="auth-error" role="alert">
+          {error}
+        </p>
+      )}
+      {warning && (
+        <p className="auth-notice" role="status">
+          {warning}
+        </p>
+      )}
+
+      <button type="submit" className="btn btn-grad campaign-submit studio-submit" disabled={busy}>
+        {busy
+          ? stagePhase !== 'idle' && stagePhase !== 'ready' && stagePhase !== 'error'
+            ? 'Generating…'
+            : 'Creating…'
+          : hasImageReference || hasVideoReference
+            ? 'Generate from reference'
+            : 'Create campaign'}
+        <span aria-hidden="true">→</span>
+      </button>
+    </form>
+  )
 
   return (
     <AppLayout>
@@ -495,414 +1320,21 @@ export default function NewCampaignPage() {
         reason={paywallReason}
         onClose={() => setPaywallOpen(false)}
       />
-      <main className="app-main campaign-create studio-page">
-        {plan === 'free' ? (
-          <p className="studio-paid-banner" role="status">
-            Explore the full campaign builder — upgrade is only required when you create.
-          </p>
-        ) : null}
-        <header className="studio-hero tone-campaign">
-          <div className="studio-hero-copy">
-            <p className="studio-hero-kicker">Full Campaign</p>
-            <h1>Build a complete campaign pack</h1>
-            <p className="studio-hero-lead">
-              Pick exact image and video formats for one product. Packaging stays true across every
-              look.
-            </p>
-            <ol className="studio-hero-steps" aria-label="How it works">
-              <li>Add product</li>
-              <li>Pick formats</li>
-              <li>Generate pack</li>
-            </ol>
-            <p className="studio-limit-chip" role="status">
-              {limits.label}
-            </p>
-          </div>
-          <div className="studio-hero-media" aria-hidden="true">
-            <img src="/images/fidelity-studio.jpg" alt="" />
-            <div className="studio-hero-glow" />
-          </div>
-        </header>
-
-        <form className="app-form campaign-form create-panel studio-panel" onSubmit={onSubmit}>
-          <section className="form-section">
-            <div className="form-section-head">
-              <h2>Product</h2>
-            </div>
-
-            <div className="source-toggle" role="tablist" aria-label="Product source">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={sourceType === 'upload'}
-                className={sourceType === 'upload' ? 'is-active' : ''}
-                onClick={() => {
-                  setSourceType('upload')
-                  setError(null)
-                }}
-                disabled={busy}
-              >
-                <span className="source-toggle-title">Photo</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={sourceType === 'url'}
-                className={sourceType === 'url' ? 'is-active' : ''}
-                onClick={() => {
-                  setSourceType('url')
-                  setError(null)
-                  setShowDetails(true)
-                }}
-                disabled={busy}
-              >
-                <span className="source-toggle-title">Product URL</span>
-              </button>
-            </div>
-
-            {sourceType === 'upload' ? (
-              <div className="upload-block">
-                <input
-                  ref={fileInputRef}
-                  id="product-image"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  hidden
-                  onChange={(e) => pickFile(e.target.files?.[0])}
-                  disabled={busy}
-                />
-
-                <div
-                  className={`upload-drop${dragOver ? ' is-over' : ''}${previewUrl ? ' has-preview' : ''}`}
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    setDragOver(true)
-                  }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={onDrop}
-                >
-                  {previewUrl ? (
-                    <div className="upload-preview">
-                      <img src={previewUrl} alt="Product preview" />
-                      <div className="upload-preview-actions">
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={busy}
-                        >
-                          Replace
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => {
-                            setImageFile(null)
-                            setPreviewUrl(null)
-                          }}
-                          disabled={busy}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="upload-empty"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={busy}
-                    >
-                      <span className="upload-empty-title">Drop product photo here</span>
-                      <span className="upload-empty-copy">JPG, PNG, or WebP · up to 12MB</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="url-block">
-                <label htmlFor="product-url">Product page URL</label>
-                <input
-                  id="product-url"
-                  type="url"
-                  required
-                  value={productUrl}
-                  onChange={(e) => setProductUrl(e.target.value)}
-                  placeholder="https://yourstore.com/products/…"
-                  disabled={busy}
-                />
-                {urlFetchBusy ? (
-                  <p className="field-hint">Fetching photos from that page…</p>
-                ) : null}
-                {urlFetchError ? (
-                  <p className="auth-error" role="alert">
-                    {urlFetchError}
-                  </p>
-                ) : null}
-                {urlImages.length > 0 ? (
-                  <div className="url-image-picker" role="listbox" aria-label="Product photos from URL">
-                    <p className="field-hint">Pick the product photo to use</p>
-                    <div className="url-image-grid">
-                      {urlImages.map((src) => (
-                        <button
-                          key={src}
-                          type="button"
-                          role="option"
-                          aria-selected={selectedUrlImage === src}
-                          className={`url-image-thumb${selectedUrlImage === src ? ' is-selected' : ''}`}
-                          onClick={() => void applyProductUrlImage(src)}
-                          disabled={busy || urlFetchBusy}
-                        >
-                          <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" />
-                        </button>
-                      ))}
-                    </div>
-                    {previewUrl ? (
-                      <div className="upload-preview url-image-selected">
-                        <img src={previewUrl} alt="Selected product" referrerPolicy="no-referrer" />
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            <div className="details-head">
-              <div>
-                <h2>Details</h2>
-                <p>Optional</p>
-              </div>
-              <button
-                type="button"
-                className="details-toggle"
-                onClick={() => setShowDetails((v) => !v)}
-                disabled={busy}
-              >
-                {showDetails ? 'Hide' : 'Show'}
-              </button>
-            </div>
-
-            {showDetails && (
-              <div className="details-grid">
-                <div className="auth-field">
-                  <label htmlFor="product-name">Product name</label>
-                  <input
-                    id="product-name"
-                    value={productName}
-                    onChange={(e) => setProductName(e.target.value)}
-                    placeholder="Rose Oud Perfume"
-                    disabled={busy}
-                  />
-                </div>
-
-                <div className="auth-field">
-                  <label htmlFor="product-brand">Brand</label>
-                  <input
-                    id="product-brand"
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
-                    placeholder="Maison Luce"
-                    disabled={busy}
-                  />
-                </div>
-
-                <div className="auth-field">
-                  <label htmlFor="product-price">Price</label>
-                  <input
-                    id="product-price"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder="$48"
-                    disabled={busy}
-                  />
-                </div>
-
-                <div className="auth-field">
-                  <label htmlFor="product-category">Category</label>
-                  <input
-                    id="product-category"
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    placeholder="Fragrance"
-                    disabled={busy}
-                  />
-                </div>
-
-                <div className="auth-field details-span">
-                  <label htmlFor="product-desc">Description</label>
-                  <textarea
-                    id="product-desc"
-                    rows={3}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Notes, benefits, who it’s for…"
-                    disabled={busy}
-                  />
-                </div>
-              </div>
-            )}
-          </section>
-
-          <CreativeDirectionFields
-            prompt={prompt}
-            onPromptChange={setPrompt}
-            lighting={lighting}
-            onLightingChange={setLighting}
-            background={background}
-            onBackgroundChange={setBackground}
-            mood={mood}
-            onMoodChange={setMood}
-            styleTheme={styleTheme}
-            onStyleThemeChange={setStyleTheme}
-            disabled={busy}
-            compact
-            referencePreviewUrl={referencePreviewUrl}
-            onReferenceFile={pickReferenceFile}
-            onReferenceUrl={applyReferenceUrl}
-            referenceUrlBusy={referenceUrlBusy}
-            referenceError={referenceError}
-            promptPlaceholder="e.g. Soft morning light, keep packaging exact, quiet premium mood…"
+      <main className="app-main campaign-create studio-page studio-page-split studio-page-campaign">
+        <div className="studio-split">
+          <div className="studio-split-controls">{formBody}</div>
+          <StudioStagePanel
+            kind="photos"
+            phase={stagePhase}
+            progress={stageProgress}
+            message={stageMessage}
+            previewUrl={previewUrl}
+            outputs={stageOutputs}
+            campaignId={stageCampaignId}
+            activeOutputId={activeOutputId}
+            onSelectOutput={setActiveOutputId}
           />
-
-          <section className="form-section">
-            <div className="form-section-head">
-              <h2>Image formats</h2>
-              <p>
-                {photoStyles.length === 0
-                  ? `Pick as many as you want — blank uses ${DEFAULT_PHOTO_STYLES.length} starters`
-                  : `${photoStyles.length} selected · choose any combination`}
-              </p>
-            </div>
-            <FormatPickGrid
-              items={PHOTO_STYLES}
-              selected={photoStyles}
-              onChange={setPhotoStyles}
-              defaultIds={DEFAULT_PHOTO_STYLES}
-              max={Math.max(limits.maxImages, PHOTO_STYLES.length)}
-              disabled={busy}
-              ariaLabel="Image formats"
-            />
-          </section>
-
-          <section className="form-section">
-            <div className="form-section-head">
-              <h2>Video formats</h2>
-              <p>
-                {limits.maxVideos === 0
-                  ? 'Upgrade to unlock video formats'
-                  : videoStyles.length === 0
-                    ? `Pick as many as you want — blank uses ${DEFAULT_VIDEO_STYLES.length} starters`
-                    : `${videoStyles.length} selected · choose any combination`}
-              </p>
-            </div>
-            <FormatPickGrid
-              items={VIDEO_STYLES}
-              selected={videoStyles}
-              onChange={setVideoStyles}
-              defaultIds={DEFAULT_VIDEO_STYLES}
-              max={Math.max(limits.maxVideos, VIDEO_STYLES.length)}
-              disabled={busy || limits.maxVideos === 0}
-              videoAspect
-              ariaLabel="Video formats"
-            />
-          </section>
-
-          <section className="form-section">
-            <div className="form-section-head">
-              <h2>Ads & copy extras</h2>
-              <p>Add hooks, captions, CTAs and ad creatives to the same campaign</p>
-            </div>
-            <div className="campaign-extra-toggles" role="group" aria-label="Campaign extras">
-              <label className={`extra-toggle${includeHooks ? ' is-on' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={includeHooks}
-                  onChange={(e) => setIncludeHooks(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>Hooks</span>
-              </label>
-              <label className={`extra-toggle${includeCaptions ? ' is-on' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={includeCaptions}
-                  onChange={(e) => setIncludeCaptions(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>Captions</span>
-              </label>
-              <label className={`extra-toggle${includeCtas ? ' is-on' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={includeCtas}
-                  onChange={(e) => setIncludeCtas(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>CTAs</span>
-              </label>
-              <label className={`extra-toggle${includeHashtags ? ' is-on' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={includeHashtags}
-                  onChange={(e) => setIncludeHashtags(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>Hashtags</span>
-              </label>
-              <label className={`extra-toggle${includeAdCreative ? ' is-on' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={includeAdCreative}
-                  onChange={(e) => setIncludeAdCreative(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>Ad creative</span>
-              </label>
-              <label className={`extra-toggle${includeAdCopy ? ' is-on' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={includeAdCopy}
-                  onChange={(e) => setIncludeAdCopy(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>Ad copy</span>
-              </label>
-              <label className={`extra-toggle${includeStrategy ? ' is-on' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={includeStrategy}
-                  onChange={(e) => setIncludeStrategy(e.target.checked)}
-                  disabled={busy}
-                />
-                <span>Strategy notes</span>
-              </label>
-            </div>
-            <p className="dash-muted" style={{ marginTop: 10 }}>
-              Pack preview: ~{photoCount} images
-              {limits.maxVideos > 0 ? ` · ~${videoCount} videos` : ''}
-              {includeHooks ? ' · hooks' : ''}
-              {includeCaptions ? ' · captions' : ''}
-              {includeCtas ? ' · CTAs' : ''}
-              {includeAdCreative || includeAdCopy ? ' · ads' : ''}
-            </p>
-          </section>
-
-          {error && (
-            <p className="auth-error" role="alert">
-              {error}
-            </p>
-          )}
-          {warning && (
-            <p className="auth-notice" role="status">
-              {warning}
-            </p>
-          )}
-
-          <button type="submit" className="btn btn-grad campaign-submit" disabled={busy}>
-            {busy ? 'Creating…' : 'Create campaign'}
-            <span aria-hidden="true">→</span>
-          </button>
-        </form>
+        </div>
       </main>
     </AppLayout>
   )

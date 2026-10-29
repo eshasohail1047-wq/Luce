@@ -1,11 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { Link, NavLink } from 'react-router-dom'
 import Logo from '../Logo'
 import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../auth/AuthProvider'
-import { listUserCampaigns, listUserProducts, type CampaignDoc, type ProductSummary } from '../lib/campaigns'
 import { isPaidPlan, planLabel as formatPlanLabel } from '../lib/plans'
-import { campaignModeLabel } from '../lib/workspaceUi'
 
 type NavIconName =
   | 'home'
@@ -13,14 +11,13 @@ type NavIconName =
   | 'layers'
   | 'folder'
   | 'settings'
-  | 'help'
-  | 'logout'
   | 'image'
   | 'video'
   | 'tag'
   | 'spark'
   | 'plus'
   | 'crown'
+  | 'guide'
 
 type NavItem = {
   to: string
@@ -31,22 +28,44 @@ type NavItem = {
   comingSoon?: boolean
 }
 
-const MAIN_MENU: NavItem[] = [
+const ICON_RAIL: NavItem[] = [
   { to: '/app', label: 'Home', end: true, icon: 'home' },
   { to: '/app/studio/photos', label: 'Image Studio', icon: 'image' },
   { to: '/app/studio/videos', label: 'Video Studio', icon: 'video', pro: true },
   { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark', pro: true },
-  { to: '/app/products', label: 'Products', icon: 'box' },
   { to: '/app/campaigns', label: 'Campaigns', icon: 'layers' },
   { to: '/app/library', label: 'Library', icon: 'folder' },
+]
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
-    to: '/app/studio/ads',
-    label: 'Ads & Social',
-    icon: 'tag',
-    pro: true,
-    comingSoon: true,
+    label: 'Create',
+    items: [
+      { to: '/app', label: 'Home', end: true, icon: 'home' },
+      { to: '/app/studio/photos', label: 'Image Studio', icon: 'image' },
+      { to: '/app/studio/videos', label: 'Video Studio', icon: 'video', pro: true },
+      { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark', pro: true },
+    ],
   },
-  { to: '/app/settings', label: 'Settings', icon: 'settings' },
+  {
+    label: 'Manage',
+    items: [
+      { to: '/app/products', label: 'Products', icon: 'box' },
+      { to: '/app/campaigns', label: 'Campaigns', icon: 'layers' },
+      { to: '/app/library', label: 'Library', icon: 'folder' },
+      {
+        to: '/app/studio/ads',
+        label: 'Ads & Social',
+        icon: 'tag',
+        pro: true,
+        comingSoon: true,
+      },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [{ to: '/app/settings', label: 'Settings', icon: 'settings' }],
+  },
 ]
 
 function NavIcon({ name }: { name: NavIconName }) {
@@ -101,46 +120,33 @@ function NavIcon({ name }: { name: NavIconName }) {
           <circle cx="20" cy="7" r="2" />
         </svg>
       )
-    case 'help':
-      return (
-        <svg {...common}>
-          <path d="M21 12a8.5 8.5 0 0 1-12.4 7.5L3 21l1.7-5.1A8.5 8.5 0 1 1 21 12Z" />
-        </svg>
-      )
-    case 'logout':
-      return (
-        <svg {...common}>
-          <path d="M10 17H5.5A2.5 2.5 0 0 1 3 14.5v-5A2.5 2.5 0 0 1 5.5 7H10" />
-          <path d="M15 12H8" />
-          <path d="m13 9 3 3-3 3" />
-        </svg>
-      )
     case 'image':
       return (
         <svg {...common}>
           <rect x="3" y="5" width="18" height="14" rx="2" />
-          <circle cx="9" cy="10" r="1.5" />
-          <path d="m21 15-4.5-4.5L7 20" />
+          <circle cx="8.5" cy="10" r="1.5" />
+          <path d="m21 16-4.5-4.5L9 19" />
         </svg>
       )
     case 'video':
       return (
         <svg {...common}>
           <rect x="3" y="6" width="13" height="12" rx="2" />
-          <path d="m16 10 5-3v10l-5-3" />
+          <path d="m16 10 5-3v10l-5-3V10Z" />
         </svg>
       )
     case 'tag':
       return (
         <svg {...common}>
-          <path d="M20.6 13.4 12.4 21.6a2 2 0 0 1-2.8 0L3 15V4h11l6.6 6.6a2 2 0 0 1 0 2.8Z" />
-          <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
+          <path d="M20.6 13.05 12.7 21a1.5 1.5 0 0 1-2.1 0L3 13.4V3h10.4l7.2 7.2a1.5 1.5 0 0 1 0 2.85Z" />
+          <circle cx="7.5" cy="7.5" r="1.2" />
         </svg>
       )
     case 'spark':
       return (
         <svg {...common}>
-          <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
+          <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+          <path d="m6.2 6.2 2.8 2.8M15 15l2.8 2.8M17.8 6.2 15 9M9 15l-2.8 2.8" />
         </svg>
       )
     case 'plus':
@@ -155,7 +161,42 @@ function NavIcon({ name }: { name: NavIconName }) {
           <path d="m3 8 4 3 5-6 5 6 4-3v10H3V8Z" />
         </svg>
       )
+    case 'guide':
+      return (
+        <svg {...common}>
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
+        </svg>
+      )
   }
+}
+
+function renderNavItem(item: NavItem, paid: boolean) {
+  if (item.comingSoon) {
+    return (
+      <span
+        key={item.to + item.label}
+        className="studio-rail-link is-soon"
+        title="Coming soon — not in MVP"
+      >
+        <NavIcon name={item.icon} />
+        <span>{item.label}</span>
+        <span className="studio-rail-soon">Soon</span>
+      </span>
+    )
+  }
+  return (
+    <NavLink
+      key={item.to + item.label}
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) => `studio-rail-link${isActive ? ' is-active' : ''}`}
+    >
+      <NavIcon name={item.icon} />
+      <span>{item.label}</span>
+      {item.pro && !paid ? <span className="studio-rail-pro">Paid</span> : null}
+    </NavLink>
+  )
 }
 
 type AppLayoutProps = {
@@ -164,23 +205,16 @@ type AppLayoutProps = {
 
 export default function AppLayout({ children }: AppLayoutProps) {
   const { user, plan, signOut } = useAuth()
-  const navigate = useNavigate()
   const displayName = user?.displayName?.trim() || user?.email?.split('@')[0] || 'Account'
   const initial = displayName.slice(0, 1).toUpperCase()
   const planLabel = `${formatPlanLabel(plan)} plan`
   const paid = isPaidPlan(plan)
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [campaigns, setCampaigns] = useState<CampaignDoc[]>([])
-  const [products, setProducts] = useState<ProductSummary[]>([])
   const menuRef = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
-  const searchRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
   const notifId = useId()
-  const searchId = useId()
 
   async function handleLogout() {
     setMenuOpen(false)
@@ -192,64 +226,18 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   useEffect(() => {
-    if (!user) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const [cRows, pRows] = await Promise.all([
-          listUserCampaigns(user.uid),
-          listUserProducts(user.uid),
-        ])
-        if (!cancelled) {
-          setCampaigns(cRows)
-          setProducts(pRows)
-        }
-      } catch (err) {
-        console.error('[AppLayout] search index failed', err)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [user])
-
-  const searchHits = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return { campaigns: [] as CampaignDoc[], products: [] as ProductSummary[] }
-    return {
-      campaigns: campaigns
-        .filter(
-          (c) =>
-            c.title.toLowerCase().includes(q) ||
-            c.productName.toLowerCase().includes(q),
-        )
-        .slice(0, 5),
-      products: products
-        .filter(
-          (p) =>
-            p.name.toLowerCase().includes(q) ||
-            (p.brand || '').toLowerCase().includes(q) ||
-            (p.category || '').toLowerCase().includes(q),
-        )
-        .slice(0, 5),
-    }
-  }, [searchQuery, campaigns, products])
-
-  useEffect(() => {
-    if (!menuOpen && !notifOpen && !searchOpen) return
+    if (!menuOpen && !notifOpen) return
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node
       if (menuOpen && menuRef.current && !menuRef.current.contains(target)) setMenuOpen(false)
-      if (notifOpen && notifRef.current && !notifRef.current.contains(target)) setNotifOpen(false)
-      if (searchOpen && searchRef.current && !searchRef.current.contains(target)) {
-        setSearchOpen(false)
+      if (notifOpen && notifRef.current && !notifRef.current.contains(target)) {
+        setNotifOpen(false)
       }
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setMenuOpen(false)
         setNotifOpen(false)
-        setSearchOpen(false)
       }
     }
     document.addEventListener('mousedown', onPointerDown)
@@ -258,152 +246,113 @@ export default function AppLayout({ children }: AppLayoutProps) {
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [menuOpen, notifOpen, searchOpen])
+  }, [menuOpen, notifOpen])
 
   return (
     <div className="studio-shell">
-      <aside className="studio-rail studio-rail-ayari">
-        <div className="studio-rail-top">
-          <Link to="/app" className="studio-rail-brand" aria-label="LUCE home">
-            <Logo href={null} />
+      <aside className="studio-rail-dual" aria-label="App navigation">
+        <div className="studio-icon-rail">
+          <Link to="/app" className="studio-icon-rail-logo" aria-label="LUCE home">
+            <span className="studio-icon-rail-mark" aria-hidden="true">
+              L
+            </span>
           </Link>
-
-          <Link className="studio-rail-create" to="/app/studio/photos">
-            <NavIcon name="plus" />
-            <span>Create New</span>
-          </Link>
-        </div>
-
-        <div className="studio-rail-scroll">
-          <div className="studio-rail-group">
-            <p className="studio-rail-label">Main Menu</p>
-            <nav className="studio-rail-nav" aria-label="Main menu">
-              {MAIN_MENU.map((item) =>
-                item.comingSoon ? (
-                  <span
-                    key={item.to + item.label}
-                    className="studio-rail-link is-soon"
-                    title="Coming soon — not in MVP"
-                  >
-                    <NavIcon name={item.icon} />
-                    <span>{item.label}</span>
-                    <span className="studio-rail-soon">Soon</span>
-                  </span>
-                ) : (
-                  <NavLink
-                    key={item.to + item.label}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) =>
-                      `studio-rail-link${isActive ? ' is-active' : ''}`
-                    }
-                  >
-                    <NavIcon name={item.icon} />
-                    <span>{item.label}</span>
-                    {item.pro && !paid ? (
-                      <span className="studio-rail-pro">Paid</span>
-                    ) : null}
-                  </NavLink>
-                ),
-              )}
-            </nav>
+          <nav className="studio-icon-rail-nav" aria-label="Quick links">
+            {ICON_RAIL.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                title={item.label}
+                aria-label={item.label}
+                className={({ isActive }) =>
+                  `studio-icon-rail-btn${isActive ? ' is-active' : ''}`
+                }
+              >
+                <NavIcon name={item.icon} />
+              </NavLink>
+            ))}
+          </nav>
+          <div className="studio-icon-rail-bottom">
+            <Link
+              to="/app/settings#help"
+              className="studio-icon-rail-btn"
+              title="Help"
+              aria-label="Help"
+            >
+              <NavIcon name="guide" />
+            </Link>
+            <Link
+              to="/app/settings"
+              className="studio-icon-rail-btn"
+              title="Settings"
+              aria-label="Settings"
+            >
+              <NavIcon name="settings" />
+            </Link>
           </div>
         </div>
 
-        <div className="studio-rail-footer">
-          {!paid ? (
-            <Link className="studio-rail-upgrade-link" to="/app/settings#plan">
-              <NavIcon name="crown" />
-              <span>Upgrade plan</span>
+        <div className="studio-rail studio-rail-ayari studio-rail-panel">
+          <div className="studio-rail-top">
+            <div className="studio-rail-panel-head">
+              <Link to="/app" className="studio-rail-brand" aria-label="LUCE home">
+                <Logo href={null} />
+              </Link>
+            </div>
+
+            <Link className="studio-rail-create" to="/app/studio/photos">
+              <NavIcon name="plus" />
+              <span>Create New</span>
             </Link>
-          ) : null}
+          </div>
+
+          <div className="studio-rail-scroll">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label} className="studio-rail-group">
+                <p className="studio-rail-label">{group.label}</p>
+                <nav className="studio-rail-nav" aria-label={group.label}>
+                  {group.items.map((item) => renderNavItem(item, paid))}
+                </nav>
+              </div>
+            ))}
+          </div>
+
+          <div className="studio-rail-footer">
+            {!paid ? (
+              <Link className="studio-rail-upgrade-card" to="/app/settings#plan">
+                <span className="studio-rail-upgrade-icon" aria-hidden="true">
+                  <NavIcon name="crown" />
+                </span>
+                <span>
+                  <strong>Upgrade plan</strong>
+                  <em>Unlock video & campaigns</em>
+                </span>
+              </Link>
+            ) : (
+              <Link className="studio-rail-help-card" to="/app/settings#help">
+                <span className="studio-rail-upgrade-icon" aria-hidden="true">
+                  <NavIcon name="guide" />
+                </span>
+                <span>
+                  <strong>Need help?</strong>
+                  <em>View guide →</em>
+                </span>
+              </Link>
+            )}
+          </div>
         </div>
       </aside>
 
       <div className="studio-stage">
-        <header className="studio-topbar">
-          <div className="studio-topbar-left">
-            <div className="studio-topbar-search-wrap" ref={searchRef}>
-              <label className="studio-topbar-search" htmlFor={searchId}>
-                <span className="sr-only">Search</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="m20 20-3.5-3.5" />
-                </svg>
-                <input
-                  id={searchId}
-                  type="search"
-                  placeholder="Search…"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    setSearchOpen(true)
-                  }}
-                  onFocus={() => setSearchOpen(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && searchQuery.trim()) {
-                      e.preventDefault()
-                      setSearchOpen(false)
-                      navigate(`/app/campaigns?q=${encodeURIComponent(searchQuery.trim())}`)
-                    }
-                  }}
-                />
-                <kbd className="studio-topbar-kbd">⌘F</kbd>
-              </label>
-              {searchOpen && searchQuery.trim() ? (
-                <div className="studio-search-menu" role="listbox" aria-label="Search results">
-                  {searchHits.products.length === 0 && searchHits.campaigns.length === 0 ? (
-                    <p className="studio-search-empty">No matches for “{searchQuery.trim()}”</p>
-                  ) : (
-                    <>
-                      {searchHits.products.length > 0 ? (
-                        <div className="studio-search-group">
-                          <p>Products</p>
-                          {searchHits.products.map((p) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              className="studio-search-item"
-                              onClick={() => {
-                                setSearchOpen(false)
-                                setSearchQuery('')
-                                navigate('/app/products')
-                              }}
-                            >
-                              <strong>{p.name}</strong>
-                              <span>{p.brand || p.category || 'Product'}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                      {searchHits.campaigns.length > 0 ? (
-                        <div className="studio-search-group">
-                          <p>Campaigns</p>
-                          {searchHits.campaigns.map((c) => (
-                            <button
-                              key={c.id}
-                              type="button"
-                              className="studio-search-item"
-                              onClick={() => {
-                                setSearchOpen(false)
-                                setSearchQuery('')
-                                navigate(`/app/campaigns/${c.id}`)
-                              }}
-                            >
-                              <strong>{c.title || c.productName}</strong>
-                              <span>{campaignModeLabel(c)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
+        <header className="studio-topbar studio-topbar-compact">
+          <div className="studio-topbar-spacer" />
           <div className="studio-topbar-actions">
+            {!paid ? (
+              <Link className="studio-topbar-upgrade" to="/app/settings#plan">
+                Upgrade
+              </Link>
+            ) : null}
             <ThemeToggle />
             <div className="studio-topbar-notif" ref={notifRef}>
               <button
@@ -417,10 +366,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   setMenuOpen(false)
                 }}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
                   <path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9" />
                   <path d="M10 20a2 2 0 0 0 4 0" />
                 </svg>
+                <span className="studio-topbar-dot" aria-hidden="true" />
               </button>
               {notifOpen ? (
                 <div className="studio-notif-menu" id={notifId} role="menu">
@@ -449,7 +407,10 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 aria-controls={menuId}
-                onClick={() => setMenuOpen((open) => !open)}
+                onClick={() => {
+                  setMenuOpen((open) => !open)
+                  setNotifOpen(false)
+                }}
               >
                 <span className="studio-topbar-avatar" aria-hidden="true">
                   {user?.photoURL ? <img src={user.photoURL} alt="" /> : initial}
@@ -457,7 +418,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                 <span className="studio-topbar-meta">
                   <strong className="studio-topbar-name">{displayName}</strong>
                   <span className={`studio-topbar-plan${paid ? ' is-pro' : ''}`}>
-                    {user?.email || planLabel}
+                    {planLabel}
                   </span>
                 </span>
               </button>

@@ -92,10 +92,31 @@ export default function StudioStagePanel({
           </div>
         ) : (
           <div className="studio-stage-empty">
+            <span className="studio-stage-empty-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                {kind === 'videos' ? (
+                  <path
+                    d="M8 6.5v11l9-5.5-9-5.5Z"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinejoin="round"
+                  />
+                ) : (
+                  <path
+                    d="M4.5 17.5l4.2-5.2 3.1 3.4 3.4-4.6 4.3 6.4H4.5ZM9 9.2a1.7 1.7 0 100-3.4 1.7 1.7 0 000 3.4Z"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                )}
+              </svg>
+            </span>
+            <strong>Preview stage</strong>
             <p>
               {kind === 'videos'
-                ? 'Results appear here after you generate.'
-                : 'Results appear here after you generate.'}
+                ? 'Your clips will land here after you generate.'
+                : 'Your shots will land here after you generate.'}
             </p>
           </div>
         )}

@@ -21,8 +21,9 @@ export default function CampaignsPage() {
   const [filter, setFilter] = useState<'all' | 'studio' | 'campaign'>('all')
   const [confirmId, setConfirmId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const query = (searchParams.get('q') || '').trim().toLowerCase()
+  const [searchDraft, setSearchDraft] = useState(searchParams.get('q') || '')
 
   async function refreshCampaigns() {
     if (!user) return
@@ -107,9 +108,30 @@ export default function CampaignsPage() {
               {query ? ` Showing results for “${searchParams.get('q')}”.` : ''}
             </p>
           </div>
-          <Link className="dash-create-btn" to="/app/studio/photos">
-            <span aria-hidden="true">+</span> New images
-          </Link>
+          <div className="workspace-list-tools">
+            <label className="workspace-list-search">
+              <span className="sr-only">Search campaigns</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                type="search"
+                placeholder="Search campaigns…"
+                value={searchDraft}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setSearchDraft(next)
+                  const trimmed = next.trim()
+                  if (trimmed) setSearchParams({ q: trimmed })
+                  else setSearchParams({})
+                }}
+              />
+            </label>
+            <Link className="dash-create-btn" to="/app/studio/photos">
+              <span aria-hidden="true">+</span> New images
+            </Link>
+          </div>
         </header>
 
         <div className="workspace-filters" role="tablist" aria-label="Filter campaigns">

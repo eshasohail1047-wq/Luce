@@ -446,6 +446,10 @@ export default function StudioPage({
     setWarning(null)
     setRecreate(null)
 
+    if (searchParams.get('source') === 'url') {
+      setSourceType('url')
+    }
+
     const style = searchParams.get('style')
     if (kind === 'videos' && style === 'ugc') {
       const qty = { video_ugc_selfie: 3 }
