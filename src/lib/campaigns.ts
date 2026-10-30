@@ -856,7 +856,18 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
     )
     if (snap) {
       for (const d of snap.docs) {
-        const data = d.data()
+        const data = d.data() as {
+          name?: unknown
+          category?: unknown
+          brand?: unknown
+          description?: unknown
+          sourceType?: unknown
+          sourceUrl?: unknown
+          imageUrls?: unknown
+          imagePaths?: unknown
+          updatedAt?: Timestamp
+          userId?: unknown
+        }
         // Fast path only — Storage heal can hang and was freezing Products on "Loading…".
         const imageUrl = firstImageUrl(data.imageUrls)
         byId.set(d.id, {
@@ -870,7 +881,7 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
           imageUrl,
           imagePath: firstImagePath(data.imagePaths),
           campaignCount: campaignsByProduct.get(d.id)?.length ?? 0,
-          updatedAt: data.updatedAt as Timestamp | undefined,
+          updatedAt: data.updatedAt,
         })
         if (!imageUrl) {
           void healProductImageUrl(d.id, data).then((healed) => {
