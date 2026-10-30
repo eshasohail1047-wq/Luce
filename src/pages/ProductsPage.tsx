@@ -3,17 +3,11 @@ import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
 import {
-  backfillProductImageUrl,
-  listUserCampaigns,
   listUserProducts,
   updateProductPhoto,
   type ProductSummary,
 } from '../lib/campaigns'
-import {
-  resolveCampaignCover,
-  resolveProductImage,
-  stashProductImageSafe,
-} from '../lib/localDemoCampaign'
+import { stashProductImageSafe } from '../lib/localDemoCampaign'
 import { relativeTime } from '../lib/workspaceUi'
 
 function productInitial(name: string) {
@@ -144,42 +138,8 @@ export default function ProductsPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const [rows, campaigns] = await Promise.all([
-          listUserProducts(user.uid),
-          listUserCampaigns(user.uid),
-        ])
-        if (cancelled) return
-
-        const campaignsByProduct = new Map<string, string[]>()
-        for (const c of campaigns) {
-          if (!c.productId) continue
-          const list = campaignsByProduct.get(c.productId) ?? []
-          list.push(c.id)
-          campaignsByProduct.set(c.productId, list)
-        }
-
-        const enriched = await Promise.all(
-          rows.map(async (product) => {
-            let imageUrl = await resolveProductImage(product.id, product.imageUrl)
-            if (!imageUrl) {
-              const linked = campaignsByProduct.get(product.id) ?? []
-              for (const campaignId of linked) {
-                imageUrl = await resolveCampaignCover(campaignId, product.imageUrl)
-                if (imageUrl) break
-              }
-            }
-            if (imageUrl) {
-              void stashProductImageSafe(product.id, imageUrl)
-              if (!product.imageUrl || product.imageUrl !== imageUrl) {
-                void backfillProductImageUrl(product.id, imageUrl)
-              }
-              return { ...product, imageUrl }
-            }
-            return product
-          }),
-        )
-
-        if (!cancelled) setProducts(enriched)
+        const rows = await listUserProducts(user.uid)
+        if (!cancelled) setProducts(rows)
       } catch (err) {
         console.error(err)
         if (!cancelled) setListError('Could not load products.')

@@ -78,7 +78,7 @@ export default function CampaignsPage() {
   }, [user, loading])
 
   async function handleDelete(campaignId: string) {
-    if (!user) return
+    if (!user || deletingId) return
     setDeletingId(campaignId)
     setListError(null)
     try {
@@ -236,7 +236,6 @@ export default function CampaignsPage() {
                           <button
                             type="button"
                             className="dash-campaign-delete-btn"
-                            disabled={Boolean(deletingId)}
                             aria-label={`Delete ${name}`}
                             onClick={() => setConfirmId(c.id)}
                           >

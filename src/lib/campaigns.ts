@@ -38,6 +38,9 @@ import {
   fileToDataUrl,
   isLocalCampaignId,
   listLocalCampaigns,
+  resolveCampaignCover,
+  resolveProductImage,
+  stashProductImageSafe,
   type LocalCampaign,
 } from './localDemoCampaign'
 
@@ -753,20 +756,29 @@ export type ProductSummary = {
 }
 
 export async function listUserProducts(userId: string): Promise<ProductSummary[]> {
-  const q = query(collection(requireDb(), 'products'), where('userId', '==', userId))
-  const snap = await getDocs(q)
   const campaigns = await listUserCampaigns(userId)
-  const countByProduct = new Map<string, number>()
+  const campaignsByProduct = new Map<string, CampaignDoc[]>()
   for (const c of campaigns) {
-    if (!c.productId) continue
-    countByProduct.set(c.productId, (countByProduct.get(c.productId) ?? 0) + 1)
+    const key = c.productId?.trim() || `campaign:${c.id}`
+    const list = campaignsByProduct.get(key) ?? []
+    list.push(c)
+    campaignsByProduct.set(key, list)
   }
 
-  const rows: ProductSummary[] = await Promise.all(
-    snap.docs.map(async (d) => {
+  const byId = new Map<string, ProductSummary>()
+
+  try {
+    const q = query(collection(requireDb(), 'products'), where('userId', '==', userId))
+    const snap = await Promise.race([
+      getDocs(q),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('listUserProducts-timeout')), 12_000)
+      }),
+    ])
+    for (const d of snap.docs) {
       const data = d.data()
       const imageUrl = await healProductImageUrl(d.id, data)
-      return {
+      byId.set(d.id, {
         id: d.id,
         name: String(data.name ?? 'Product'),
         category: String(data.category ?? '').trim(),
@@ -776,9 +788,66 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
         sourceUrl: data.sourceUrl ? String(data.sourceUrl) : undefined,
         imageUrl,
         imagePath: firstImagePath(data.imagePaths),
-        campaignCount: countByProduct.get(d.id) ?? 0,
+        campaignCount: campaignsByProduct.get(d.id)?.length ?? 0,
         updatedAt: data.updatedAt as Timestamp | undefined,
+      })
+    }
+  } catch (err) {
+    console.warn('[campaigns] listUserProducts cloud failed — deriving from projects', err)
+  }
+
+  // Surface every product the user entered via studio / campaigns, even when the
+  // Firestore products doc is missing or imageUrls never backfilled.
+  for (const [key, linked] of campaignsByProduct) {
+    const newest = linked[0]
+    const existing = byId.get(key)
+    if (existing) {
+      byId.set(key, {
+        ...existing,
+        campaignCount: linked.length,
+        name: existing.name || newest?.productName || 'Product',
+        sourceType: existing.sourceType || newest?.sourceType,
+        sourceUrl: existing.sourceUrl || newest?.productUrl,
+      })
+      continue
+    }
+
+    byId.set(key, {
+      id: key,
+      name: newest?.productName || newest?.title || 'Product',
+      category: '',
+      sourceType: newest?.sourceType || (newest?.productUrl ? 'url' : 'upload'),
+      sourceUrl: newest?.productUrl,
+      campaignCount: linked.length,
+      updatedAt: newest?.updatedAt || newest?.createdAt,
+    })
+  }
+
+  const rows = await Promise.all(
+    [...byId.values()].map(async (product) => {
+      let imageUrl = await resolveProductImage(product.id, product.imageUrl)
+      if (!imageUrl) {
+        const linked = campaignsByProduct.get(product.id) ?? []
+        for (const campaign of linked) {
+          imageUrl = await resolveCampaignCover(campaign.id, product.imageUrl)
+          if (imageUrl) break
+        }
       }
+      // Campaigns without productId use synthetic ids — also try cover by campaign id.
+      if (!imageUrl && product.id.startsWith('campaign:')) {
+        imageUrl = await resolveCampaignCover(product.id.slice('campaign:'.length), product.imageUrl)
+      }
+      if (imageUrl) {
+        void stashProductImageSafe(product.id, imageUrl)
+        if (
+          !product.id.startsWith('campaign:') &&
+          (!product.imageUrl || product.imageUrl !== imageUrl)
+        ) {
+          void backfillProductImageUrl(product.id, imageUrl)
+        }
+        return { ...product, imageUrl }
+      }
+      return product
     }),
   )
 
