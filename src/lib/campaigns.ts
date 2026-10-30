@@ -771,6 +771,70 @@ function normalizeProductName(value: string | undefined): string {
     .replace(/\s+/g, ' ')
 }
 
+/** Collapse repeated adds of the same product (name or URL) into one catalog row. */
+function productDedupeKey(product: ProductSummary): string {
+  const rawUrl = product.sourceUrl?.trim()
+  if (rawUrl) {
+    try {
+      const parsed = new URL(rawUrl)
+      const path = parsed.pathname.replace(/\/+$/, '') || '/'
+      return `url:${parsed.host.toLowerCase()}${path.toLowerCase()}`
+    } catch {
+      return `url:${rawUrl.toLowerCase()}`
+    }
+  }
+  const name = normalizeProductName(product.name)
+  if (name) return `name:${name}`
+  return `id:${product.id}`
+}
+
+function mergeDuplicateProducts(a: ProductSummary, b: ProductSummary): ProductSummary {
+  const aSynth = a.id.startsWith('campaign:')
+  const bSynth = b.id.startsWith('campaign:')
+  const aTime = a.updatedAt?.toMillis?.() ?? 0
+  const bTime = b.updatedAt?.toMillis?.() ?? 0
+
+  let primary = a
+  let secondary = b
+  if (aSynth && !bSynth) {
+    primary = b
+    secondary = a
+  } else if (!aSynth && bSynth) {
+    primary = a
+    secondary = b
+  } else if (!a.imageUrl && b.imageUrl) {
+    primary = b
+    secondary = a
+  } else if (bTime > aTime) {
+    primary = b
+    secondary = a
+  }
+
+  return {
+    ...primary,
+    name: primary.name || secondary.name,
+    brand: primary.brand || secondary.brand,
+    category: primary.category || secondary.category,
+    description: primary.description || secondary.description,
+    sourceType: primary.sourceType || secondary.sourceType,
+    sourceUrl: primary.sourceUrl || secondary.sourceUrl,
+    imageUrl: primary.imageUrl || secondary.imageUrl,
+    imagePath: primary.imagePath || secondary.imagePath,
+    campaignCount: (a.campaignCount ?? 0) + (b.campaignCount ?? 0),
+    updatedAt: aTime >= bTime ? a.updatedAt : b.updatedAt,
+  }
+}
+
+function dedupeProducts(rows: ProductSummary[]): ProductSummary[] {
+  const byKey = new Map<string, ProductSummary>()
+  for (const row of rows) {
+    const key = productDedupeKey(row)
+    const existing = byKey.get(key)
+    byKey.set(key, existing ? mergeDuplicateProducts(existing, row) : row)
+  }
+  return [...byKey.values()]
+}
+
 export async function listUserProducts(userId: string): Promise<ProductSummary[]> {
   const campaigns = await listUserCampaigns(userId)
   const campaignsByProduct = new Map<string, CampaignDoc[]>()
@@ -903,7 +967,7 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
     }),
   )
 
-  return rows.sort((a, b) => {
+  return dedupeProducts(rows).sort((a, b) => {
     const aTime = a.updatedAt?.toMillis?.() ?? 0
     const bTime = b.updatedAt?.toMillis?.() ?? 0
     return bTime - aTime
