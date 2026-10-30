@@ -321,6 +321,14 @@ export default function NewCampaignPage() {
   }, [])
 
   useEffect(() => {
+    if (searchParams.get('source') === 'url') {
+      setSourceType('url')
+    } else if (searchParams.get('source') === 'upload') {
+      setSourceType('upload')
+    }
+  }, [searchParams])
+
+  useEffect(() => {
     if (!user) return
     const productId = searchParams.get('productId')?.trim()
     if (!productId) return

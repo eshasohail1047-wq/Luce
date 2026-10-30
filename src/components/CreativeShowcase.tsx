@@ -8,14 +8,34 @@ export type ShowcaseItem = {
   poster?: string
 }
 
-/** Five HeyGen clips with format-relative tags */
+/**
+ * Labels match the clip content:
+ * - girl using perfume → Table Talk
+ * - separate perfume shot → Ad Creative
+ * - PINCH product → Cinematic Shot
+ * - everything else → UGC
+ */
 const DEFAULT_ITEMS: ShowcaseItem[] = [
   {
+    id: 'heygen-2',
+    label: 'Table Talk',
+    kind: 'video',
+    src: '/videos/creator/heygen-ugc-2.mp4',
+    poster: '/images/video-poster-ugc.jpg',
+  },
+  {
     id: 'heygen-1',
-    label: 'UGC',
+    label: 'Ad Creative',
     kind: 'video',
     src: '/videos/creator/heygen-ugc-1.mp4',
-    poster: '/images/video-poster-ugc.jpg',
+    poster: '/images/video-poster-cinematic.jpg',
+  },
+  {
+    id: 'cinematic-heygen',
+    label: 'Cinematic Shot',
+    kind: 'video',
+    src: '/videos/showcase/cinematic-heygen.mp4',
+    poster: '/images/video-poster-spin.jpg',
   },
   {
     id: 'miss-rose-ugc',
@@ -26,24 +46,10 @@ const DEFAULT_ITEMS: ShowcaseItem[] = [
   },
   {
     id: 'image1-ugc',
-    label: 'Table Talk',
+    label: 'UGC',
     kind: 'video',
     src: '/videos/creator/image1-ugc.mp4',
     poster: '/images/ugc-makeup-lipstick.jpg',
-  },
-  {
-    id: 'heygen-2',
-    label: 'Ad Creative',
-    kind: 'video',
-    src: '/videos/creator/heygen-ugc-2.mp4',
-    poster: '/images/moisturizer-ugc-poster.jpg',
-  },
-  {
-    id: 'cinematic-heygen',
-    label: 'Cinematic Shot',
-    kind: 'video',
-    src: '/videos/showcase/cinematic-heygen.mp4',
-    poster: '/images/video-poster-cinematic.jpg',
   },
 ]
 
@@ -140,7 +146,6 @@ export default function CreativeShowcase({ items = DEFAULT_ITEMS }: CreativeShow
               className={`creative-showcase-window ${slotClass}`}
               aria-hidden={!isCenter}
             >
-              {/* Tag sits on the top edge of the card — always inside the visible frame */}
               <div className="creative-showcase-tag" aria-hidden={!isCenter}>
                 {item.label}
               </div>

@@ -11,7 +11,7 @@ import {
 type CampaignMediaCardProps = {
   campaign: CampaignDoc
   imageUrl?: string
-  /** Show richer status text (Campaigns / Library) */
+  /** Show richer status text (Projects / Saved) */
   showStatusDetail?: boolean
   /** Optional footer actions (e.g. delete) rendered under the media link */
   actions?: ReactNode
@@ -35,31 +35,26 @@ export default function CampaignMediaCard({
   const cover = imageUrl?.trim()
 
   return (
-    <article className="campaign-media-card">
-      <Link className="campaign-media-link" to={`/app/campaigns/${campaign.id}`}>
-        <div className="campaign-media-frame">
-          {cover ? (
-            <img className="campaign-media-img" src={cover} alt="" />
-          ) : (
-            <span className="campaign-media-soft">{mode}</span>
-          )}
-          <span className="campaign-media-shade" />
-        </div>
-        <div className="campaign-media-copy">
-          <span
-            className={`dash-badge dash-badge-${done ? 'done' : 'progress'} campaign-media-badge`}
-          >
-            {status}
+    <article className="ws-card">
+      <Link className="ws-card-media" to={`/app/campaigns/${campaign.id}`}>
+        {cover ? (
+          <img src={cover} alt="" loading="lazy" decoding="async" />
+        ) : (
+          <span className="ws-card-fallback" aria-hidden="true">
+            {mode}
           </span>
-          <strong>{name}</strong>
-          <span className="campaign-media-sub">
-            {modeLine}
-            <span aria-hidden="true"> · </span>
-            {relativeTime(campaign)}
-          </span>
-        </div>
+        )}
+        <span className={`ws-card-tag${done ? ' is-done' : ''}`}>{status}</span>
       </Link>
-      {actions ? <div className="campaign-media-actions">{actions}</div> : null}
+      <div className="ws-card-body">
+        <strong>{name}</strong>
+        <span>
+          {modeLine}
+          <span aria-hidden="true"> · </span>
+          {relativeTime(campaign)}
+        </span>
+      </div>
+      {actions ? <div className="ws-card-actions">{actions}</div> : null}
     </article>
   )
 }

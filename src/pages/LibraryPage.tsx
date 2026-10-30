@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
@@ -17,6 +17,8 @@ function relativeSaved(ms: number) {
   return `${Math.floor(days / 7)} week${Math.floor(days / 7) === 1 ? '' : 's'} ago`
 }
 
+type LibraryFilter = 'all' | 'image' | 'video' | 'copy'
+
 function SavedCard({
   asset,
   onRemove,
@@ -28,54 +30,51 @@ function SavedCard({
   onExport: () => void
   busy: boolean
 }) {
+  const kindLabel =
+    asset.kind === 'video' ? 'Video' : asset.kind === 'copy' ? 'Copy' : 'Image'
+
   return (
-    <article className="campaign-media-card saved-asset-card">
-      <div className="campaign-media-link saved-asset-media">
-        <div className="campaign-media-frame">
-          {asset.kind === 'video' && asset.videoUrl ? (
-            <video
-              className="campaign-media-img"
-              src={asset.videoUrl}
-              poster={asset.imageUrl}
-              muted
-              playsInline
-              preload="metadata"
-            />
-          ) : asset.imageUrl ? (
-            <img className="campaign-media-img" src={asset.imageUrl} alt="" />
-          ) : (
-            <span className="campaign-media-soft">
-              {asset.kind === 'video' ? 'Video' : asset.kind === 'copy' ? 'Copy' : 'Asset'}
-            </span>
-          )}
-          <span className="campaign-media-shade" />
-        </div>
-        <div className="campaign-media-copy">
-          <span className="dash-badge dash-badge-done campaign-media-badge">Saved</span>
-          <strong>{asset.label}</strong>
-          <span className="campaign-media-sub">
-            {asset.productName}
-            <span aria-hidden="true"> · </span>
-            {relativeSaved(asset.savedAt)}
+    <article className="ws-card">
+      <div className="ws-card-media">
+        {asset.kind === 'video' && asset.videoUrl ? (
+          <video
+            src={asset.videoUrl}
+            poster={asset.imageUrl}
+            muted
+            playsInline
+            preload="metadata"
+          />
+        ) : asset.imageUrl ? (
+          <img src={asset.imageUrl} alt="" loading="lazy" decoding="async" />
+        ) : (
+          <span className="ws-card-fallback" aria-hidden="true">
+            {kindLabel}
           </span>
-        </div>
-        <div className="saved-asset-overlay">
-          <button
-            type="button"
-            className="btn btn-grad saved-asset-export"
-            disabled={busy}
-            onClick={() => void onExport()}
-          >
-            {busy ? '…' : 'Export'}
-          </button>
-        </div>
+        )}
+        <span className="ws-card-tag is-done">{kindLabel}</span>
+        <button
+          type="button"
+          className="ws-card-export"
+          disabled={busy}
+          onClick={() => void onExport()}
+        >
+          {busy ? '…' : 'Export'}
+        </button>
       </div>
-      <div className="campaign-media-actions saved-asset-actions">
+      <div className="ws-card-body">
+        <strong>{asset.label}</strong>
+        <span>
+          {asset.productName}
+          <span aria-hidden="true"> · </span>
+          {relativeSaved(asset.savedAt)}
+        </span>
+      </div>
+      <div className="ws-card-actions">
         <Link
           className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
           to={`/app/campaigns/${asset.campaignId}`}
         >
-          Open project
+          Open
         </Link>
         <button
           type="button"
@@ -97,6 +96,7 @@ export default function LibraryPage() {
   const [listError, setListError] = useState<string | null>(null)
   const [listing, setListing] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<LibraryFilter>('all')
 
   async function refresh() {
     if (!user) return
@@ -123,6 +123,11 @@ export default function LibraryPage() {
     }
   }, [user])
 
+  const filtered = useMemo(() => {
+    if (filter === 'all') return assets
+    return assets.filter((a) => a.kind === filter)
+  }, [assets, filter])
+
   if (loading) {
     return (
       <div className="studio-shell studio-shell-alone">
@@ -135,17 +140,38 @@ export default function LibraryPage() {
 
   return (
     <AppLayout>
-      <main className="dash dash-simple workspace-list">
-        <header className="workspace-list-header">
-          <div>
+      <main className="dash workspace-page">
+        <header className="workspace-page-header">
+          <div className="workspace-page-title-row">
             <h1>Saved</h1>
-            <p>
-              Creatives you save from a campaign. Export any image or video from here anytime.
-            </p>
+            <Link className="dash-create-btn" to="/app">
+              <span aria-hidden="true">+</span> Create
+            </Link>
           </div>
-          <Link className="dash-create-btn" to="/app/studio/photos">
-            Create images
-          </Link>
+
+          <div className="workspace-page-toolbar">
+            <div className="workspace-filters" role="tablist" aria-label="Filter saved">
+              {(
+                [
+                  ['all', 'All'],
+                  ['image', 'Images'],
+                  ['video', 'Videos'],
+                  ['copy', 'Copy'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === id}
+                  className={filter === id ? 'is-active' : ''}
+                  onClick={() => setFilter(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </header>
 
         {listError && (
@@ -155,28 +181,19 @@ export default function LibraryPage() {
         )}
 
         {listing ? (
-          <p className="dash-muted">Loading…</p>
-        ) : assets.length === 0 ? (
-          <div className="dash-empty">
-            <p>
-              Nothing saved yet. Generate in a campaign, then tap <strong>Save</strong> on the
-              creatives you want to keep.
-            </p>
-            <div className="workspace-empty-actions">
-              <Link className="dash-create-btn dash-create-btn-sm" to="/app/studio/photos">
-                Image Studio
+          <p className="workspace-page-empty">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <div className="workspace-page-empty-card">
+            <p>{assets.length === 0 ? 'Nothing saved yet.' : 'Nothing matches.'}</p>
+            {assets.length === 0 ? (
+              <Link className="dash-create-btn dash-create-btn-sm" to="/app/campaigns">
+                Browse projects
               </Link>
-              <Link
-                className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
-                to="/app/campaigns"
-              >
-                Campaigns
-              </Link>
-            </div>
+            ) : null}
           </div>
         ) : (
-          <ul className="campaign-media-grid">
-            {assets.map((asset) => (
+          <ul className="ws-card-grid">
+            {filtered.map((asset) => (
               <li key={asset.id}>
                 <SavedCard
                   asset={asset}

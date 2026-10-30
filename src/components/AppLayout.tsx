@@ -33,8 +33,8 @@ const ICON_RAIL: NavItem[] = [
   { to: '/app/studio/photos', label: 'Image Studio', icon: 'image' },
   { to: '/app/studio/videos', label: 'Video Studio', icon: 'video', pro: true },
   { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark', pro: true },
-  { to: '/app/campaigns', label: 'Campaigns', icon: 'layers' },
-  { to: '/app/library', label: 'Library', icon: 'folder' },
+  { to: '/app/campaigns', label: 'Projects', icon: 'layers' },
+  { to: '/app/library', label: 'Saved', icon: 'folder' },
 ]
 
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
@@ -51,8 +51,8 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     label: 'Manage',
     items: [
       { to: '/app/products', label: 'Products', icon: 'box' },
-      { to: '/app/campaigns', label: 'Campaigns', icon: 'layers' },
-      { to: '/app/library', label: 'Library', icon: 'folder' },
+      { to: '/app/campaigns', label: 'Projects', icon: 'layers' },
+      { to: '/app/library', label: 'Saved', icon: 'folder' },
       {
         to: '/app/studio/ads',
         label: 'Ads & Social',
@@ -404,7 +404,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
               <div className="studio-topbar-account" ref={menuRef}>
                 <button
                   type="button"
-                  className={`studio-float-avatar${menuOpen ? ' is-open' : ''}`}
+                  className={`studio-dash-user${menuOpen ? ' is-open' : ''}`}
                   aria-label="Account menu"
                   aria-haspopup="menu"
                   aria-expanded={menuOpen}
@@ -414,7 +414,19 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     setNotifOpen(false)
                   }}
                 >
-                  {user?.photoURL ? <img src={user.photoURL} alt="" /> : initial}
+                  <span className="studio-float-avatar" aria-hidden="true">
+                    {user?.photoURL ? <img src={user.photoURL} alt="" /> : initial}
+                  </span>
+                  <span className="studio-dash-user-name">{displayName}</span>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden="true">
+                    <path
+                      d="m6 9 6 6 6-6"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </button>
 
                 {menuOpen ? (

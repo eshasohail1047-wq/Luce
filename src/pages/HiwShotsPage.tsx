@@ -47,7 +47,7 @@ export default function HiwShotsPage() {
               <span
                 className={`studio-rail-link${createActive === 'campaigns' ? ' is-active' : ''}`}
               >
-                <span>Campaigns</span>
+                <span>Projects</span>
               </span>
               <span
                 className={`studio-rail-link${createActive === 'saved' ? ' is-active' : ''}`}

@@ -45,7 +45,7 @@ export default function CampaignsPage() {
         if (!cancelled) setProductsById(productMap)
       } catch (err) {
         console.error(err)
-        if (!cancelled) setListError('Could not load campaigns.')
+        if (!cancelled) setListError('Could not load projects.')
       } finally {
         if (!cancelled) setListing(false)
       }
@@ -65,7 +65,7 @@ export default function CampaignsPage() {
       await refreshCampaigns()
     } catch (err) {
       console.error(err)
-      setListError(err instanceof Error ? err.message : 'Could not delete campaign.')
+      setListError(err instanceof Error ? err.message : 'Could not delete project.')
     } finally {
       setDeletingId(null)
     }
@@ -98,26 +98,54 @@ export default function CampaignsPage() {
 
   return (
     <AppLayout>
-      <main className="dash dash-simple workspace-list">
-        <header className="workspace-list-header">
-          <div>
-            <h1>Campaigns</h1>
-            <p>
-              Every image, video, ads, and full-campaign workspace. Open one to generate, export, or
-              save creatives to Saved.
-              {query ? ` Showing results for “${searchParams.get('q')}”.` : ''}
-            </p>
+      <main className="dash workspace-page">
+        <header className="workspace-page-header">
+          <div className="workspace-page-title-row">
+            <h1>Projects</h1>
+            <Link className="dash-create-btn" to="/app">
+              <span aria-hidden="true">+</span> New
+            </Link>
           </div>
-          <div className="workspace-list-tools">
-            <label className="workspace-list-search">
-              <span className="sr-only">Search campaigns</span>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+
+          <div className="workspace-page-toolbar">
+            <div className="workspace-filters" role="tablist" aria-label="Filter projects">
+              {(
+                [
+                  ['all', 'All'],
+                  ['studio', 'Studio'],
+                  ['campaign', 'Full'],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === id}
+                  className={filter === id ? 'is-active' : ''}
+                  onClick={() => setFilter(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <label className="workspace-page-search">
+              <span className="sr-only">Search projects</span>
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
                 <circle cx="11" cy="11" r="7" />
                 <path d="m20 20-3.5-3.5" />
               </svg>
               <input
                 type="search"
-                placeholder="Search campaigns…"
+                placeholder="Search…"
                 value={searchDraft}
                 onChange={(e) => {
                   const next = e.target.value
@@ -128,32 +156,8 @@ export default function CampaignsPage() {
                 }}
               />
             </label>
-            <Link className="dash-create-btn" to="/app/studio/photos">
-              <span aria-hidden="true">+</span> New images
-            </Link>
           </div>
         </header>
-
-        <div className="workspace-filters" role="tablist" aria-label="Filter campaigns">
-          {(
-            [
-              ['all', 'All'],
-              ['studio', 'Studio'],
-              ['campaign', 'Full campaigns'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={filter === id}
-              className={filter === id ? 'is-active' : ''}
-              onClick={() => setFilter(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
 
         {listError && (
           <p className="auth-error" role="alert">
@@ -162,25 +166,18 @@ export default function CampaignsPage() {
         )}
 
         {listing ? (
-          <p className="dash-muted">Loading…</p>
+          <p className="workspace-page-empty">Loading…</p>
         ) : filtered.length === 0 ? (
-          <div className="dash-empty">
-            <p>
-              {campaigns.length === 0
-                ? 'No campaigns yet. Start from Image Studio or create a full campaign.'
-                : 'Nothing matches this filter.'}
-            </p>
-            <div className="workspace-empty-actions">
-              <Link className="dash-create-btn dash-create-btn-sm" to="/app/studio/photos">
-                Image Studio
+          <div className="workspace-page-empty-card">
+            <p>{campaigns.length === 0 ? 'No projects yet.' : 'Nothing matches.'}</p>
+            {campaigns.length === 0 ? (
+              <Link className="dash-create-btn dash-create-btn-sm" to="/app">
+                Create project
               </Link>
-              <Link className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm" to="/app/campaigns/new">
-                Full campaign
-              </Link>
-            </div>
+            ) : null}
           </div>
         ) : (
-          <ul className="campaign-media-grid workspace-campaign-grid">
+          <ul className="ws-card-grid">
             {filtered.map((c) => {
               const name = c.title || c.productName || 'Untitled'
               const confirming = confirmId === c.id
