@@ -823,20 +823,49 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
     })
   }
 
+  // Same cover pipeline as Projects: campaign stash / generated still / product CDN.
+  // Product docs often keep empty imageUrls even when Projects already show the photo.
+  const coverByCampaignId = new Map<string, string>()
+  const coverByProductId = new Map<string, string>()
+  const coverByName = new Map<string, string>()
+  await Promise.all(
+    campaigns.map(async (campaign) => {
+      try {
+        const url = await resolveCampaignCover(campaign.id)
+        if (!url) return
+        coverByCampaignId.set(campaign.id, url)
+        const pid = campaign.productId?.trim()
+        if (pid && !coverByProductId.has(pid)) coverByProductId.set(pid, url)
+        const nameKey = normalizeProductName(campaign.productName || campaign.title)
+        if (nameKey && !coverByName.has(nameKey)) coverByName.set(nameKey, url)
+      } catch (err) {
+        console.warn('[campaigns] product cover resolve failed', campaign.id, err)
+      }
+    }),
+  )
+
   const rows = await Promise.all(
     [...byId.values()].map(async (product) => {
       let imageUrl = await resolveProductImage(product.id, product.imageUrl)
+
+      if (!imageUrl) imageUrl = coverByProductId.get(product.id)
+
       if (!imageUrl) {
         const linked = campaignsByProduct.get(product.id) ?? []
         for (const campaign of linked) {
-          imageUrl = await resolveCampaignCover(campaign.id, product.imageUrl)
+          imageUrl = coverByCampaignId.get(campaign.id)
           if (imageUrl) break
         }
       }
-      // Campaigns without productId use synthetic ids — also try cover by campaign id.
+
       if (!imageUrl && product.id.startsWith('campaign:')) {
-        imageUrl = await resolveCampaignCover(product.id.slice('campaign:'.length), product.imageUrl)
+        imageUrl = coverByCampaignId.get(product.id.slice('campaign:'.length))
       }
+
+      if (!imageUrl) {
+        imageUrl = coverByName.get(normalizeProductName(product.name))
+      }
+
       if (imageUrl) {
         void stashProductImageSafe(product.id, imageUrl)
         if (
@@ -856,6 +885,13 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
     const bTime = b.updatedAt?.toMillis?.() ?? 0
     return bTime - aTime
   })
+}
+
+function normalizeProductName(value: string | undefined): string {
+  return (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
 }
 
 /** Load one product for Studio / Full Campaign reuse from Products CTAs. */
