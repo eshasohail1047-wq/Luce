@@ -29,31 +29,53 @@ export default function CampaignsPage() {
     if (!user) return
     const rows = await listUserCampaigns(user.uid)
     setCampaigns(rows)
-    const productMap = await getProductsByIds(rows.map((c) => c.productId))
-    setProductsById(productMap)
+    try {
+      const productMap = await getProductsByIds(
+        rows.filter((c) => c.productId && !c.id.startsWith('local-')).map((c) => c.productId),
+      )
+      setProductsById(productMap)
+    } catch (err) {
+      console.warn('[projects] product covers skipped', err)
+    }
   }
 
   useEffect(() => {
-    if (!user) return
+    if (!user) {
+      // Auth resolved without a user (redirect handles it) — never stick on Loading
+      if (!loading) setListing(false)
+      return
+    }
     let cancelled = false
+    setListing(true)
     ;(async () => {
       try {
         const rows = await listUserCampaigns(user.uid)
         if (cancelled) return
         setCampaigns(rows)
-        const productMap = await getProductsByIds(rows.map((c) => c.productId))
-        if (!cancelled) setProductsById(productMap)
+        // Unblock the grid immediately — covers are optional and can hang on Storage.
+        setListing(false)
+        try {
+          const productMap = await getProductsByIds(
+            rows
+              .filter((c) => c.productId && !c.id.startsWith('local-'))
+              .map((c) => c.productId),
+          )
+          if (!cancelled) setProductsById(productMap)
+        } catch (coverErr) {
+          console.warn('[projects] product covers skipped', coverErr)
+        }
       } catch (err) {
         console.error(err)
-        if (!cancelled) setListError('Could not load projects.')
-      } finally {
-        if (!cancelled) setListing(false)
+        if (!cancelled) {
+          setListError('Could not load projects.')
+          setListing(false)
+        }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [user])
+  }, [user, loading])
 
   async function handleDelete(campaignId: string) {
     if (!user) return

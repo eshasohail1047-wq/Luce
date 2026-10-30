@@ -7,7 +7,7 @@ import {
   removeSavedAsset,
   type SavedAsset,
 } from '../lib/savedAssets'
-import { downloadMockOutput } from '../lib/mockCampaign'
+import { downloadMockOutput, ensurePlayableVideoOutputs } from '../lib/mockCampaign'
 
 function relativeSaved(ms: number) {
   const days = Math.floor((Date.now() - ms) / 86_400_000)
@@ -19,48 +19,58 @@ function relativeSaved(ms: number) {
 
 type LibraryFilter = 'all' | 'image' | 'video' | 'copy'
 
+function kindLabel(kind: SavedAsset['kind']) {
+  if (kind === 'video') return 'Video'
+  if (kind === 'copy') return 'Copy'
+  return 'Image'
+}
+
 function SavedCard({
   asset,
   onRemove,
   onExport,
+  onPreview,
   busy,
 }: {
   asset: SavedAsset
   onRemove: () => void
   onExport: () => void
+  onPreview: () => void
   busy: boolean
 }) {
-  const kindLabel =
-    asset.kind === 'video' ? 'Video' : asset.kind === 'copy' ? 'Copy' : 'Image'
+  const label = kindLabel(asset.kind)
 
   return (
     <article className="ws-card">
-      <div className="ws-card-media">
+      <button type="button" className="ws-card-media" onClick={onPreview}>
         {asset.kind === 'video' && asset.videoUrl ? (
           <video
             src={asset.videoUrl}
             poster={asset.imageUrl}
             muted
             playsInline
+            loop
             preload="metadata"
           />
         ) : asset.imageUrl ? (
           <img src={asset.imageUrl} alt="" loading="lazy" decoding="async" />
+        ) : asset.text ? (
+          <span className="ws-card-copy-preview">{asset.text}</span>
         ) : (
           <span className="ws-card-fallback" aria-hidden="true">
-            {kindLabel}
+            {label}
           </span>
         )}
-        <span className="ws-card-tag is-done">{kindLabel}</span>
-        <button
-          type="button"
-          className="ws-card-export"
-          disabled={busy}
-          onClick={() => void onExport()}
-        >
-          {busy ? '…' : 'Export'}
-        </button>
-      </div>
+        <span className={`ws-card-tag${asset.kind === 'video' ? ' is-done' : ''}`}>{label}</span>
+        {asset.kind === 'video' ? (
+          <span className="ws-card-play" aria-hidden="true">
+            ▶
+          </span>
+        ) : null}
+        <span className="ws-card-export" aria-hidden="true">
+          Preview
+        </span>
+      </button>
       <div className="ws-card-body">
         <strong>{asset.label}</strong>
         <span>
@@ -70,6 +80,14 @@ function SavedCard({
         </span>
       </div>
       <div className="ws-card-actions">
+        <button
+          type="button"
+          className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
+          disabled={busy}
+          onClick={() => void onExport()}
+        >
+          Export
+        </button>
         <Link
           className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
           to={`/app/campaigns/${asset.campaignId}`}
@@ -97,11 +115,18 @@ export default function LibraryPage() {
   const [listing, setListing] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [filter, setFilter] = useState<LibraryFilter>('all')
+  const [previewId, setPreviewId] = useState<string | null>(null)
 
   async function refresh() {
     if (!user) return
     const rows = await listSavedAssets(user.uid)
-    setAssets(rows)
+    const healed = ensurePlayableVideoOutputs(rows as never) as unknown as SavedAsset[]
+    setAssets(
+      healed.map((row, i) => ({
+        ...rows[i]!,
+        videoUrl: row.videoUrl || rows[i]!.videoUrl,
+      })),
+    )
   }
 
   useEffect(() => {
@@ -110,7 +135,25 @@ export default function LibraryPage() {
     ;(async () => {
       try {
         const rows = await listSavedAssets(user.uid)
-        if (!cancelled) setAssets(rows)
+        const healed = ensurePlayableVideoOutputs(
+          rows.map((r) => ({
+            id: r.outputId,
+            assetType: r.assetType,
+            label: r.label,
+            kind: r.kind,
+            imageUrl: r.imageUrl,
+            videoUrl: r.videoUrl,
+            text: r.text,
+          })),
+        )
+        if (!cancelled) {
+          setAssets(
+            rows.map((row, i) => ({
+              ...row,
+              videoUrl: healed[i]?.videoUrl || row.videoUrl,
+            })),
+          )
+        }
       } catch (err) {
         console.error(err)
         if (!cancelled) setListError('Could not load saved creatives.')
@@ -127,6 +170,17 @@ export default function LibraryPage() {
     if (filter === 'all') return assets
     return assets.filter((a) => a.kind === filter)
   }, [assets, filter])
+
+  const preview = previewId ? assets.find((a) => a.id === previewId) || null : null
+
+  useEffect(() => {
+    if (!previewId) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [previewId])
 
   if (loading) {
     return (
@@ -198,6 +252,7 @@ export default function LibraryPage() {
                 <SavedCard
                   asset={asset}
                   busy={busyId === asset.id}
+                  onPreview={() => setPreviewId(asset.id)}
                   onExport={async () => {
                     setBusyId(asset.id)
                     setListError(null)
@@ -226,6 +281,7 @@ export default function LibraryPage() {
                     try {
                       await removeSavedAsset(asset.id)
                       await refresh()
+                      if (previewId === asset.id) setPreviewId(null)
                     } catch (err) {
                       console.error(err)
                       setListError('Could not remove from saved.')
@@ -238,6 +294,90 @@ export default function LibraryPage() {
             ))}
           </ul>
         )}
+
+        {preview ? (
+          <div
+            className="ws-preview-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label={preview.label}
+            onClick={() => setPreviewId(null)}
+          >
+            <div className="ws-preview-panel" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="ws-preview-close"
+                aria-label="Close preview"
+                onClick={() => setPreviewId(null)}
+              >
+                ×
+              </button>
+              <div className="ws-preview-media">
+                {preview.kind === 'video' && preview.videoUrl ? (
+                  <video
+                    key={preview.id}
+                    src={preview.videoUrl}
+                    poster={preview.imageUrl}
+                    controls
+                    autoPlay
+                    playsInline
+                    loop
+                  />
+                ) : preview.imageUrl ? (
+                  <img src={preview.imageUrl} alt={preview.label} />
+                ) : preview.text ? (
+                  <blockquote>{preview.text}</blockquote>
+                ) : (
+                  <p>No preview available.</p>
+                )}
+              </div>
+              <div className="ws-preview-meta">
+                <div>
+                  <strong>{preview.label}</strong>
+                  <span>
+                    {kindLabel(preview.kind)} · {preview.productName}
+                  </span>
+                </div>
+                <div className="ws-preview-actions">
+                  <button
+                    type="button"
+                    className="dash-create-btn dash-create-btn-sm"
+                    disabled={busyId === preview.id}
+                    onClick={() => {
+                      void (async () => {
+                        setBusyId(preview.id)
+                        try {
+                          await downloadMockOutput(
+                            {
+                              id: preview.outputId,
+                              assetType: preview.assetType,
+                              label: preview.label,
+                              kind: preview.kind,
+                              imageUrl: preview.imageUrl,
+                              videoUrl: preview.videoUrl,
+                              text: preview.text,
+                            },
+                            preview.productName,
+                          )
+                        } finally {
+                          setBusyId(null)
+                        }
+                      })()
+                    }}
+                  >
+                    Export
+                  </button>
+                  <Link
+                    className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
+                    to={`/app/campaigns/${preview.campaignId}`}
+                  >
+                    Open project
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </main>
     </AppLayout>
   )

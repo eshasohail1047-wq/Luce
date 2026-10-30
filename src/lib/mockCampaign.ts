@@ -119,10 +119,9 @@ function buildOne(
   const imageUrl = pickImage(assetType, version, productImageUrl)
   const usingProduct = Boolean(productImageUrl && imageUrl === productImageUrl)
   const video = isVideoAsset(assetType)
-  // With a product photo: never attach stock demo MP4s (wrong product).
-  // AI generate fills videoUrl; until then show the product still as the poster.
-  const videoUrl =
-    video && !productImageUrl ? videoUrlForAsset(assetType) : undefined
+  // Always attach a playable format clip for video kinds. Product photo is the
+  // poster; AI generate replaces videoUrl with a product-true clip when ready.
+  const videoUrl = video ? videoUrlForAsset(assetType) : undefined
   const secs = video && durationSeconds ? durationSeconds : undefined
 
   return {
@@ -136,8 +135,8 @@ function buildOne(
     note: video
       ? productImageUrl
         ? version > 1
-          ? `Your product · ${secs || 5}s · waiting for AI · v${version}`
-          : `Your product · ${secs || 5}s — AI will build this format`
+          ? `Demo format clip · your product as poster · ${secs || 5}s · v${version}`
+          : `Demo format clip · your product as poster · ${secs || 5}s`
         : version > 1
           ? `Demo format clip · v${version}`
           : 'Demo format clip'
@@ -150,6 +149,33 @@ function buildOne(
           : 'Format still — recreate if you want another option',
     version,
   }
+}
+
+/**
+ * Backfill missing videoUrl on video outputs (older packs stripped demos when a
+ * product photo was present). Safe to run on every results/library render.
+ */
+export function ensurePlayableVideoOutputs(outputs: MockOutput[]): MockOutput[] {
+  return outputs.map((item) => {
+    if (item.kind !== 'video') return item
+    if (item.videoUrl?.trim()) return item
+    const demo = videoUrlForAsset(item.assetType)
+    if (!demo) return item
+    return {
+      ...item,
+      videoUrl: demo,
+      note:
+        item.note &&
+        (item.note.includes('waiting for AI') ||
+          item.note.includes('AI video failed') ||
+          item.note.includes('AI video unavailable'))
+          ? item.note.replace(
+              /waiting for AI.*$|AI video failed.*$|AI video unavailable.*$/i,
+              'demo format clip · your product as poster',
+            )
+          : item.note || 'Demo format clip · your product as poster',
+    }
+  })
 }
 
 /** Build preview assets for the results UI (no AI — demo pack). */

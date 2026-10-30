@@ -35,6 +35,7 @@ import {
   PHOTO_STYLES,
   VIDEO_STYLES,
   resolveCampaignFromFormats,
+  videoUrlForAsset,
   type PhotoStyleId,
   type VideoStyleId,
 } from '../lib/deliverables'
@@ -592,9 +593,9 @@ export default function NewCampaignPage() {
               ? {
                   ...o,
                   kind: 'video' as const,
-                  videoUrl: undefined,
+                  videoUrl: videoUrlForAsset(item.assetType) || o.videoUrl,
                   imageUrl: opts.productImage,
-                  note: 'AI video failed — product still kept',
+                  note: 'AI video failed — demo format clip with your product as poster',
                 }
               : o,
           )
@@ -603,7 +604,7 @@ export default function NewCampaignPage() {
       if (failCount) {
         warn = warn
           ? `${warn} Some videos also failed (${failCount}).`
-          : `Some AI videos failed (${failCount}); product stills were kept.`
+          : `Some AI videos failed (${failCount}); demo format clips play with your product as poster.`
       }
     }
 

@@ -37,6 +37,8 @@ import {
   deleteLocalCampaign,
   fileToDataUrl,
   isLocalCampaignId,
+  listLocalCampaigns,
+  type LocalCampaign,
 } from './localDemoCampaign'
 
 export type CampaignStatus =
@@ -649,43 +651,89 @@ export async function createStudioProject(input: CreateStudioInput) {
   }
 }
 
-export async function listUserCampaigns(userId: string): Promise<CampaignDoc[]> {
-  const q = query(collection(requireDb(), 'campaigns'), where('userId', '==', userId))
-  const snap = await getDocs(q)
-  const rows = snap.docs.map((d) => {
-    const data = d.data()
-    return {
-      id: d.id,
-      userId: String(data.userId ?? ''),
-      productId: String(data.productId ?? ''),
-      title: String(data.title ?? 'Campaign'),
-      status: (data.status as CampaignStatus) || 'draft',
-      productName: String(data.productName ?? 'Product'),
-      productUrl: data.productUrl ? String(data.productUrl) : undefined,
-      sourceType:
-        data.sourceType === 'url' || data.sourceType === 'upload'
-          ? (data.sourceType as ProductSourceType)
-          : undefined,
-      mode: (data.mode as CampaignMode) || 'campaign',
-      studioKind: data.studioKind as StudioKind | undefined,
-      deliverables: Array.isArray(data.deliverables)
-        ? (asFlatStringArray(data.deliverables) as DeliverableId[])
-        : undefined,
-      selectedAssets: Array.isArray(data.selectedAssets)
-        ? (asFlatStringArray(data.selectedAssets) as AssetType[])
-        : undefined,
-      creativeDirection: data.creativeDirection
-        ? sanitizeCreativeDirection(data.creativeDirection as CreativeDirection)
-        : undefined,
-      tryFree: Boolean(data.tryFree),
-      createdAt: data.createdAt as CampaignDoc['createdAt'],
-      updatedAt: data.updatedAt as CampaignDoc['updatedAt'],
-    }
-  })
+function millisFromTs(value: CampaignDoc['updatedAt'] | CampaignDoc['createdAt']) {
+  return value?.toMillis?.() ?? 0
+}
 
-  return rows.sort((a, b) => {
-    const aTime = a.updatedAt?.toMillis?.() ?? 0
-    const bTime = b.updatedAt?.toMillis?.() ?? 0
+/** Adapt browser-local demo campaigns into the same shape Projects / Products list. */
+function localCampaignToDoc(local: LocalCampaign, userId: string): CampaignDoc {
+  const ms = Number(local.createdAt) || Date.now()
+  const stamp = { toMillis: () => ms } as CampaignDoc['createdAt']
+  return {
+    id: local.id,
+    userId,
+    productId: local.productId || '',
+    title: local.title || `${local.productName || 'Product'} project`,
+    status: (local.status as CampaignStatus) || 'draft',
+    productName: local.productName || 'Product',
+    productUrl: local.productUrl,
+    mode: local.mode || 'campaign',
+    studioKind: local.studioKind,
+    deliverables: local.deliverables,
+    selectedAssets: local.selectedAssets as AssetType[] | undefined,
+    tryFree: Boolean(local.tryFree),
+    createdAt: stamp,
+    updatedAt: stamp,
+  }
+}
+
+/**
+ * Cloud campaigns for this user, merged with local/demo projects from this
+ * browser. Firestore failures must not hide local studio packs or hang forever.
+ */
+export async function listUserCampaigns(userId: string): Promise<CampaignDoc[]> {
+  let cloud: CampaignDoc[] = []
+  try {
+    const q = query(collection(requireDb(), 'campaigns'), where('userId', '==', userId))
+    const snap = await Promise.race([
+      getDocs(q),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('listUserCampaigns-timeout')), 12_000)
+      }),
+    ])
+    cloud = snap.docs.map((d) => {
+      const data = d.data()
+      return {
+        id: d.id,
+        userId: String(data.userId ?? ''),
+        productId: String(data.productId ?? ''),
+        title: String(data.title ?? 'Campaign'),
+        status: (data.status as CampaignStatus) || 'draft',
+        productName: String(data.productName ?? 'Product'),
+        productUrl: data.productUrl ? String(data.productUrl) : undefined,
+        sourceType:
+          data.sourceType === 'url' || data.sourceType === 'upload'
+            ? (data.sourceType as ProductSourceType)
+            : undefined,
+        mode: (data.mode as CampaignMode) || 'campaign',
+        studioKind: data.studioKind as StudioKind | undefined,
+        deliverables: Array.isArray(data.deliverables)
+          ? (asFlatStringArray(data.deliverables) as DeliverableId[])
+          : undefined,
+        selectedAssets: Array.isArray(data.selectedAssets)
+          ? (asFlatStringArray(data.selectedAssets) as AssetType[])
+          : undefined,
+        creativeDirection: data.creativeDirection
+          ? sanitizeCreativeDirection(data.creativeDirection as CreativeDirection)
+          : undefined,
+        tryFree: Boolean(data.tryFree),
+        createdAt: data.createdAt as CampaignDoc['createdAt'],
+        updatedAt: data.updatedAt as CampaignDoc['updatedAt'],
+      }
+    })
+  } catch (err) {
+    console.warn('[campaigns] listUserCampaigns cloud failed — showing local only', err)
+  }
+
+  const local = listLocalCampaigns().map((row) => localCampaignToDoc(row, userId))
+  const byId = new Map<string, CampaignDoc>()
+  // Cloud first; local overlays same id (demo ids never collide with Firestore).
+  for (const row of cloud) byId.set(row.id, row)
+  for (const row of local) byId.set(row.id, row)
+
+  return [...byId.values()].sort((a, b) => {
+    const aTime = millisFromTs(a.updatedAt) || millisFromTs(a.createdAt)
+    const bTime = millisFromTs(b.updatedAt) || millisFromTs(b.createdAt)
     return bTime - aTime
   })
 }

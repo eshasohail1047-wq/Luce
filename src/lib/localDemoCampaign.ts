@@ -83,6 +83,50 @@ export function isLocalCampaignId(id: string | undefined) {
   return Boolean(id && id.startsWith('local-'))
 }
 
+/** All local/demo campaigns persisted in this browser (session + local). */
+export function listLocalCampaigns(): LocalCampaign[] {
+  const byId = new Map<string, LocalCampaign>()
+
+  const ingest = (storage: Storage | undefined) => {
+    if (!storage) return
+    try {
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i)
+        if (!key || !key.startsWith(PREFIX)) continue
+        const raw = storage.getItem(key)
+        if (!raw) continue
+        try {
+          const parsed = JSON.parse(raw) as LocalCampaign
+          if (!parsed?.id || !isLocalCampaignId(parsed.id)) continue
+          const prev = byId.get(parsed.id)
+          if (!prev || (parsed.createdAt || 0) >= (prev.createdAt || 0)) {
+            byId.set(parsed.id, parsed)
+          }
+        } catch {
+          /* skip corrupt */
+        }
+      }
+    } catch {
+      /* storage blocked */
+    }
+  }
+
+  try {
+    ingest(typeof sessionStorage !== 'undefined' ? sessionStorage : undefined)
+  } catch {
+    /* ignore */
+  }
+  try {
+    ingest(typeof localStorage !== 'undefined' ? localStorage : undefined)
+  } catch {
+    /* ignore */
+  }
+
+  return [...byId.values()].sort(
+    (a, b) => (b.createdAt || 0) - (a.createdAt || 0),
+  )
+}
+
 const IMAGE_KEY = 'luce.campaignImage.'
 const REF_KEY = 'luce.campaignRefImage.'
 const OUTPUTS_KEY = 'luce.campaignOutputs.'
@@ -562,6 +606,11 @@ export function clearCampaignStash(campaignId: string) {
 export function deleteLocalCampaign(id: string) {
   try {
     sessionStorage.removeItem(PREFIX + id)
+  } catch (err) {
+    console.error('[localDemo] delete failed', err)
+  }
+  try {
+    localStorage.removeItem(PREFIX + id)
   } catch (err) {
     console.error('[localDemo] delete failed', err)
   }

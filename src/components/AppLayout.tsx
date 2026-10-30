@@ -213,10 +213,13 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const paid = isPaidPlan(plan)
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
+  const helpRef = useRef<HTMLDivElement>(null)
   const menuId = useId()
   const notifId = useId()
+  const helpId = useId()
 
   async function handleLogout() {
     setMenuOpen(false)
@@ -228,18 +231,22 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   useEffect(() => {
-    if (!menuOpen && !notifOpen) return
+    if (!menuOpen && !notifOpen && !helpOpen) return
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node
       if (menuOpen && menuRef.current && !menuRef.current.contains(target)) setMenuOpen(false)
       if (notifOpen && notifRef.current && !notifRef.current.contains(target)) {
         setNotifOpen(false)
       }
+      if (helpOpen && helpRef.current && !helpRef.current.contains(target)) {
+        setHelpOpen(false)
+      }
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setMenuOpen(false)
         setNotifOpen(false)
+        setHelpOpen(false)
       }
     }
     document.addEventListener('mousedown', onPointerDown)
@@ -248,7 +255,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [menuOpen, notifOpen])
+  }, [menuOpen, notifOpen, helpOpen])
 
   return (
     <div className="studio-shell">
@@ -276,14 +283,80 @@ export default function AppLayout({ children }: AppLayoutProps) {
             ))}
           </nav>
           <div className="studio-icon-rail-bottom">
-            <Link
-              to="/app/settings#help"
-              className="studio-icon-rail-btn"
-              title="Help"
-              aria-label="Help"
-            >
-              <NavIcon name="guide" />
-            </Link>
+            <div className="studio-help-wrap" ref={helpRef}>
+              <button
+                type="button"
+                className={`studio-icon-rail-btn${helpOpen ? ' is-active' : ''}`}
+                title="Help"
+                aria-label="Help"
+                aria-expanded={helpOpen}
+                aria-controls={helpId}
+                onClick={() => {
+                  setHelpOpen((v) => !v)
+                  setMenuOpen(false)
+                  setNotifOpen(false)
+                }}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4" strokeLinecap="round" />
+                  <circle cx="12" cy="17" r="0.8" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+              {helpOpen ? (
+                <div className="studio-help-menu" id={helpId} role="menu">
+                  <a
+                    role="menuitem"
+                    className="studio-help-item"
+                    href="/#how-it-works"
+                    onClick={() => setHelpOpen(false)}
+                  >
+                    <span className="studio-help-ico" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z" strokeLinejoin="round" />
+                        <path d="M6 12v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    <span>Learning center</span>
+                  </a>
+                  <a
+                    role="menuitem"
+                    className="studio-help-item"
+                    href="mailto:hello@luce.ai?subject=LUCE%20support"
+                    onClick={() => setHelpOpen(false)}
+                  >
+                    <span className="studio-help-ico" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <span>Chat with us</span>
+                  </a>
+                  <a
+                    role="menuitem"
+                    className="studio-help-item"
+                    href="mailto:hello@luce.ai?subject=LUCE%20feedback"
+                    onClick={() => setHelpOpen(false)}
+                  >
+                    <span className="studio-help-ico" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8">
+                        <path d="M12 20h9" strokeLinecap="round" />
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    <span>Give feedback</span>
+                  </a>
+                </div>
+              ) : null}
+            </div>
             <Link
               to="/app/settings"
               className="studio-icon-rail-btn"
@@ -331,17 +404,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   <em>Unlock video & campaigns</em>
                 </span>
               </Link>
-            ) : (
-              <Link className="studio-rail-help-card" to="/app/settings#help">
-                <span className="studio-rail-upgrade-icon" aria-hidden="true">
-                  <NavIcon name="guide" />
-                </span>
-                <span>
-                  <strong>Need help?</strong>
-                  <em>View guide →</em>
-                </span>
-              </Link>
-            )}
+            ) : null}
           </div>
         </div>
       </aside>

@@ -21,6 +21,11 @@ function productInitial(name: string) {
   return letter ? letter.toUpperCase() : 'P'
 }
 
+function productTag(product: ProductSummary) {
+  if (product.sourceType === 'url') return 'URL'
+  return 'Upload'
+}
+
 function ProductCard({
   product,
   userId,
@@ -35,7 +40,9 @@ function ProductCard({
   const [uploadError, setUploadError] = useState<string | null>(null)
 
   const studioTo = `/app/studio/photos?productId=${encodeURIComponent(product.id)}`
+  const videoTo = `/app/studio/videos?productId=${encodeURIComponent(product.id)}`
   const campaignTo = `/app/campaigns/new?productId=${encodeURIComponent(product.id)}`
+  const tag = productTag(product)
 
   async function onPickPhoto(file: File | null) {
     if (!file) return
@@ -60,32 +67,31 @@ function ProductCard({
   }
 
   return (
-    <article className="product-card">
-      <div className="product-card-media">
+    <article className="ws-card">
+      <div className="ws-card-media">
         {product.imageUrl ? (
-          <img src={product.imageUrl} alt="" />
+          <img src={product.imageUrl} alt="" loading="lazy" decoding="async" />
         ) : (
           <button
             type="button"
-            className="product-card-fallback product-card-fallback-btn"
+            className="ws-card-fallback ws-card-fallback-btn"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
             aria-label={`Add photo for ${product.name}`}
           >
             <span className="product-card-initial">{productInitial(product.name)}</span>
-            <span className="product-card-fallback-hint">
-              {uploading ? 'Uploading…' : 'Add photo'}
-            </span>
+            <span>{uploading ? 'Uploading…' : 'Add photo'}</span>
           </button>
         )}
+        <span className="ws-card-tag is-done">{tag}</span>
         {product.imageUrl ? (
           <button
             type="button"
-            className="product-card-replace"
-            onClick={() => fileRef.current?.click()}
+            className="ws-card-export"
             disabled={uploading}
+            onClick={() => fileRef.current?.click()}
           >
-            {uploading ? 'Uploading…' : 'Replace photo'}
+            {uploading ? '…' : 'Replace'}
           </button>
         ) : null}
         <input
@@ -96,45 +102,32 @@ function ProductCard({
           onChange={(e) => void onPickPhoto(e.target.files?.[0] ?? null)}
         />
       </div>
-      <div className="product-card-body">
-        <h2>{product.name}</h2>
-        <p>
-          {product.brand ||
-            product.category ||
-            (product.sourceType === 'url' ? 'From URL' : 'Uploaded photo')}
+      <div className="ws-card-body">
+        <strong>{product.name}</strong>
+        <span>
+          {product.brand || product.category || (product.sourceType === 'url' ? 'From URL' : 'Uploaded')}
           {product.campaignCount
             ? ` · ${product.campaignCount} project${product.campaignCount === 1 ? '' : 's'}`
             : ''}
-        </p>
+          <span aria-hidden="true"> · </span>
+          {relativeTime({ updatedAt: product.updatedAt })}
+        </span>
         {uploadError ? (
-          <p className="product-card-upload-error" role="alert">
+          <span className="product-card-upload-error" role="alert">
             {uploadError}
-          </p>
+          </span>
         ) : null}
-        <div className="product-card-meta">
-          <span>{relativeTime({ updatedAt: product.updatedAt })}</span>
-          {product.sourceUrl ? (
-            <a
-              href={product.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Source
-            </a>
-          ) : null}
-        </div>
-        <div className="product-card-actions">
-          <Link className="dash-create-btn dash-create-btn-sm" to={studioTo}>
-            New images
-          </Link>
-          <Link
-            className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
-            to={campaignTo}
-          >
-            Full campaign
-          </Link>
-        </div>
+      </div>
+      <div className="ws-card-actions">
+        <Link className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel" to={studioTo}>
+          Images
+        </Link>
+        <Link className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel" to={videoTo}>
+          Videos
+        </Link>
+        <Link className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel" to={campaignTo}>
+          Campaign
+        </Link>
       </div>
     </article>
   )
@@ -177,7 +170,6 @@ export default function ProductsPage() {
             }
             if (imageUrl) {
               void stashProductImageSafe(product.id, imageUrl)
-              // Persist recovered covers so other devices/browsers see them too.
               if (!product.imageUrl || product.imageUrl !== imageUrl) {
                 void backfillProductImageUrl(product.id, imageUrl)
               }
@@ -212,18 +204,14 @@ export default function ProductsPage() {
 
   return (
     <AppLayout>
-      <main className="dash dash-simple workspace-list">
-        <header className="workspace-list-header">
-          <div>
+      <main className="dash workspace-page">
+        <header className="workspace-page-header">
+          <div className="workspace-page-title-row">
             <h1>Products</h1>
-            <p>
-              Your product catalog — click Add photo on any card missing an image, then start new
-              images or a full campaign from here.
-            </p>
+            <Link className="dash-create-btn" to="/app/studio/photos">
+              <span aria-hidden="true">+</span> Add
+            </Link>
           </div>
-          <Link className="dash-create-btn" to="/app/studio/photos">
-            <span aria-hidden="true">+</span> Add product
-          </Link>
         </header>
 
         {listError && (
@@ -233,37 +221,30 @@ export default function ProductsPage() {
         )}
 
         {listing ? (
-          <p className="dash-muted">Loading…</p>
+          <p className="workspace-page-empty">Loading…</p>
         ) : products.length === 0 ? (
-          <div className="dash-empty">
-            <p>No products yet. Add one from Image Studio or start a full campaign.</p>
-            <div className="workspace-empty-actions">
-              <Link className="dash-create-btn dash-create-btn-sm" to="/app/studio/photos">
-                Image Studio
-              </Link>
-              <Link
-                className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
-                to="/app/campaigns/new"
-              >
-                Full campaign
-              </Link>
-            </div>
+          <div className="workspace-page-empty-card">
+            <p>No products yet.</p>
+            <Link className="dash-create-btn dash-create-btn-sm" to="/app">
+              Create from dashboard
+            </Link>
           </div>
         ) : (
-          <div className="product-grid">
+          <ul className="ws-card-grid">
             {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                userId={user.uid}
-                onPhotoUpdated={(productId, imageUrl) => {
-                  setProducts((prev) =>
-                    prev.map((p) => (p.id === productId ? { ...p, imageUrl } : p)),
-                  )
-                }}
-              />
+              <li key={product.id}>
+                <ProductCard
+                  product={product}
+                  userId={user.uid}
+                  onPhotoUpdated={(productId, imageUrl) => {
+                    setProducts((prev) =>
+                      prev.map((p) => (p.id === productId ? { ...p, imageUrl } : p)),
+                    )
+                  }}
+                />
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </main>
     </AppLayout>

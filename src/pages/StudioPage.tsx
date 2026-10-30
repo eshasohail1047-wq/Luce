@@ -40,6 +40,7 @@ import {
   resolveAdStyles,
   resolvePhotoStyles,
   resolveVideoStudioStyles,
+  videoUrlForAsset,
   type AdStyleId,
   type PhotoStyleId,
   type StudioKind,
@@ -703,15 +704,17 @@ export default function StudioPage({
       } catch (err) {
         const failReason =
           err instanceof Error ? err.message : 'AI video unavailable'
-        console.warn('[Studio] AI video recreate failed — keeping product still', err)
+        console.warn('[Studio] AI video recreate failed — demo format clip', err)
         next = {
           ...next,
           kind: 'video',
-          videoUrl: undefined,
+          videoUrl: videoUrlForAsset(current.assetType) || next.videoUrl,
           imageUrl: productPhoto || next.imageUrl,
-          note: `AI video failed — ${failReason}`,
+          note: `AI video failed — ${failReason}. Demo format clip with your product as poster.`,
         }
-        setWarning(`${failReason} Your product still was kept (no demo clip).`)
+        setWarning(
+          `${failReason} Playing a demo format clip with your product as poster.`,
+        )
       }
     }
 
@@ -962,9 +965,9 @@ export default function StudioPage({
               ? {
                   ...o,
                   kind: 'video' as const,
-                  videoUrl: undefined,
+                  videoUrl: videoUrlForAsset(item.assetType) || o.videoUrl,
                   imageUrl: opts.productImage,
-                  note: 'AI video failed — product still kept',
+                  note: 'AI video failed — demo format clip with your product as poster',
                 }
               : o,
           )
@@ -973,7 +976,7 @@ export default function StudioPage({
       if (failCount) {
         warn = warn
           ? `${warn} Some videos also failed (${failCount}).`
-          : `Some AI videos failed (${failCount}); product stills were kept.`
+          : `Some AI videos failed (${failCount}); demo format clips play with your product as poster.`
       }
     }
 

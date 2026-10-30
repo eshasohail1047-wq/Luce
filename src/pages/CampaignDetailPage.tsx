@@ -18,6 +18,7 @@ import PaywallModal from '../components/PaywallModal'
 import {
   CAMPAIGN_DELIVERABLES,
   formatLabel,
+  videoUrlForAsset,
   type DeliverableId,
   type StudioKind,
 } from '../lib/deliverables'
@@ -66,6 +67,7 @@ import {
   buildMockOutputs,
   downloadMockOutput,
   downloadMockPack,
+  ensurePlayableVideoOutputs,
   type MockOutput,
 } from '../lib/mockCampaign'
 import {
@@ -425,16 +427,20 @@ export default function CampaignDetailPage() {
 
   const outputs = useMemo(() => {
     if (!campaign) return []
-    if (campaign.outputs && campaign.outputs.length > 0) return campaign.outputs
+    if (campaign.outputs && campaign.outputs.length > 0) {
+      return ensurePlayableVideoOutputs(campaign.outputs)
+    }
     if (campaign.status === 'ready' || campaign.status === 'exported') {
-      return buildMockOutputs({
-        productName: campaign.productName,
-        productImageUrl: campaign.imageUrl,
-        selectedAssets: campaign.selectedAssets,
-        studioKind: campaign.studioKind,
-        mode: campaign.mode,
-        videoDurations: campaign.videoDurations,
-      })
+      return ensurePlayableVideoOutputs(
+        buildMockOutputs({
+          productName: campaign.productName,
+          productImageUrl: campaign.imageUrl,
+          selectedAssets: campaign.selectedAssets,
+          studioKind: campaign.studioKind,
+          mode: campaign.mode,
+          videoDurations: campaign.videoDurations,
+        }),
+      )
     }
     return []
   }, [campaign])
@@ -731,22 +737,23 @@ export default function CampaignDetailPage() {
               const failReason =
                 err instanceof Error ? err.message : 'Video generation failed'
               console.warn('[generate] video variant failed', item.id, err)
-              // Never leave a stock demo perfume clip in the pack.
+              // Keep a playable demo format clip; product photo stays as poster.
+              const demoClip = videoUrlForAsset(item.assetType)
               nextOutputs = nextOutputs.map((o) =>
                 o.id === item.id
                   ? {
                       ...o,
                       kind: 'video' as const,
-                      videoUrl: undefined,
+                      videoUrl: demoClip || o.videoUrl,
                       imageUrl: productImageUrl,
-                      note: `AI video failed — ${failReason}`,
+                      note: `AI video failed — ${failReason}. Playing demo format clip with your product as poster.`,
                     }
                   : o,
               )
             }
           }
           if (videoFailCount) {
-            const videoMsg = `Some AI videos failed (${videoFailCount}); your product still was kept — no demo clips.`
+            const videoMsg = `Some AI videos failed (${videoFailCount}); demo format clips play with your product as poster.`
             aiWarning = aiWarning ? `${aiWarning} ${videoMsg}` : videoMsg
           }
         } catch (err) {
@@ -758,13 +765,13 @@ export default function CampaignDetailPage() {
               ? {
                   ...o,
                   kind: 'video' as const,
-                  videoUrl: undefined,
+                  videoUrl: videoUrlForAsset(o.assetType) || o.videoUrl,
                   imageUrl: productImageUrl || o.imageUrl,
-                  note: `AI video unavailable — ${failReason}`,
+                  note: `AI video unavailable — ${failReason}. Demo format clip with your product as poster.`,
                 }
               : o,
           )
-          const videoMsg = `${failReason} — product stills kept.`
+          const videoMsg = `${failReason} — demo format clips kept.`
           aiWarning = aiWarning ? `${aiWarning} ${videoMsg}` : videoMsg
         }
       }
@@ -1514,13 +1521,14 @@ export default function CampaignDetailPage() {
                         {preview.kind === 'video' && preview.videoUrl ? (
                           <div className="results-preview-media results-preview-video">
                             <video
-                              key={preview.id}
+                              key={preview.videoUrl}
                               src={preview.videoUrl}
                               poster={preview.imageUrl}
                               controls
                               autoPlay
                               loop
                               playsInline
+                              preload="auto"
                             />
                           </div>
                         ) : preview.imageUrl ? (
@@ -1533,7 +1541,9 @@ export default function CampaignDetailPage() {
                         ) : (
                           <p className="dash-muted">
                             {preview.kind === 'video'
-                              ? 'Playing your selected video format — recreate for another look.'
+                              ? preview.videoUrl
+                                ? 'Playing your selected video format — recreate for another look.'
+                                : 'Video still only — generate again for a playable clip.'
                               : 'Full preview — export, save, or recreate this look.'}
                           </p>
                         )}
@@ -1597,7 +1607,8 @@ export default function CampaignDetailPage() {
                                 muted
                                 loop
                                 playsInline
-                                preload="metadata"
+                                autoPlay={previewId === item.id}
+                                preload={previewId === item.id ? 'auto' : 'metadata'}
                               />
                             ) : item.imageUrl ? (
                               <img src={item.imageUrl} alt="" />
@@ -1606,6 +1617,13 @@ export default function CampaignDetailPage() {
                                 {item.label.slice(0, 1)}
                               </span>
                             )}
+                            {item.kind === 'video' ? (
+                              <span className="results-card-play" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                                  <path d="M8 5v14l11-7z" />
+                                </svg>
+                              </span>
+                            ) : null}
                             {item.kind === 'video' ? (
                               <span className="results-card-badge">Video</span>
                             ) : null}
