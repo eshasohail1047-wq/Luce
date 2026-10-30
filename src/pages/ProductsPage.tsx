@@ -136,19 +136,30 @@ export default function ProductsPage() {
   useEffect(() => {
     if (!user) return
     let cancelled = false
+    const safety = window.setTimeout(() => {
+      if (!cancelled) {
+        setListing(false)
+        setListError((prev) => prev ?? 'Products is taking longer than usual — retry in a moment.')
+      }
+    }, 18_000)
     ;(async () => {
       try {
         const rows = await listUserProducts(user.uid)
-        if (!cancelled) setProducts(rows)
+        if (!cancelled) {
+          setProducts(rows)
+          setListError(null)
+        }
       } catch (err) {
         console.error(err)
         if (!cancelled) setListError('Could not load products.')
       } finally {
+        window.clearTimeout(safety)
         if (!cancelled) setListing(false)
       }
     })()
     return () => {
       cancelled = true
+      window.clearTimeout(safety)
     }
   }, [user])
 

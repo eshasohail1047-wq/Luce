@@ -755,6 +755,22 @@ export type ProductSummary = {
   updatedAt?: Timestamp
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise.catch(() => fallback),
+    new Promise<T>((resolve) => {
+      setTimeout(() => resolve(fallback), ms)
+    }),
+  ])
+}
+
+function normalizeProductName(value: string | undefined): string {
+  return (value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+}
+
 export async function listUserProducts(userId: string): Promise<ProductSummary[]> {
   const campaigns = await listUserCampaigns(userId)
   const campaignsByProduct = new Map<string, CampaignDoc[]>()
@@ -769,28 +785,35 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
 
   try {
     const q = query(collection(requireDb(), 'products'), where('userId', '==', userId))
-    const snap = await Promise.race([
+    const snap = await withTimeout(
       getDocs(q),
-      new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('listUserProducts-timeout')), 12_000)
-      }),
-    ])
-    for (const d of snap.docs) {
-      const data = d.data()
-      const imageUrl = await healProductImageUrl(d.id, data)
-      byId.set(d.id, {
-        id: d.id,
-        name: String(data.name ?? 'Product'),
-        category: String(data.category ?? '').trim(),
-        brand: String(data.brand ?? '').trim() || undefined,
-        description: String(data.description ?? '').trim() || undefined,
-        sourceType: data.sourceType === 'url' ? 'url' : 'upload',
-        sourceUrl: data.sourceUrl ? String(data.sourceUrl) : undefined,
-        imageUrl,
-        imagePath: firstImagePath(data.imagePaths),
-        campaignCount: campaignsByProduct.get(d.id)?.length ?? 0,
-        updatedAt: data.updatedAt as Timestamp | undefined,
-      })
+      10_000,
+      null as Awaited<ReturnType<typeof getDocs>> | null,
+    )
+    if (snap) {
+      for (const d of snap.docs) {
+        const data = d.data()
+        // Fast path only — Storage heal can hang and was freezing Products on "Loading…".
+        const imageUrl = firstImageUrl(data.imageUrls)
+        byId.set(d.id, {
+          id: d.id,
+          name: String(data.name ?? 'Product'),
+          category: String(data.category ?? '').trim(),
+          brand: String(data.brand ?? '').trim() || undefined,
+          description: String(data.description ?? '').trim() || undefined,
+          sourceType: data.sourceType === 'url' ? 'url' : 'upload',
+          sourceUrl: data.sourceUrl ? String(data.sourceUrl) : undefined,
+          imageUrl,
+          imagePath: firstImagePath(data.imagePaths),
+          campaignCount: campaignsByProduct.get(d.id)?.length ?? 0,
+          updatedAt: data.updatedAt as Timestamp | undefined,
+        })
+        if (!imageUrl) {
+          void healProductImageUrl(d.id, data).then((healed) => {
+            if (healed) void stashProductImageSafe(d.id, healed)
+          })
+        }
+      }
     }
   } catch (err) {
     console.warn('[campaigns] listUserProducts cloud failed — deriving from projects', err)
@@ -823,30 +846,30 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
     })
   }
 
-  // Same cover pipeline as Projects: campaign stash / generated still / product CDN.
-  // Product docs often keep empty imageUrls even when Projects already show the photo.
+  // Same cover pipeline as Projects, but each resolve is time-boxed so the page
+  // cannot stay on "Loading…" if IndexedDB / Storage stalls.
   const coverByCampaignId = new Map<string, string>()
   const coverByProductId = new Map<string, string>()
   const coverByName = new Map<string, string>()
   await Promise.all(
     campaigns.map(async (campaign) => {
-      try {
-        const url = await resolveCampaignCover(campaign.id)
-        if (!url) return
-        coverByCampaignId.set(campaign.id, url)
-        const pid = campaign.productId?.trim()
-        if (pid && !coverByProductId.has(pid)) coverByProductId.set(pid, url)
-        const nameKey = normalizeProductName(campaign.productName || campaign.title)
-        if (nameKey && !coverByName.has(nameKey)) coverByName.set(nameKey, url)
-      } catch (err) {
-        console.warn('[campaigns] product cover resolve failed', campaign.id, err)
-      }
+      const url = await withTimeout(resolveCampaignCover(campaign.id), 2500, undefined)
+      if (!url) return
+      coverByCampaignId.set(campaign.id, url)
+      const pid = campaign.productId?.trim()
+      if (pid && !coverByProductId.has(pid)) coverByProductId.set(pid, url)
+      const nameKey = normalizeProductName(campaign.productName || campaign.title)
+      if (nameKey && !coverByName.has(nameKey)) coverByName.set(nameKey, url)
     }),
   )
 
   const rows = await Promise.all(
     [...byId.values()].map(async (product) => {
-      let imageUrl = await resolveProductImage(product.id, product.imageUrl)
+      let imageUrl = await withTimeout(
+        resolveProductImage(product.id, product.imageUrl),
+        2000,
+        product.imageUrl,
+      )
 
       if (!imageUrl) imageUrl = coverByProductId.get(product.id)
 
@@ -885,13 +908,6 @@ export async function listUserProducts(userId: string): Promise<ProductSummary[]
     const bTime = b.updatedAt?.toMillis?.() ?? 0
     return bTime - aTime
   })
-}
-
-function normalizeProductName(value: string | undefined): string {
-  return (value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
 }
 
 /** Load one product for Studio / Full Campaign reuse from Products CTAs. */
