@@ -7296,6 +7296,16 @@ html[data-theme='dark'] .studio-float-avatar {
     linear-gradient(180deg, #fbfcff 0%, #f3f5fb 48%, #eef2fa 100%);
 }
 
+.studio-stage-body:has(.dash-home) {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 22px 18px;
+}
+
+.studio-stage-body:has(.dash-home) > .dash-home {
+  flex: 1 1 auto;
+}
+
 .studio-stage-body:has(.dash-workspace-home) {
   overflow: auto;
   display: block;
@@ -7864,24 +7874,32 @@ html[data-theme='dark'] .studio-dash-topbar .studio-topbar-icon {
   color: var(--ink-soft);
 }
 
-/* Dashboard home — product-first start + showcase + recent */
+/* Dashboard home — create CTA + showcase (full stage, top-aligned) */
 .dash-home {
   position: relative;
   width: 100%;
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 10px 28px 40px;
-  display: grid;
-  gap: 28px;
+  max-width: none;
+  margin: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
   background: transparent;
 }
 
 .dash-home-hero {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   justify-items: center;
   text-align: center;
-  padding-top: 6px;
+  width: 100%;
+  max-width: none;
+  padding-top: 36px;
+  flex: 0 0 auto;
+  margin: 0 auto;
 }
 
 .dash-home-welcome {
@@ -8069,7 +8087,17 @@ html[data-theme='dark'] .studio-dash-topbar .studio-topbar-icon {
 }
 
 .dash-home .creative-showcase {
-  min-height: clamp(240px, 34vh, 340px);
+  flex: 1 1 auto;
+  width: 100%;
+  margin-top: auto;
+  min-height: clamp(280px, 42vh, 420px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.dash-home .creative-showcase-stage {
+  height: clamp(280px, 42vh, 420px);
 }
 
 .dash-home-recent {
