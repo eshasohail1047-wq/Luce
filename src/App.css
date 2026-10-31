@@ -2857,6 +2857,9 @@
 
 .hiw-head {
   margin-bottom: 8px;
+  text-align: center;
+  max-width: 40rem;
+  margin-inline: auto;
 }
 
 .hiw-head h2 {
@@ -2865,39 +2868,41 @@
 
 .hiw-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 72px;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 64px;
   align-items: start;
 }
 
 .hiw-sticky {
   position: sticky;
-  top: 120px;
+  top: 110px;
 }
 
 .hiw-viz-frame {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 10;
-  border-radius: 22px;
+  border-radius: 24px;
   overflow: hidden;
-  background: #ece8f3;
-  border: 1px solid rgba(20, 18, 28, 0.1);
-  box-shadow: 0 28px 64px rgba(40, 28, 80, 0.16);
+  background: #f4f2f8;
+  border: 1px solid rgba(20, 18, 28, 0.08);
+  box-shadow:
+    0 28px 60px rgba(55, 40, 100, 0.14),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
 }
 
 .hiw-viz-slot {
   position: absolute;
   inset: 0;
   opacity: 0;
-  transform: translateY(8px) scale(0.99);
-  transition: opacity 0.45s ease, transform 0.5s ease;
+  transform: scale(1.03);
+  transition: opacity 0.5s ease, transform 0.55s ease;
   pointer-events: none;
 }
 
 .hiw-viz-slot.is-active {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: scale(1);
 }
 
 .hiw-viz-media {
@@ -2907,31 +2912,30 @@
   height: 100%;
   object-fit: cover;
   object-position: left top;
-  background: #f3f1f7;
-}
-
-/* Real app screenshots � keep left sidebar + top chrome readable */
-.hiw-viz-media[src*='hiw-app-'] {
-  object-fit: cover;
-  object-position: left top;
-}
-
-.hiw-viz-media.light-cool {
-  filter: saturate(0.92) hue-rotate(18deg) brightness(1.05);
-  object-position: 55% 40%;
-}
-
-.hiw-viz-media.light-warm {
-  filter: saturate(1.08) brightness(1.04) contrast(1.04);
-  object-position: 40% 60%;
 }
 
 .hiw-viz-veil {
-  display: none;
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, transparent 48%, rgba(18, 12, 32, 0.28) 100%),
+    radial-gradient(circle at 82% 18%, rgba(109, 77, 255, 0.12), transparent 40%);
+  pointer-events: none;
 }
 
 .hiw-panel {
-  display: none;
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  width: min(58%, 250px);
+  display: grid;
+  gap: 6px;
+  padding: 14px 15px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+  color: var(--ink);
 }
 
 .hiw-panel-label {
@@ -2945,7 +2949,7 @@
 
 .hiw-panel strong {
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   letter-spacing: -0.02em;
   margin-bottom: 2px;
 }
@@ -3024,6 +3028,28 @@
   display: flex;
   justify-content: center;
   padding-top: 8px;
+}
+
+@media (max-width: 900px) {
+  .hiw-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .hiw-sticky {
+    position: relative;
+    top: auto;
+  }
+
+  .hiw-viz-frame {
+    aspect-ratio: 16 / 10;
+  }
+
+  .hiw-step {
+    min-height: 0;
+    padding: 20px 8px 28px 18px;
+    opacity: 1;
+  }
 }
 
 .workflow-list {
@@ -3640,14 +3666,6 @@
     opacity: 1 !important;
   }
 
-  .hiw-step {
-    min-height: 0;
-    opacity: 1;
-  }
-
-  .hiw-viz-slot {
-    transition: none;
-  }
 }
 
 /* ===== Video showcase (after hero) ===== */
@@ -16119,9 +16137,38 @@ html[data-theme='dark'] .site-demo-badge {
   min-height: 0;
   overflow: auto;
   background: var(--bg, #f6f4fa);
+  height: 100%;
 }
-.hiw-shot-main-real .app-main {
-  padding-top: 12px;
+.hiw-shot-main-real .app-main,
+.hiw-shot-main-real .dash-home {
+  padding: 18px 22px 28px;
+}
+.hiw-shot-home {
+  min-height: 100%;
+  gap: 28px;
+}
+.hiw-shot-home .dash-home-hero {
+  padding-top: 18px;
+}
+.hiw-shot-home-showcase {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: auto;
+}
+.hiw-shot-home-showcase img {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 18px;
+  border: 2px solid #141218;
+  box-shadow: 0 16px 36px rgba(20, 18, 28, 0.16);
+}
+.hiw-shot-home-showcase img:nth-child(2) {
+  transform: translateY(-18px) scale(1.04);
+}
+.hiw-shot-project-grid {
+  margin-top: 8px;
 }
 .hiw-shot-account {
   display: inline-flex;

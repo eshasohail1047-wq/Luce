@@ -1280,6 +1280,7 @@ export default function StudioPage({
         }
         const saved = saveLocalCampaign({
           id,
+          userId: user?.uid,
           title: `${displayName} — ${titleSuffix}`,
           status: 'product_confirmed',
           productName: displayName,

@@ -10,8 +10,10 @@ const browserPath =
   process.env.BROWSER_PATH ||
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 
-/** Only recapture results/saved — product + formats use real user screenshots. */
 const shots = [
+  { shot: 'home', file: 'hiw-app-home.jpg' },
+  { shot: 'product', file: 'hiw-app-product.jpg' },
+  { shot: 'formats', file: 'hiw-app-formats.jpg' },
   { shot: 'results', file: 'hiw-app-results.jpg' },
   { shot: 'saved', file: 'hiw-app-saved.jpg' },
 ]
@@ -33,7 +35,7 @@ try {
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60_000 })
     await page.waitForSelector(`[data-hiw-shot="${item.shot}"]`, { timeout: 20_000 })
     await page.waitForSelector('.hiw-shot-capture', { timeout: 20_000 })
-    await new Promise((r) => setTimeout(r, 1500))
+    await new Promise((r) => setTimeout(r, 1200))
     const el = await page.$('.hiw-shot-capture')
     if (!el) throw new Error('Missing .hiw-shot-capture')
     const buf = await el.screenshot({ type: 'jpeg', quality: 90 })

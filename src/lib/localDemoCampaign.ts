@@ -5,6 +5,8 @@ const PREFIX = 'luce.localCampaign.'
 
 export type LocalCampaign = {
   id: string
+  /** Firebase uid that owns this browser-local project. Required for multi-account isolation. */
+  userId?: string
   title: string
   status: string
   productName: string
@@ -125,6 +127,17 @@ export function listLocalCampaigns(): LocalCampaign[] {
   return [...byId.values()].sort(
     (a, b) => (b.createdAt || 0) - (a.createdAt || 0),
   )
+}
+
+/**
+ * Local projects for one Firebase user only.
+ * Legacy rows without `userId` are hidden so a new account on the same browser
+ * never inherits another user’s offline demo projects / product covers.
+ */
+export function listLocalCampaignsForUser(userId: string): LocalCampaign[] {
+  const uid = userId.trim()
+  if (!uid) return []
+  return listLocalCampaigns().filter((row) => row.userId?.trim() === uid)
 }
 
 const IMAGE_KEY = 'luce.campaignImage.'

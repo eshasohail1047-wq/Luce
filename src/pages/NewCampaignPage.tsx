@@ -678,6 +678,7 @@ export default function NewCampaignPage() {
     if (imageUrl) await stashCampaignImageSafe(id, imageUrl)
     const saved = saveLocalCampaign({
       id,
+      userId: user?.uid,
       title: `${displayName} campaign`,
       status: 'product_confirmed',
       productName: displayName,

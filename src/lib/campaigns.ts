@@ -37,7 +37,7 @@ import {
   deleteLocalCampaign,
   fileToDataUrl,
   isLocalCampaignId,
-  listLocalCampaigns,
+  listLocalCampaignsForUser,
   resolveCampaignCover,
   resolveProductImage,
   stashProductImageSafe,
@@ -728,7 +728,9 @@ export async function listUserCampaigns(userId: string): Promise<CampaignDoc[]> 
     console.warn('[campaigns] listUserCampaigns cloud failed — showing local only', err)
   }
 
-  const local = listLocalCampaigns().map((row) => localCampaignToDoc(row, userId))
+  const local = listLocalCampaignsForUser(userId).map((row) =>
+    localCampaignToDoc(row, userId),
+  )
   const byId = new Map<string, CampaignDoc>()
   // Cloud first; local overlays same id (demo ids never collide with Firestore).
   for (const row of cloud) byId.set(row.id, row)

@@ -105,27 +105,47 @@ const PRODUCT_LIGHTS = [
 const workflow = [
   {
     step: '01',
-    title: 'Add your product',
-    text: 'Paste a product URL or upload a clear product photo. LUCE locks that product as the source of truth for every creative.',
-    image: '/images/hiw-app-product.png',
+    title: 'Start from Home',
+    text: 'Upload a product photo or paste a URL, then choose Images, Videos, or Full Campaign — one clean start for every creative.',
+    image: '/images/hiw-real-home.png',
+    panel: {
+      label: 'Home',
+      title: 'Create your creatives',
+      lines: ['Upload product or paste URL', 'Images · Videos · Full Campaign'],
+    },
   },
   {
     step: '02',
-    title: 'Pick your formats',
-    text: 'Choose studio, daylight, editorial, flatlay, and more — set how many variants you want, then generate.',
-    image: '/images/hiw-app-formats.png',
+    title: 'Add your product',
+    text: 'Drop a packshot or switch to Product URL, then add name and brand. That product stays the source of truth for every shot.',
+    image: '/images/hiw-real-studio.png',
+    panel: {
+      label: 'Image Studio',
+      title: 'Product source',
+      lines: ['Photo or Product URL', 'Name · Brand · Notes'],
+    },
   },
   {
     step: '03',
-    title: 'Review generated creatives',
-    text: 'Preview every still or clip in your campaign pack. Keep packaging true while you refine the ones you love.',
-    image: '/images/hiw-app-results.jpg',
+    title: 'Pick formats & generate',
+    text: 'Choose studio, daylight, editorial, in-hand, flatlay, and more. Preview stays ready on the right while you build the pack.',
+    image: '/images/hiw-real-formats.png',
+    panel: {
+      label: 'Formats',
+      title: 'Style pack',
+      lines: ['Studio · Daylight · Editorial', 'In hand · Flatlay · Custom'],
+    },
   },
   {
     step: '04',
-    title: 'Export or save favorites',
-    text: 'Download any creative, or save keepers to Saved so your best images and videos stay one click away.',
-    image: '/images/hiw-app-saved.jpg',
+    title: 'Review in Projects & Saved',
+    text: 'Open Projects to manage generations, export keepers, and pin favorites to Saved so your best creatives stay one click away.',
+    image: '/images/hiw-app-results.jpg',
+    panel: {
+      label: 'Projects',
+      title: 'Keep the best',
+      lines: ['Review generations', 'Export · Pin to Saved'],
+    },
   },
 ]
 
@@ -541,20 +561,26 @@ function HowItWorks() {
         <Reveal className="section-head hiw-head">
           <p className="eyebrow">Workflow</p>
           <h2 id="workflow-title">How it works</h2>
-          <p>Add product → Choose formats → Generate → Export &amp; save</p>
+          <p>Home → Image Studio → formats → Projects</p>
         </Reveal>
 
         <div className="hiw-grid">
           <div className="hiw-sticky" aria-hidden="true">
             <div className="hiw-viz-frame">
               {workflow.map((item, i) => (
-                <div key={item.step} className={`hiw-viz-slot ${i === active ? 'is-active' : ''}`}>
-                  <img
-                    className="hiw-viz-media"
-                    src={item.image}
-                    alt=""
-                    loading={i === 0 ? 'eager' : 'lazy'}
-                  />
+                <div
+                  key={item.step}
+                  className={`hiw-viz-slot${i === active ? ' is-active' : ''}`}
+                >
+                  <img className="hiw-viz-media" src={item.image} alt="" />
+                  <div className="hiw-viz-veil" />
+                  <div className="hiw-panel">
+                    <p className="hiw-panel-label">{item.panel.label}</p>
+                    <strong>{item.panel.title}</strong>
+                    {item.panel.lines.map((line) => (
+                      <span key={line}>{line}</span>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -567,7 +593,7 @@ function HowItWorks() {
             {workflow.map((item, i) => (
               <div
                 key={item.step}
-                className={`hiw-step ${i === active ? 'is-active' : ''}`}
+                className={`hiw-step${i === active ? ' is-active' : ''}`}
                 ref={(el) => {
                   stepsRef.current[i] = el
                 }}
@@ -587,10 +613,10 @@ function HowItWorks() {
             onClick={(e) => {
               e.preventDefault()
               markTryFree()
-              goToApp('/app/studio/photos')
+              goToApp('/app')
             }}
           >
-            Try free images
+            Open Home and try it
             <span aria-hidden="true">→</span>
           </a>
         </div>
