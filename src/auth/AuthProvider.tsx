@@ -254,7 +254,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ;(async () => {
       try {
         const redirect = await getRedirectResult(auth)
-        if (redirect?.user) {
+        if (redirect?.user && active) {
+          // Apply session immediately so /login does not bounce before onAuthStateChanged.
+          setUser(redirect.user)
+          setLoading(false)
+          window.clearTimeout(safety)
           try {
             const created = await ensureUserDocument(redirect.user)
             if (!created.welcomeEmailSent) {
@@ -355,20 +359,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signInWithGoogle() {
         setError(null)
         const auth = requireAuth()
-        const preferRedirect =
-          typeof window !== 'undefined' &&
-          (window.location.hostname.endsWith('.vercel.app') ||
-            window.location.hostname === 'luce-landing.vercel.app')
-
-        // Production Vercel: redirect is more reliable than popups (blockers / 3P cookies).
-        if (preferRedirect) {
-          await signInWithRedirect(auth, googleProvider)
-          return
-        }
-
+        // Prefer popup everywhere. Redirect on Vercel often returns to /login without a
+        // session (browsers block cross-site auth storage for *.firebaseapp.com).
         try {
           const result = await signInWithPopup(auth, googleProvider)
+          setUser(result.user)
+          setLoading(false)
           await syncProfile(result.user)
+          try {
+            const settings = await loadUserSettings(result.user.uid)
+            setPlan(settings.plan)
+            setFreeImageUsed(settings.freeImageUsed)
+            setWorkspace(settings.workspace)
+          } catch (settingsErr) {
+            console.warn('[auth] settings load after Google sign-in failed', settingsErr)
+          }
         } catch (err) {
           const message = formatAuthError(err)
           setError(message)
@@ -376,7 +381,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             typeof err === 'object' && err && 'code' in err
               ? String((err as { code?: string }).code ?? '')
               : ''
-          if (code === 'auth/popup-blocked') {
+          // Last resort only — may still fail on strict browsers without auth proxy.
+          if (
+            code === 'auth/popup-blocked' ||
+            code === 'auth/cancelled-popup-request'
+          ) {
             await signInWithRedirect(auth, googleProvider)
             return
           }

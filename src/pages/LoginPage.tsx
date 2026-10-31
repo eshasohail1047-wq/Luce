@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import Logo from '../Logo'
 import ThemeToggle from '../components/ThemeToggle'
 import { useAuth } from '../auth/AuthProvider'
+import { requireAuth } from '../lib/firebase'
 import { resolvePostLoginPath } from '../lib/postLogin'
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'forgot-sent' | 'forgot-google'
@@ -125,7 +126,16 @@ export default function LoginPage() {
     clearError()
     try {
       await signInWithGoogle()
-      navigate(destination(), { replace: true })
+      // Popup path sets currentUser before returning. Redirect path unloads this page.
+      // Avoid racing into /app while React auth state is still null (bounces back here).
+      const started = Date.now()
+      while (Date.now() - started < 3000) {
+        if (requireAuth().currentUser) {
+          navigate(destination(), { replace: true })
+          return
+        }
+        await new Promise((r) => setTimeout(r, 40))
+      }
     } catch (err) {
       console.error('[login] google failed', err)
       setLocalError(

@@ -4,6 +4,10 @@
     "api/generate-videos.ts": { "maxDuration": 300 }
   },
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/__/auth/:path*",
+      "destination": "https://luce-ee1cb.firebaseapp.com/__/auth/:path*"
+    },
+    { "source": "/((?!api/|__/).*)", "destination": "/index.html" }
   ]
 }
