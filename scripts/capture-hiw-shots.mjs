@@ -11,11 +11,10 @@ const browserPath =
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
 
 const shots = [
-  { shot: 'home', file: 'hiw-app-home.jpg' },
-  { shot: 'product', file: 'hiw-app-product.jpg' },
-  { shot: 'formats', file: 'hiw-app-formats.jpg' },
+  { shot: 'home', file: 'hiw-real-home.png' },
+  { shot: 'product', file: 'hiw-real-studio.png' },
+  { shot: 'formats', file: 'hiw-real-formats.png' },
   { shot: 'results', file: 'hiw-app-results.jpg' },
-  { shot: 'saved', file: 'hiw-app-saved.jpg' },
 ]
 
 await mkdir(outDir, { recursive: true })
