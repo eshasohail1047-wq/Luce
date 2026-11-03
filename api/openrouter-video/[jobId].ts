@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { fetchOpenRouterVideoContent } from '../_lib/openRouter.js'
+import { clientIp, rateLimit } from '../_lib/rateLimit.js'
 
 export const config = {
   maxDuration: 60,
@@ -16,6 +17,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const jobId = Array.isArray(raw) ? raw[0] : raw
   if (!jobId || typeof jobId !== 'string') {
     return res.status(400).json({ error: 'jobId required' })
+  }
+
+  // <video src> can't send a bearer token; the unguessable job id is the capability, so just throttle per IP.
+  const limited = await rateLimit(`or-video:${clientIp(req)}`, 120, 3600)
+  if (!limited.ok) {
+    res.setHeader('Retry-After', String(limited.retryAfterSec))
+    return res.status(429).json({ error: 'Too many requests. Try again later.' })
   }
 
   try {

@@ -1,3 +1,5 @@
+import { requireIdToken } from './firebase'
+
 export type FetchedProductPage = {
   url: string
   title?: string
@@ -15,9 +17,13 @@ export type FetchedRemoteMedia = {
 export async function requestFetchProductPage(
   productUrl: string,
 ): Promise<FetchedProductPage> {
+  const token = await requireIdToken()
   const res = await fetch('/api/fetch-product', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({ url: productUrl.trim() }),
   })
   const data = (await res.json().catch(() => ({}))) as {
@@ -43,9 +49,13 @@ export async function requestFetchRemoteMedia(
   mediaUrl: string,
   prefer: 'image' | 'video' | 'any' = 'any',
 ): Promise<FetchedRemoteMedia> {
+  const token = await requireIdToken()
   const res = await fetch('/api/fetch-media', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({ url: mediaUrl.trim(), prefer }),
   })
   const data = (await res.json().catch(() => ({}))) as {

@@ -1,4 +1,8 @@
+import { safeFetch } from './safeFetch.js'
+
 const MAX_EDGE = 1280
+const MAX_FETCH_BYTES = 12 * 1024 * 1024
+const FETCH_TIMEOUT_MS = 15_000
 const JPEG_QUALITY = 82
 /** FLUX / BFL reject reference images smaller than 256×256 */
 const MIN_EDGE = 256
@@ -56,9 +60,19 @@ async function bufferFromImageUrl(url: string): Promise<Buffer | null> {
   }
   const fetchUrl = absoluteImageUrl(trimmed)
   if (/^https?:\/\//i.test(fetchUrl)) {
-    const res = await fetch(fetchUrl)
-    if (!res.ok) return null
-    return Buffer.from(await res.arrayBuffer())
+    try {
+      const res = await safeFetch(fetchUrl, {
+        maxBytes: MAX_FETCH_BYTES,
+        timeoutMs: FETCH_TIMEOUT_MS,
+      })
+      return res.body
+    } catch (err) {
+      console.warn(
+        '[prepare-image] reference fetch refused/failed',
+        err instanceof Error ? err.message : err,
+      )
+      return null
+    }
   }
   // Relative path with no APP_URL / VERCEL_URL — cannot fetch on the server
   console.warn(

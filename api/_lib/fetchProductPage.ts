@@ -1,4 +1,5 @@
 /** Fetch a product page and extract usable image URLs + basic metadata. */
+import { safeFetch, SafeFetchError } from './safeFetch.js'
 
 const MAX_HTML_BYTES = 1_800_000
 /** Cap gallery choices — product uploads only, not the whole page CDN. */
@@ -340,6 +341,58 @@ function collectFromShopifyProductJson(data: unknown, base: string, out: string[
   }
 }
 
+/** SSRF-safe GET with a minimal Response-like shape (non-2xx -> ok:false, blocked/timeout -> throws). */
+async function guardedGet(
+  url: string,
+  accept: string,
+  signal: AbortSignal,
+): Promise<{
+  ok: boolean
+  status: number
+  url: string
+  headers: { get(name: string): string | null }
+  arrayBuffer(): Promise<ArrayBuffer>
+  json(): Promise<unknown>
+}> {
+  if (signal.aborted) throw new SafeFetchError('Timed out', 'timeout')
+  try {
+    const r = await safeFetch(url, {
+      maxBytes: MAX_HTML_BYTES,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      headers: {
+        Accept: accept,
+        'User-Agent':
+          'Mozilla/5.0 (compatible; LUCEBot/1.0; +https://luce-landing.vercel.app)',
+      },
+    })
+    const body = r.body
+    return {
+      ok: true,
+      status: r.status,
+      url: r.url,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-type' ? r.contentType : null,
+      },
+      arrayBuffer: async () =>
+        body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+      json: async () => JSON.parse(body.toString('utf8')),
+    }
+  } catch (err) {
+    if (err instanceof SafeFetchError && err.code === 'status') {
+      return {
+        ok: false,
+        status: err.status ?? 502,
+        url,
+        headers: { get: () => null },
+        arrayBuffer: async () => new ArrayBuffer(0),
+        json: async () => ({}),
+      }
+    }
+    throw err
+  }
+}
+
 async function tryFetchShopifyProductJs(
   pageUrl: string,
   signal: AbortSignal,
@@ -347,16 +400,7 @@ async function tryFetchShopifyProductJs(
   const jsUrl = shopifyProductJsUrl(pageUrl)
   if (!jsUrl) return null
   try {
-    const res = await fetch(jsUrl, {
-      method: 'GET',
-      redirect: 'follow',
-      signal,
-      headers: {
-        Accept: 'application/json,text/javascript,*/*;q=0.8',
-        'User-Agent':
-          'Mozilla/5.0 (compatible; LUCEBot/1.0; +https://luce-landing.vercel.app)',
-      },
-    })
+    const res = await guardedGet(jsUrl, 'application/json,text/javascript,*/*;q=0.8', signal)
     if (!res.ok) return null
     const data = (await res.json()) as Record<string, unknown>
     const images: string[] = []
@@ -404,16 +448,11 @@ export async function fetchProductPage(
     // Shopify: product.js is the uploaded gallery — prefer it exclusively
     const shopify = await tryFetchShopifyProductJs(trimmed, controller.signal)
 
-    const res = await fetch(trimmed, {
-      method: 'GET',
-      redirect: 'follow',
-      signal: controller.signal,
-      headers: {
-        Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
-        'User-Agent':
-          'Mozilla/5.0 (compatible; LUCEBot/1.0; +https://luce-landing.vercel.app)',
-      },
-    })
+    const res = await guardedGet(
+      trimmed,
+      'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+      controller.signal,
+    )
     if (!res.ok && !shopify) {
       return {
         ok: false,
@@ -546,6 +585,16 @@ export async function fetchProductPage(
       },
     }
   } catch (err) {
+    if (err instanceof SafeFetchError) {
+      switch (err.code) {
+        case 'blocked':
+          return { ok: false, error: 'That URL is not allowed.', status: 400 }
+        case 'too_large':
+          return { ok: false, error: 'That page is too large to read.', status: 413 }
+        case 'timeout':
+          return { ok: false, error: 'Timed out loading that product page.', status: 504 }
+      }
+    }
     const aborted =
       err instanceof Error &&
       (err.name === 'AbortError' || /aborted/i.test(err.message))

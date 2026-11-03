@@ -1,5 +1,7 @@
 /** Download a remote image/video into a data URL for client use (CORS-safe). */
 
+import { safeFetch, SafeFetchError } from './safeFetch.js'
+
 const FETCH_TIMEOUT_MS = 20_000
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024
 const MAX_VIDEO_BYTES = 40 * 1024 * 1024
@@ -43,29 +45,19 @@ export async function fetchRemoteMedia(
     return { ok: false, error: 'Enter a valid http(s) media URL.', status: 400 }
   }
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-
   try {
-    const res = await fetch(trimmed, {
-      method: 'GET',
-      redirect: 'follow',
-      signal: controller.signal,
+    // Fetch with the largest cap; per-kind limit is enforced once we know the type.
+    const res = await safeFetch(trimmed, {
+      maxBytes: MAX_VIDEO_BYTES,
+      timeoutMs: FETCH_TIMEOUT_MS,
       headers: {
         Accept: 'image/*,video/*,*/*;q=0.8',
         'User-Agent':
           'Mozilla/5.0 (compatible; LUCEBot/1.0; +https://luce-landing.vercel.app)',
       },
     })
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: `Could not download media (${res.status}).`,
-        status: 502,
-      }
-    }
 
-    const contentType = (res.headers.get('content-type') || 'application/octet-stream')
+    const contentType = (res.contentType || 'application/octet-stream')
       .split(';')[0]!
       .trim()
     const kind = sniffKind(contentType, res.url || trimmed)
@@ -84,19 +76,7 @@ export async function fetchRemoteMedia(
     }
 
     const max = kind === 'video' ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES
-    const lenHeader = Number(res.headers.get('content-length') || 0)
-    if (lenHeader > max) {
-      return {
-        ok: false,
-        error:
-          kind === 'video'
-            ? 'Reference video must be under 40MB.'
-            : 'Reference image must be under 12MB.',
-        status: 413,
-      }
-    }
-
-    const buf = Buffer.from(await res.arrayBuffer())
+    const buf = res.body
     if (buf.byteLength > max) {
       return {
         ok: false,
@@ -128,17 +108,22 @@ export async function fetchRemoteMedia(
       },
     }
   } catch (err) {
-    const aborted =
-      err instanceof Error &&
-      (err.name === 'AbortError' || /aborted/i.test(err.message))
-    return {
-      ok: false,
-      error: aborted
-        ? 'Timed out downloading that media URL.'
-        : 'Could not download that media URL.',
-      status: aborted ? 504 : 502,
+    if (err instanceof SafeFetchError) {
+      switch (err.code) {
+        case 'blocked':
+          return { ok: false, error: 'That media URL is not allowed.', status: 400 }
+        case 'too_large':
+          return { ok: false, error: 'That media file is too large.', status: 413 }
+        case 'timeout':
+          return { ok: false, error: 'Timed out downloading that media URL.', status: 504 }
+        case 'status':
+          return {
+            ok: false,
+            error: `Could not download media (${err.status}).`,
+            status: 502,
+          }
+      }
     }
-  } finally {
-    clearTimeout(timer)
+    return { ok: false, error: 'Could not download that media URL.', status: 502 }
   }
 }
