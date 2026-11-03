@@ -37,6 +37,7 @@ import {
 } from '../lib/userSettings'
 import { normalizeUserPlan } from '../lib/plans'
 import { resetPostLoginCache } from '../lib/postLogin'
+import { clearLocalWorkspaceCache } from '../lib/localWorkspaceCache'
 import { sendTransactionalEmail } from '../lib/transactionalEmail'
 
 export type { UserPlan } from '../lib/userSettings'
@@ -505,6 +506,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async signOut() {
         setError(null)
         resetPostLoginCache()
+        clearLocalWorkspaceCache()
         await firebaseSignOut(requireAuth())
       },
     }),
