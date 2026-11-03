@@ -1,7 +1,8 @@
 /** Fetch a product page and extract usable image URLs + basic metadata. */
 
 const MAX_HTML_BYTES = 1_800_000
-const MAX_IMAGES = 16
+/** Cap gallery choices — product uploads only, not the whole page CDN. */
+const MAX_IMAGES = 8
 const FETCH_TIMEOUT_MS = 14_000
 
 export type FetchedProductPage = {
@@ -59,10 +60,17 @@ function titleFromHtml(html: string): string | undefined {
 
 function isLikelyJunkImage(url: string): boolean {
   const u = url.toLowerCase()
+  // Tiny Shopify size variants are UI thumbs, not gallery masters
+  if (/_(?:pico|icon|thumb|small|compact|50x|60x|80x|100x|160x)(?=\.|_|\?|$)/i.test(u)) {
+    return true
+  }
   return (
     u.startsWith('data:') ||
+    u.endsWith('.svg') ||
+    u.includes('.svg?') ||
     u.includes('sprite') ||
     u.includes('/icon') ||
+    u.includes('icons/') ||
     u.includes('favicon') ||
     u.includes('logo') ||
     u.includes('1x1') ||
@@ -72,7 +80,55 @@ function isLikelyJunkImage(url: string): boolean {
     u.includes('spacer') ||
     u.includes('payment') ||
     u.includes('badge') ||
-    u.includes('avatar')
+    u.includes('avatar') ||
+    u.includes('whatsapp') ||
+    u.includes('telegram') ||
+    u.includes('facebook') ||
+    u.includes('fb-') ||
+    u.includes('twitter') ||
+    u.includes('instagram') ||
+    u.includes('pinterest') ||
+    u.includes('tiktok') ||
+    u.includes('youtube') ||
+    u.includes('social') ||
+    u.includes('share-') ||
+    u.includes('/share/') ||
+    u.includes('newsletter') ||
+    u.includes('emoji') ||
+    u.includes('spinner') ||
+    u.includes('loading') ||
+    u.includes('lazyload') ||
+    u.includes('arrow') ||
+    u.includes('chevron') ||
+    u.includes('caret') ||
+    u.includes('close-') ||
+    u.includes('cart') ||
+    u.includes('wishlist') ||
+    u.includes('star-') ||
+    u.includes('rating') ||
+    u.includes('review') ||
+    u.includes('flag') ||
+    u.includes('banner') ||
+    u.includes('hero-bg') ||
+    u.includes('background') ||
+    u.includes('/theme/') ||
+    u.includes('/assets/share') ||
+    u.includes('gift-card') ||
+    u.includes('swatch')
+  )
+}
+
+/** Prefer CDN paths that look like product media, not theme chrome. */
+function isLikelyProductMediaPath(url: string): boolean {
+  const u = url.toLowerCase()
+  if (isLikelyJunkImage(u)) return false
+  return (
+    /\/products?\//i.test(u) ||
+    /\/files\//i.test(u) ||
+    /\/product[_-]?images?\//i.test(u) ||
+    /cdn\.shopify\.com\/s\/files\//i.test(u) ||
+    /\/media\/catalog\/product\//i.test(u) ||
+    /\/wp-content\/uploads\//i.test(u)
   )
 }
 
@@ -125,7 +181,8 @@ function walkJsonLd(node: unknown, base: string, out: string[]) {
   }
   if (typeof node !== 'object') return
   const obj = node as Record<string, unknown>
-  for (const key of ['image', 'thumbnailUrl', 'contentUrl', 'logo', 'photo']) {
+  // Skip brand logos / unrelated thumbnails — product `image` only
+  for (const key of ['image', 'photo', 'contentUrl']) {
     if (key in obj) walkJsonLd(obj[key], base, out)
   }
   if (Array.isArray(obj['@graph'])) walkJsonLd(obj['@graph'], base, out)
@@ -344,7 +401,7 @@ export async function fetchProductPage(
       }
     }
 
-    // Shopify: product.js usually has the full media gallery
+    // Shopify: product.js is the uploaded gallery — prefer it exclusively
     const shopify = await tryFetchShopifyProductJs(trimmed, controller.signal)
 
     const res = await fetch(trimmed, {
@@ -370,11 +427,36 @@ export async function fetchProductPage(
     let title: string | undefined = shopify?.title
     let description: string | undefined
 
+    // When Shopify product media exists, do NOT scrape page chrome (icons, banners, WhatsApp, etc.)
     if (shopify?.images.length) {
-      images.push(...shopify.images)
-    }
-
-    if (res.ok) {
+      images.push(...shopify.images.filter((u) => !isLikelyJunkImage(u)))
+      if (res.ok) {
+        try {
+          const contentType = (res.headers.get('content-type') || '').toLowerCase()
+          if (
+            contentType.includes('text/html') ||
+            contentType.includes('application/xhtml') ||
+            !contentType
+          ) {
+            const buf = Buffer.from(await res.arrayBuffer())
+            if (buf.byteLength <= MAX_HTML_BYTES) {
+              const html = buf.toString('utf8')
+              title =
+                title ||
+                metaContent(html, 'og:title') ||
+                metaContent(html, 'twitter:title') ||
+                titleFromHtml(html)
+              description =
+                metaContent(html, 'og:description') ||
+                metaContent(html, 'description') ||
+                metaContent(html, 'twitter:description')
+            }
+          }
+        } catch {
+          /* title/description optional */
+        }
+      }
+    } else if (res.ok) {
       const contentType = (res.headers.get('content-type') || '').toLowerCase()
       if (contentType.startsWith('image/')) {
         images.unshift(res.url || trimmed)
@@ -387,6 +469,9 @@ export async function fetchProductPage(
         const buf = Buffer.from(await res.arrayBuffer())
         if (buf.byteLength <= MAX_HTML_BYTES) {
           const html = buf.toString('utf8')
+          const structured: string[] = []
+          const loose: string[] = []
+
           for (const key of [
             'og:image',
             'og:image:url',
@@ -397,13 +482,32 @@ export async function fetchProductPage(
             const v = metaContent(html, key)
             if (v) {
               const abs = absolutize(finalUrl, v)
-              if (abs && !isLikelyJunkImage(abs)) images.push(abs)
+              if (abs && !isLikelyJunkImage(abs)) structured.push(abs)
             }
           }
-          collectJsonLdImages(html, finalUrl, images)
-          collectJsonScriptImages(html, finalUrl, images)
-          collectShopifyCdnUrls(html, images)
-          collectImgTags(html, finalUrl, images)
+          collectJsonLdImages(html, finalUrl, structured)
+          collectJsonScriptImages(html, finalUrl, structured)
+
+          // Raw <img> / CDN sweep only as fallback, and only product-looking paths
+          const rawImgs: string[] = []
+          collectShopifyCdnUrls(html, rawImgs)
+          collectImgTags(html, finalUrl, rawImgs)
+          for (const u of rawImgs) {
+            if (isLikelyProductMediaPath(u)) loose.push(u)
+          }
+
+          if (structured.length) {
+            images.push(...structured)
+            // Add a few extra gallery files that match product media paths
+            for (const u of loose) {
+              if (!structured.some((s) => imageDedupeKey(s) === imageDedupeKey(u))) {
+                images.push(u)
+              }
+            }
+          } else {
+            images.push(...loose)
+          }
+
           title =
             title ||
             metaContent(html, 'og:title') ||
@@ -414,7 +518,7 @@ export async function fetchProductPage(
             metaContent(html, 'description') ||
             metaContent(html, 'twitter:description')
         }
-      } else if (!shopify) {
+      } else {
         return {
           ok: false,
           error: 'That URL is not a product page we can read.',
@@ -423,7 +527,7 @@ export async function fetchProductPage(
       }
     }
 
-    const unique = uniqueKeepOrder(images)
+    const unique = uniqueKeepOrder(images.filter((u) => !isLikelyJunkImage(u)))
     if (!unique.length) {
       return {
         ok: false,
