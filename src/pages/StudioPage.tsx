@@ -162,7 +162,13 @@ export default function StudioPage({
   const [stageCampaignId, setStageCampaignId] = useState<string | null>(null)
   const [activeOutputId, setActiveOutputId] = useState<string | null>(null)
   const isRecreate = Boolean(recreate) || searchParams.get('recreate') === '1'
-  const isSplitStudio = kind === 'photos' || kind === 'videos'
+  /** Image/Video Studio: keep a single-column form until a product image exists, then reveal the stage. */
+  const supportsSplitStudio = kind === 'photos' || kind === 'videos'
+  const showStagePanel =
+    Boolean(previewUrl) ||
+    stageOutputs.length > 0 ||
+    (stagePhase !== 'idle' && stagePhase !== 'error')
+  const isSplitStudio = supportsSplitStudio && showStagePanel
   const limits = getPlanLimits(plan)
   const photoTotalMax = Math.max(1, limits.maxImages)
   const videoTotalMax =

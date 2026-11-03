@@ -5788,6 +5788,12 @@
   gap: 20px;
 }
 
+.app-main.campaign-create.studio-page:not(.studio-page-split) {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+}
+
 .create-banner {
   display: grid;
   grid-template-columns: 1.15fr 0.85fr;
@@ -7354,10 +7360,11 @@ html[data-theme='dark'] .studio-stage-body:has(.settings-page) {
 
 .studio-page.app-main,
 .app-main.studio-page {
-  max-width: 760px;
+  max-width: none;
   margin: 0;
-  padding: 20px 22px 48px;
+  padding: 18px 22px 48px;
   width: 100%;
+  box-sizing: border-box;
   display: grid;
   gap: 14px;
 }
@@ -11170,11 +11177,19 @@ html[data-theme='dark'] .settings-toggle {
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.08);
 }
 
-/* Studio + campaign create — focused create tool */
+/* Studio create — full stage width until product unlocks the split preview */
 .app-main.studio-page {
-  max-width: 920px;
-  padding: 22px 28px 64px;
+  max-width: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 18px 22px 48px;
   gap: 18px;
+}
+
+.app-main.studio-page:not(.studio-page-split) > .studio-panel {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
 }
 
 .app-main.studio-page.studio-page-split {
@@ -11197,6 +11212,16 @@ html[data-theme='dark'] .settings-toggle {
     radial-gradient(ellipse 50% 40% at 0% 0%, rgba(130, 175, 255, 0.1), transparent 55%),
     radial-gradient(ellipse 45% 35% at 100% 100%, rgba(230, 170, 200, 0.08), transparent 50%),
     linear-gradient(165deg, #f6f7fa 0%, #eef0f4 55%, #f3f4f7 100%);
+  animation: studio-split-reveal 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes studio-split-reveal {
+  from {
+    opacity: 0.88;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .studio-split-controls {
@@ -11333,6 +11358,26 @@ html[data-theme='dark'] .settings-toggle {
     radial-gradient(ellipse 70% 45% at 80% 0%, rgba(130, 175, 255, 0.16), transparent 55%),
     radial-gradient(ellipse 55% 40% at 10% 100%, rgba(232, 160, 200, 0.12), transparent 50%),
     linear-gradient(165deg, #eef0f5 0%, #f4f5f8 55%, #e9ebf0 100%);
+  animation: studio-stage-pop 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: right center;
+}
+
+@keyframes studio-stage-pop {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-split,
+  .studio-stage-panel {
+    animation: none;
+  }
 }
 
 .studio-stage-status {
