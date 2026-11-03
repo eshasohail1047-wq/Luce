@@ -4,12 +4,13 @@ import { gateVideos } from './_lib/planGate.js'
 import { rateLimit } from './_lib/rateLimit.js'
 import {
   generateCampaignVideos,
+  startCampaignVideoJob,
   VIDEO_ASSET_KINDS,
   type VideoAssetKind,
 } from './_lib/generateVideos.js'
 
 export const config = {
-  maxDuration: 300,
+  maxDuration: 120,
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -78,7 +79,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       : undefined
 
-  const result = await generateCampaignVideos({
+  const wantsAsync = body.async === true
+  if (wantsAsync && uniqueAssets.length !== 1) {
+    return res.status(400).json({ error: 'Async mode takes exactly one video format.' })
+  }
+  const runVideos = wantsAsync ? startCampaignVideoJob : generateCampaignVideos
+  const result = await runVideos({
     productName: String(body.productName ?? ''),
     productImage:
       typeof body.productImage === 'string' ? body.productImage : undefined,

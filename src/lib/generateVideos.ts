@@ -49,9 +49,68 @@ export type GenerateVideosResponse = {
   partialErrors?: { type: VideoAssetKind; error: string }[]
 }
 
+const VIDEO_POLL_INTERVAL_MS = 6_000
+const VIDEO_POLL_TIMEOUT_MS = 12 * 60_000
+
+type VideoApiBody = {
+  ok?: boolean
+  error?: string
+  needsPaywall?: boolean
+  sync?: boolean
+  pending?: boolean
+  jobId?: string
+  type?: VideoAssetKind
+  label?: string
+  promptUsed?: string
+  assets?: GeneratedVideoAsset[]
+  partialErrors?: { type: VideoAssetKind; error: string }[]
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+async function pollVideoJobUntilDone(jobId: string, token: string): Promise<string> {
+  const deadline = Date.now() + VIDEO_POLL_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    await sleep(VIDEO_POLL_INTERVAL_MS)
+    const res = await fetch(`/api/video-status?jobId=${encodeURIComponent(jobId)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const data = (await res.json().catch(() => ({}))) as {
+      status?: string
+      videoUrl?: string
+      error?: string
+    }
+    if (res.status === 429) continue
+    if (!res.ok) throw new Error(data.error || `Video status check failed (${res.status})`)
+    if (data.status === 'completed' && data.videoUrl) return data.videoUrl
+    if (data.status === 'failed') throw new Error(data.error || 'Video generation failed')
+  }
+  throw new Error('Video generation timed out. Try again.')
+}
+
+async function postGenerateVideos(
+  token: string,
+  payload: Record<string, unknown>,
+): Promise<{ res: Response; data: VideoApiBody }> {
+  const res = await fetch('/api/generate-videos', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  })
+  const data = (await res.json().catch(() => ({}))) as VideoApiBody
+  return { res, data }
+}
+
 /**
- * Authenticated POST to /api/generate-videos (OpenRouter async video).
- * Prefer calling with 1 asset at a time so the UI can show progress.
+ * Authenticated video generation. Each format is started as an async job
+ * (/api/generate-videos with async:true) and polled via /api/video-status, so no
+ * request has to survive the serverless time limit. Falls back to the old
+ * synchronous call when the server uses direct HeyGen.
  */
 export async function requestGenerateVideos(
   input: GenerateVideosRequest,
@@ -66,44 +125,85 @@ export async function requestGenerateVideos(
     ? await compressImageDataUrl(input.referenceFrameImage, 1024, 0.8)
     : input.referenceFrameImage
 
-  const res = await fetch('/api/generate-videos', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      productName: input.productName,
-      productImage,
-      referenceFrameImage,
-      creativeDirection: input.creativeDirection,
-      assets: input.assets,
-      recreateNote: input.recreateNote,
-      durationSeconds: input.durationSeconds,
-    }),
-  })
-
-  const data = (await res.json().catch(() => ({}))) as {
-    ok?: boolean
-    error?: string
-    assets?: GeneratedVideoAsset[]
-    partialErrors?: { type: VideoAssetKind; error: string }[]
+  const base = {
+    productName: input.productName,
+    productImage,
+    referenceFrameImage,
+    creativeDirection: input.creativeDirection,
+    recreateNote: input.recreateNote,
+    durationSeconds: input.durationSeconds,
   }
 
-  if (!res.ok || !data.ok || !Array.isArray(data.assets)) {
-    if (res.status === 503) {
-      throw new Error(
-        data.error ||
-          'Video AI is not configured. Set HEYGEN_API_KEY and/or OPENROUTER_API_KEY.',
-      )
+  const assets: GeneratedVideoAsset[] = []
+  const partialErrors: { type: VideoAssetKind; error: string }[] = []
+  let lastError: Error | null = null
+
+  for (let i = 0; i < input.assets.length; i++) {
+    const type = input.assets[i]!
+    const { res, data } = await postGenerateVideos(token, {
+      ...base,
+      assets: [type],
+      async: true,
+    })
+
+    if (res.status === 409 && data.sync) {
+      // Direct HeyGen: no resumable job — use the synchronous route for the rest.
+      const sync = await postGenerateVideos(token, {
+        ...base,
+        assets: input.assets.slice(i),
+      })
+      if (!sync.res.ok || !sync.data.ok || !Array.isArray(sync.data.assets)) {
+        throw new Error(
+          sync.data.error || `Video generation failed (${sync.res.status})`,
+        )
+      }
+      assets.push(...sync.data.assets)
+      if (sync.data.partialErrors?.length) partialErrors.push(...sync.data.partialErrors)
+      break
     }
-    throw new Error(data.error || `Video generation failed (${res.status})`)
+
+    // Server answered synchronously (e.g. the Vite dev middleware ignores `async`).
+    if (res.ok && data.ok && !data.pending && Array.isArray(data.assets)) {
+      assets.push(...data.assets)
+      if (data.partialErrors?.length) partialErrors.push(...data.partialErrors)
+      continue
+    }
+
+    if (!res.ok || !data.ok || !data.pending || !data.jobId) {
+      const message =
+        res.status === 503
+          ? data.error ||
+            'Video AI is not configured. Set HEYGEN_API_KEY and/or OPENROUTER_API_KEY.'
+          : data.error || `Video generation failed (${res.status})`
+      // Auth / plan / quota / config errors apply to every format — stop now.
+      if ([401, 402, 429, 503].includes(res.status)) throw new Error(message)
+      lastError = new Error(message)
+      partialErrors.push({ type, error: message })
+      continue
+    }
+
+    try {
+      const videoUrl = await pollVideoJobUntilDone(data.jobId, token)
+      assets.push({
+        type,
+        label: data.label || String(type),
+        videoUrl,
+        videoDataUrl: videoUrl,
+        promptUsed: data.promptUsed,
+      })
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error('Video generation failed')
+      partialErrors.push({ type, error: lastError.message })
+    }
   }
 
+  if (assets.length === 0) {
+    throw lastError ?? new Error('Video generation failed')
+  }
   return {
     ok: true,
-    assets: data.assets,
-    ...(data.partialErrors?.length ? { partialErrors: data.partialErrors } : {}),
+    assets,
+    ...(partialErrors.length ? { partialErrors } : {}),
   }
 }
 

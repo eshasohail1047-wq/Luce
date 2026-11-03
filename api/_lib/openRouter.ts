@@ -300,14 +300,12 @@ function clampHeyGenDuration(raw: number | undefined): number {
   return best
 }
 
-/**
- * Submit + poll OpenRouter video generation.
- * Returns a playable HTTPS URL when OpenRouter provides one (preferred),
- * otherwise downloads and returns a data URL.
- */
-export async function generateVideo(
+export type SubmittedVideoJob = { jobId: string; pollUrl: string; model: string }
+
+/** Submit an OpenRouter video job and return immediately (no polling). */
+export async function submitVideoJob(
   input: GenerateVideoInput,
-): Promise<GenerateVideoResult> {
+): Promise<SubmittedVideoJob> {
   const apiKey = getOpenRouterApiKey()
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is not configured')
@@ -386,6 +384,51 @@ export async function generateVideo(
   const pollUrl =
     submitJson.polling_url || `${OPENROUTER_VIDEOS_URL}/${jobId}`
   console.info(`[openrouter-video] job ${jobId} polling…`)
+  return { jobId, pollUrl, model }
+}
+
+export type VideoJobPoll =
+  | { status: 'pending' }
+  | { status: 'completed' }
+  | { status: 'failed'; error: string }
+
+/** One poll of an OpenRouter video job (stateless — safe to call from a status endpoint). */
+export async function pollVideoJob(jobId: string): Promise<VideoJobPoll> {
+  const apiKey = getOpenRouterApiKey()
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY is not configured')
+  const id = jobId.trim()
+  if (!/^gen-vid-[\w-]+$/i.test(id)) throw new Error('Invalid OpenRouter video job id')
+  const pollRes = await fetch(`${OPENROUTER_VIDEOS_URL}/${id}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  })
+  const pollJson = (await pollRes.json().catch(() => null)) as {
+    status?: string
+    error?: string | { message?: string }
+  } | null
+  const status = pollJson?.status || ''
+  if (status === 'completed') return { status: 'completed' }
+  if (status === 'failed' || status === 'cancelled' || status === 'expired') {
+    const error =
+      typeof pollJson?.error === 'string'
+        ? pollJson.error
+        : pollJson?.error && typeof pollJson.error === 'object' && typeof pollJson.error.message === 'string'
+          ? pollJson.error.message
+          : `Video generation ${status}`
+    return { status: 'failed', error }
+  }
+  return { status: 'pending' }
+}
+
+/**
+ * Submit + poll OpenRouter video generation.
+ * Returns a playable HTTPS URL when OpenRouter provides one (preferred),
+ * otherwise downloads and returns a data URL.
+ */
+export async function generateVideo(
+  input: GenerateVideoInput,
+): Promise<GenerateVideoResult> {
+  const { jobId, pollUrl, model } = await submitVideoJob(input)
+  const apiKey = getOpenRouterApiKey()!
 
   let completed: {
     status?: string

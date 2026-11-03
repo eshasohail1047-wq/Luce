@@ -5,7 +5,7 @@ import {
   renderVideoKeyframePrompt,
   renderVideoMotionPrompt,
 } from './luceGeneration.js'
-import { generateVideo, getOpenRouterApiKey } from './openRouter.js'
+import { generateVideo, getOpenRouterApiKey, submitVideoJob } from './openRouter.js'
 import { prepareFrameImage } from './prepareImage.js'
 import { getAiProviderStatus } from './providers.js'
 
@@ -382,6 +382,65 @@ async function composeFormatKeyframe(input: {
   return still.imageDataUrl
 }
 
+type PreparedVideo = {
+  firstFrame: string
+  duration: number
+  promptUsed: string
+}
+
+/** Keyframe (person-led formats) + motion prompt + duration for one format. */
+async function prepareVideoInputs(
+  type: VideoAssetKind,
+  ctx: {
+    productName: string
+    productImage: string
+    referenceFrame?: string
+    input: GenerateVideosInput
+  },
+): Promise<PreparedVideo> {
+  const { productName, productImage, referenceFrame, input } = ctx
+  const personLed = PERSON_LED_FORMATS.has(type)
+  let firstFrame = productImage
+  // Only person-on-camera formats need a composed keyframe. Product-led
+  // formats (cinematic / spin / ASMR / flatlay) animate the product photo
+  // directly — faster and fewer failure points for large uploads.
+  if (personLed) {
+    console.info(`[generate-videos] ${type}: composing person+product keyframe`)
+    try {
+      firstFrame = await composeFormatKeyframe({
+        type,
+        productName,
+        productImage,
+        referenceFrame,
+        creativeDirection: input.creativeDirection,
+      })
+      firstFrame = await prepareFrameImage(firstFrame)
+    } catch (keyErr) {
+      console.warn(
+        `[generate-videos] ${type}: keyframe failed, falling back to product still`,
+        keyErr instanceof Error ? keyErr.message : keyErr,
+      )
+      firstFrame = productImage
+    }
+  } else {
+    console.info(`[generate-videos] ${type}: using product photo as first frame`)
+  }
+
+  const duration = clampDurationSeconds(
+    input.durationSeconds,
+    personLed || type === 'video_howto_demo' ? 8 : 5,
+  )
+  const promptUsed = buildMotionPrompt(
+    type,
+    productName,
+    input.creativeDirection,
+    input.recreateNote,
+    personLed,
+    duration,
+  )
+  return { firstFrame, duration, promptUsed }
+}
+
 export async function generateCampaignVideos(
   input: GenerateVideosInput,
 ): Promise<GenerateVideosResult> {
@@ -438,51 +497,13 @@ export async function generateCampaignVideos(
 
   // Sequential — person formats: keyframe → video; product formats: photo → video
   for (const type of assets) {
-    const personLed = PERSON_LED_FORMATS.has(type)
     try {
-      let firstFrame = productImage
-      // Only person-on-camera formats need a composed keyframe. Product-led
-      // formats (cinematic / spin / ASMR / flatlay) animate the product photo
-      // directly — faster and fewer failure points for large uploads.
-      if (personLed) {
-        console.info(
-          `[generate-videos] ${type}: composing person+product keyframe`,
-        )
-        try {
-          firstFrame = await composeFormatKeyframe({
-            type,
-            productName,
-            productImage,
-            referenceFrame,
-            creativeDirection: input.creativeDirection,
-          })
-          firstFrame = await prepareFrameImage(firstFrame)
-        } catch (keyErr) {
-          console.warn(
-            `[generate-videos] ${type}: keyframe failed, falling back to product still`,
-            keyErr instanceof Error ? keyErr.message : keyErr,
-          )
-          firstFrame = productImage
-        }
-      } else {
-        console.info(
-          `[generate-videos] ${type}: using product photo as first frame`,
-        )
-      }
-
-      const duration = clampDurationSeconds(
-        input.durationSeconds,
-        personLed || type === 'video_howto_demo' ? 8 : 5,
-      )
-
-      const promptUsed = buildMotionPrompt(
-        type,
+      const { firstFrame, duration, promptUsed } = await prepareVideoInputs(type, {
         productName,
-        input.creativeDirection,
-        input.recreateNote,
-        personLed,
-        duration,
-      )
+        productImage,
+        referenceFrame,
+        input,
+      })
 
       // Format → explicit model params (LUCE §4 / §13 — never let the model guess)
       const result = await generateVideoWithProviders({
@@ -534,6 +555,92 @@ export async function generateCampaignVideos(
       ok: true,
       assets: generated,
       ...(partialErrors.length ? { partialErrors } : {}),
+    },
+  }
+}
+
+export type StartVideoJobResult =
+  | {
+      status: 202
+      body: {
+        ok: true
+        pending: true
+        jobId: string
+        type: VideoAssetKind
+        label: string
+        promptUsed: string
+      }
+    }
+  /** Direct HeyGen is configured: no resumable job id, caller should use the sync route. */
+  | { status: 409; body: { error: string; sync: true } }
+  | { status: number; body: { ok?: false; error: string } }
+
+/**
+ * Async start for ONE format: compose keyframe, submit to OpenRouter, return the job id.
+ * The browser then polls /api/video-status, so no single request has to outlive the
+ * serverless time limit.
+ */
+export async function startCampaignVideoJob(
+  input: GenerateVideosInput,
+): Promise<StartVideoJobResult> {
+  if (getHeyGenApiKey()) {
+    return {
+      status: 409,
+      body: { error: 'Direct HeyGen is configured; use synchronous generation.', sync: true },
+    }
+  }
+  if (!getOpenRouterApiKey()) {
+    return {
+      status: 503,
+      body: { error: 'Video AI is not configured. Set OPENROUTER_API_KEY.' },
+    }
+  }
+  const productName = String(input.productName ?? '').trim()
+  if (!productName) return { status: 400, body: { error: 'productName is required' } }
+  const type = (Array.isArray(input.assets) ? input.assets : [])
+    .map(String)
+    .find(isVideoAssetKind)
+  if (!type) {
+    return { status: 400, body: { error: 'assets must include a video format' } }
+  }
+  const rawProductImage = input.productImage?.trim() || undefined
+  if (!rawProductImage) {
+    return {
+      status: 400,
+      body: {
+        error:
+          'productImage is required. Upload your product photo so videos keep packaging true.',
+      },
+    }
+  }
+  const productImage = await prepareFrameImage(rawProductImage)
+  const referenceFrameRaw = input.referenceFrameImage?.trim() || undefined
+  const referenceFrame = referenceFrameRaw
+    ? await prepareFrameImage(referenceFrameRaw)
+    : undefined
+
+  const { firstFrame, duration, promptUsed } = await prepareVideoInputs(type, {
+    productName,
+    productImage,
+    referenceFrame,
+    input,
+  })
+  const job = await submitVideoJob({
+    prompt: promptUsed,
+    frameImages: [{ url: firstFrame, frameType: 'first_frame' }],
+    duration,
+    aspectRatio: '9:16',
+    resolution: '768p',
+  })
+  return {
+    status: 202,
+    body: {
+      ok: true,
+      pending: true,
+      jobId: job.jobId,
+      type,
+      label: LABELS[type],
+      promptUsed,
     },
   }
 }
