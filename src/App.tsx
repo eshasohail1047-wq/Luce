@@ -69,14 +69,14 @@ const HERO_PRODUCT = {
 const HERO_SIDES = {
   left: [
     {
-      src: '/videos/ugc-skincare-ringlight.mp4',
-      poster: '/images/moisturizer-ugc-poster.jpg',
+      src: '/videos/creator/miss-rose-ugc.mp4',
+      poster: '/images/ugc-makeup-blush.jpg',
       rot: -5,
     },
   ],
   right: [
     {
-      src: '/videos/perfume-1.mp4',
+      src: '/videos/showcase/cinematic-heygen.mp4',
       poster: '/images/campaign-perfume-studio.jpg',
       rot: 5,
     },
