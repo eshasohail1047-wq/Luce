@@ -54,6 +54,7 @@ export async function sendEarlyAccessEmail(input: {
       { name: 'category', value: 'early_access' },
       { name: 'source', value: source.slice(0, 64) },
     ],
+  }, {
     idempotencyKey: `early-access/${email}/${new Date().toISOString().slice(0, 10)}`,
   })
 

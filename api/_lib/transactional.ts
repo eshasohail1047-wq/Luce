@@ -150,8 +150,7 @@ export async function sendTransactionalEmail(
     subject: message.subject,
     html: message.html,
     tags: [{ name: 'category', value: input.type }],
-    idempotencyKey: message.idempotencyKey.slice(0, 256),
-  })
+  }, { idempotencyKey: message.idempotencyKey.slice(0, 256) })
 
   if (sent.error) {
     console.error(`[transactional] ${input.type} failed`, sent.error)

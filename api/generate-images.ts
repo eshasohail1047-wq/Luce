@@ -25,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const body =
       typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}
     const assetsRaw = Array.isArray(body.assets) ? body.assets : []
-    const assets = assetsRaw
+    const assets: ImageAssetKind[] = assetsRaw
       .map((a: unknown) => String(a))
       .filter((a: string): a is ImageAssetKind =>
         (IMAGE_ASSET_KINDS as string[]).includes(a),

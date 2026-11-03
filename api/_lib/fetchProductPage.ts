@@ -203,7 +203,7 @@ function collectImgTags(html: string, base: string, out: string[]) {
     if (srcset) {
       for (const part of srcset.split(',')) {
         const candidate = part.trim().split(/\s+/)[0]
-        if (candidate) attrs.push(['', candidate] as unknown as RegExpMatchArray)
+        if (candidate) attrs.push(['', candidate] as unknown as RegExpExecArray)
       }
     }
     for (const m of attrs) {
