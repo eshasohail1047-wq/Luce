@@ -1,3 +1,4 @@
+import { loadCampaignOutputsFromCloud } from '../lib/cloudOutputs'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { doc, getDoc } from 'firebase/firestore'
@@ -356,7 +357,10 @@ export default function CampaignDetailPage() {
 
         // Never trust legacy Firestore `outputs` arrays — they caused nested-entity
         // write failures and may still be corrupt on old docs. Prefer session stash.
-        const stashedOutputs = loadStashedCampaignOutputs<MockOutput[]>(campaignId)
+        const stashedOutputs =
+          loadStashedCampaignOutputs<MockOutput[]>(campaignId) ||
+          // New browser / cleared session: fall back to the copy saved in Storage.
+          (await loadCampaignOutputsFromCloud(campaignId))
 
         if (!cancelled) {
           setLoadError(null)

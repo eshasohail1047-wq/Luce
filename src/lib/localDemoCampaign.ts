@@ -1,5 +1,6 @@
 import type { DeliverableId, StudioKind } from './deliverables'
 import type { MockOutput } from './mockCampaign'
+import { queueCampaignOutputsSave } from './cloudOutputs'
 
 const PREFIX = 'luce.localCampaign.'
 
@@ -590,6 +591,8 @@ export function stashCampaignOutputs(campaignId: string, outputs: unknown) {
   } catch (err) {
     console.error('[localDemo] outputs stash failed', err)
   }
+  // Durable copy (no-op for browser-local campaigns).
+  queueCampaignOutputsSave(campaignId, outputs)
   const cover = firstOutputImageUrl(outputs)
   if (cover) {
     void stashCampaignCoverSafe(campaignId, cover)
