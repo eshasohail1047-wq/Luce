@@ -37,14 +37,25 @@ function cta(href: string, label: string) {
   `
 }
 
+/** Only links that stay on our own origin; anything else falls back to the app home. */
+function safeAppLink(raw: string | undefined, appUrl: string): string {
+  const fallback = `${appUrl}/app`
+  const value = (raw || '').trim()
+  if (!value) return fallback
+  try {
+    const url = new URL(value, appUrl)
+    return url.origin === new URL(appUrl).origin ? url.toString() : fallback
+  } catch {
+    return fallback
+  }
+}
+
 function buildMessage(input: TransactionalInput) {
   const appUrl = getAppUrl()
   const name = escapeHtml((input.name || '').trim() || 'there')
   const product = escapeHtml((input.productName || '').trim() || 'your product')
   const plan = escapeHtml((input.planName || '').trim() || 'paid')
-  const campaignUrl = escapeHtml(
-    (input.campaignUrl || '').trim() || `${appUrl}/app`,
-  )
+  const campaignUrl = escapeHtml(safeAppLink(input.campaignUrl, appUrl))
   const studioUrl = `${appUrl}/app/studio/photos`
   const settingsUrl = `${appUrl}/app/settings#plan`
 
@@ -88,7 +99,7 @@ function buildMessage(input: TransactionalInput) {
             ${cta(campaignUrl, 'Review pack')}
           `,
         ),
-        idempotencyKey: `pack-ready/${input.email}/${product}/${Date.now()}`,
+        idempotencyKey: `pack-ready/${input.email}/${product}/${Math.floor(Date.now() / 300_000)}`,
       }
     case 'pack_exported':
       return {
@@ -101,7 +112,7 @@ function buildMessage(input: TransactionalInput) {
             ${cta(campaignUrl, 'Open project')}
           `,
         ),
-        idempotencyKey: `pack-exported/${input.email}/${product}/${Date.now()}`,
+        idempotencyKey: `pack-exported/${input.email}/${product}/${Math.floor(Date.now() / 300_000)}`,
       }
     default:
       return null

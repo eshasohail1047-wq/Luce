@@ -30,14 +30,12 @@ import { requestPasswordReset } from '../lib/resetPassword'
 import {
   DEFAULT_WORKSPACE,
   loadUserSettings,
-  markFreeImageUsed as saveFreeImageUsed,
   saveDisplayName,
-  saveUserPlan,
   saveWorkspaceSettings,
   type UserPlan,
   type WorkspaceSettings,
 } from '../lib/userSettings'
-import { isPaidPlan, normalizeUserPlan, planLabel } from '../lib/plans'
+import { normalizeUserPlan } from '../lib/plans'
 import { resetPostLoginCache } from '../lib/postLogin'
 import { sendTransactionalEmail } from '../lib/transactionalEmail'
 
@@ -333,22 +331,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await saveDisplayName(user, name)
         setUser(requireAuth().currentUser)
       },
-      async updatePlan(nextPlan) {
+      async updatePlan(_nextPlan) {
+        // Plans are server-owned: Firestore rules reject client writes to `plan`.
+        // Wire this to checkout (payment provider + webhook) when billing goes live.
         if (!user) throw new Error('Not signed in.')
-        const previous = plan
-        await saveUserPlan(user.uid, nextPlan)
-        setPlan(nextPlan)
-        if (isPaidPlan(nextPlan) && nextPlan !== previous) {
-          void sendTransactionalEmail({
-            type: 'plan_upgraded',
-            name: user.displayName || '',
-            planName: planLabel(nextPlan),
-          })
-        }
+        throw new Error(
+          'Plan changes are not available yet. Online checkout is coming soon.',
+        )
       },
       async markFreeImageUsed() {
+        // The server records the free try in /api/generate-images; this only syncs the UI.
         if (!user) throw new Error('Not signed in.')
-        await saveFreeImageUsed(user.uid)
         setFreeImageUsed(true)
       },
       async updateWorkspace(next) {

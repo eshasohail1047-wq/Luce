@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authFailureMessage, verifyBearerToken } from './_lib/firebaseAdmin.js'
+import { gateVideos } from './_lib/planGate.js'
+import { rateLimit } from './_lib/rateLimit.js'
 import {
   generateCampaignVideos,
   VIDEO_ASSET_KINDS,
@@ -31,6 +33,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .filter((a: string): a is VideoAssetKind =>
       (VIDEO_ASSET_KINDS as string[]).includes(a),
     )
+
+  const uniqueAssets = [...new Set(assets)]
+  if (uniqueAssets.length === 0) {
+    return res.status(400).json({ error: 'Select at least one video format.' })
+  }
+
+  const limited = await rateLimit(`gen-vid:${decoded.uid}`, 20, 3600)
+  if (!limited.ok) {
+    res.setHeader('Retry-After', String(limited.retryAfterSec))
+    return res.status(429).json({ error: 'Too many requests. Try again later.' })
+  }
+
+  const gate = await gateVideos(decoded.uid, uniqueAssets.length)
+  if (!gate.ok) {
+    return res
+      .status(gate.status)
+      .json({ error: gate.error, needsPaywall: gate.needsPaywall ?? false })
+  }
 
   const creativeDirection =
     body.creativeDirection && typeof body.creativeDirection === 'object'
@@ -69,7 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ? body.referenceImage
           : undefined,
     creativeDirection,
-    assets,
+    assets: uniqueAssets,
     recreateNote:
       typeof body.recreateNote === 'string' ? body.recreateNote : undefined,
     durationSeconds:

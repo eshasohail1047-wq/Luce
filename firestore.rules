@@ -9,23 +9,35 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // plan / freeImageUsed are server-owned (Admin SDK bypasses rules).
     match /users/{userId} {
-      allow read, update: if isOwner(userId);
-      allow create: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.data.plan == 'free'
+        && request.resource.data.freeImageUsed == false;
+      allow update: if isOwner(userId)
+        && !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['plan', 'freeImageUsed']);
     }
 
     match /products/{productId} {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if signedIn()
+      allow read, delete: if signedIn()
         && resource.data.userId == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId;
     }
 
     match /campaigns/{campaignId} {
       allow create: if signedIn()
         && request.resource.data.userId == request.auth.uid;
-      allow read, update, delete: if signedIn()
+      allow read, delete: if signedIn()
         && resource.data.userId == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId;
 
       match /{document=**} {
         allow read, write: if signedIn()

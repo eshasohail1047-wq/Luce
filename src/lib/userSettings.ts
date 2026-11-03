@@ -59,28 +59,6 @@ export async function saveDisplayName(user: User, name: string) {
   )
 }
 
-export async function saveUserPlan(userId: string, plan: UserPlan) {
-  await setDoc(
-    doc(requireDb(), 'users', userId),
-    {
-      plan,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true },
-  )
-}
-
-export async function markFreeImageUsed(userId: string) {
-  await setDoc(
-    doc(requireDb(), 'users', userId),
-    {
-      freeImageUsed: true,
-      updatedAt: serverTimestamp(),
-    },
-    { merge: true },
-  )
-}
-
 export async function saveWorkspaceSettings(
   userId: string,
   workspace: Partial<WorkspaceSettings>,

@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authFailureMessage, verifyBearerToken } from './_lib/firebaseAdmin.js'
+import { gateImages } from './_lib/planGate.js'
+import { rateLimit } from './_lib/rateLimit.js'
 import {
   generateCampaignImages,
   IMAGE_ASSET_KINDS,
@@ -28,6 +30,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .filter((a: string): a is ImageAssetKind =>
         (IMAGE_ASSET_KINDS as string[]).includes(a),
       )
+
+    const uniqueAssets = [...new Set(assets)]
+    if (uniqueAssets.length === 0) {
+      return res.status(400).json({ error: 'Select at least one image format.' })
+    }
+
+    const limited = await rateLimit(`gen-img:${decoded.uid}`, 30, 3600)
+    if (!limited.ok) {
+      res.setHeader('Retry-After', String(limited.retryAfterSec))
+      return res.status(429).json({ error: 'Too many requests. Try again later.' })
+    }
+
+    const gate = await gateImages(decoded.uid, uniqueAssets.length)
+    if (!gate.ok) {
+      return res
+        .status(gate.status)
+        .json({ error: gate.error, needsPaywall: gate.needsPaywall ?? false })
+    }
 
     const creativeDirection =
       body.creativeDirection && typeof body.creativeDirection === 'object'
@@ -64,10 +84,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ? body.referenceImage
           : undefined,
       creativeDirection,
-      assets,
+      assets: uniqueAssets,
       recreateNote:
         typeof body.recreateNote === 'string' ? body.recreateNote : undefined,
+    }).catch(async (err: unknown) => {
+      await gate.refund?.().catch(() => undefined)
+      throw err
     })
+
+    const produced =
+      result.status === 200 &&
+      'assets' in result.body &&
+      Array.isArray(result.body.assets) &&
+      result.body.assets.length > 0
+    if (!produced) await gate.refund?.().catch(() => undefined)
 
     return res.status(result.status).json(result.body)
   } catch (err) {

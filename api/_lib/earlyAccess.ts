@@ -46,7 +46,6 @@ export async function sendEarlyAccessEmail(input: {
       <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1a1428">
         <h1 style="font-size:22px;margin:0 0 12px">Welcome to LUCE</h1>
         <p>Thanks for joining early access. We’re building research-backed campaigns from one real product.</p>
-        <p><strong>Your product link:</strong> ${safeUrl}</p>
         <p style="margin-top:20px">We’ll email you when your first campaign workspace is ready.</p>
         <p style="color:#6d28d9;font-weight:700">LUCE — Bring Your Product to Light.</p>
       </div>

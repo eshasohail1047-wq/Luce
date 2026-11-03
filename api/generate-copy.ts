@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authFailureMessage, verifyBearerToken } from './_lib/firebaseAdmin.js'
+import { getServerPlan, isPaid } from './_lib/planGate.js'
+import { rateLimit } from './_lib/rateLimit.js'
 import {
   COPY_ASSET_KINDS,
   generateCampaignCopy,
@@ -18,6 +20,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res
         .status(401)
         .json({ error: authFailureMessage(req.headers.authorization, 'copy') })
+    }
+
+    const plan = await getServerPlan(decoded.uid)
+    const limited = await rateLimit(
+      `gen-copy:${decoded.uid}`,
+      isPaid(plan) ? 200 : 20,
+      3600,
+    )
+    if (!limited.ok) {
+      res.setHeader('Retry-After', String(limited.retryAfterSec))
+      return res.status(429).json({ error: 'Too many requests. Try again later.' })
     }
 
     const body =

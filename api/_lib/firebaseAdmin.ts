@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp, type App } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
+import { getFirestore } from 'firebase-admin/firestore'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -12,6 +13,7 @@ type ServiceAccount = {
 type DecodedLike = {
   uid: string
   email?: string
+  emailVerified: boolean
   name?: string
 }
 
@@ -77,79 +79,6 @@ function loadServiceAccount(): ServiceAccount {
   return loadFromFile() || loadFromEnvJson() || loadFromDiscreteEnv() || {}
 }
 
-function expectedProjectId(): string | undefined {
-  return (
-    loadServiceAccount().project_id ||
-    process.env.VITE_FIREBASE_PROJECT_ID?.trim() ||
-    process.env.FIREBASE_PROJECT_ID?.trim() ||
-    undefined
-  )
-}
-
-/**
- * Local-only: decode Firebase ID token payload without Admin verify.
- * Used when Admin SDK init/verify is broken so image/video gen can still run.
- */
-function decodeIdTokenLocally(token: string): DecodedLike | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length < 2) return null
-    const payloadJson = Buffer.from(
-      parts[1]!.replace(/-/g, '+').replace(/_/g, '/'),
-      'base64',
-    ).toString('utf8')
-    const payload = JSON.parse(payloadJson) as {
-      sub?: string
-      user_id?: string
-      email?: string
-      name?: string
-      exp?: number
-      aud?: string
-      iss?: string
-    }
-    const uid = (payload.user_id || payload.sub || '').trim()
-    if (!uid) return null
-    if (typeof payload.exp === 'number' && payload.exp * 1000 < Date.now()) {
-      console.warn('[firebaseAdmin] local decode: token expired')
-      return null
-    }
-    const project = expectedProjectId()
-    if (project) {
-      const audOk = !payload.aud || payload.aud === project
-      const issOk =
-        !payload.iss ||
-        payload.iss.includes(project) ||
-        payload.iss.includes('securetoken.google.com')
-      if (!audOk && !issOk) {
-        console.warn(
-          '[firebaseAdmin] local decode: token project mismatch',
-          payload.aud,
-          payload.iss,
-        )
-        return null
-      }
-    }
-    return {
-      uid,
-      email: payload.email,
-      name: payload.name,
-    }
-  } catch (err) {
-    console.warn(
-      '[firebaseAdmin] local decode failed',
-      err instanceof Error ? err.message : err,
-    )
-    return null
-  }
-}
-
-function allowLocalAuthFallback(): boolean {
-  if (process.env.LUCE_DEV_RELAXED_AUTH === '0') return false
-  if (process.env.LUCE_DEV_RELAXED_AUTH === '1') return true
-  // Default on for Vite local (no VERCEL / NODE_ENV=production)
-  return process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production'
-}
-
 let cachedApp: App | null = null
 
 export function getAdminApp(): App {
@@ -177,6 +106,10 @@ export function getAdminApp(): App {
   return cachedApp
 }
 
+export function getAdminDb() {
+  return getFirestore(getAdminApp())
+}
+
 export async function verifyBearerToken(
   authHeader: string | undefined,
 ): Promise<DecodedLike | null> {
@@ -191,22 +124,13 @@ export async function verifyBearerToken(
     return {
       uid: decoded.uid,
       email: decoded.email,
+      emailVerified: decoded.email_verified === true,
       name: typeof decoded.name === 'string' ? decoded.name : undefined,
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[firebaseAdmin] verifyIdToken failed:', message)
 
-    if (allowLocalAuthFallback()) {
-      const local = decodeIdTokenLocally(token)
-      if (local) {
-        console.warn(
-          '[firebaseAdmin] using local JWT decode fallback for uid',
-          local.uid,
-        )
-        return local
-      }
-    }
     return null
   }
 }

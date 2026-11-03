@@ -1,3 +1,4 @@
+import type { App } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { Resend } from 'resend'
 import { getAdminApp } from './firebaseAdmin.js'
@@ -55,18 +56,19 @@ export async function sendPasswordResetForEmail(
 
   const auth = getAuth(app)
 
-  let user
   try {
-    user = await auth.getUserByEmail(email)
+    await auth.getUserByEmail(email)
   } catch {
     // Don't reveal whether the account exists
     return { status: 200, body: { ok: true, via: 'resend', id: null } }
   }
 
-  // Google-only users can still receive a reset link to *add* a password.
-  const providers = user.providerData.map((p) => p.providerId)
-  const googleOnly =
-    providers.includes('google.com') && !providers.includes('password')
+  // Every outcome below answers identically (no googleOnly flag, no provider errors) so
+  // the endpoint can't be used to learn which emails have accounts.
+  const generic: PasswordResetResult = {
+    status: 200,
+    body: { ok: true, via: 'resend', id: null },
+  }
 
   const continueUrl =
     process.env.PASSWORD_RESET_CONTINUE_URL ||
@@ -81,13 +83,7 @@ export async function sendPasswordResetForEmail(
     })
   } catch (err) {
     console.error('[reset-password] generate link failed', err)
-    return {
-      status: 502,
-      body: {
-        error:
-          'Could not create reset link. Is Email/Password enabled in Firebase Auth?',
-      },
-    }
+    return generic
   }
 
   const from = process.env.RESEND_FROM ?? 'LUCE <onboarding@resend.dev>'
@@ -117,21 +113,7 @@ export async function sendPasswordResetForEmail(
 
   if (sent.error) {
     console.error('[reset-password] resend failed', sent.error)
-    return {
-      status: 502,
-      body: {
-        error: sent.error.message || 'Failed to send reset email via Resend',
-      },
-    }
   }
 
-  return {
-    status: 200,
-    body: {
-      ok: true,
-      via: 'resend',
-      id: sent.data?.id ?? null,
-      ...(googleOnly ? { googleOnly: true } : {}),
-    },
-  }
+  return generic
 }
