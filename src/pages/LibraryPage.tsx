@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
+import CreativeFormatPreview from '../components/CreativeFormatPreview'
 import { useAuth } from '../auth/AuthProvider'
 import {
   listSavedAssets,
@@ -17,7 +18,11 @@ function relativeSaved(ms: number) {
   return `${Math.floor(days / 7)} week${Math.floor(days / 7) === 1 ? '' : 's'} ago`
 }
 
-type LibraryFilter = 'all' | 'image' | 'video' | 'copy'
+type TypeFilter = 'all' | 'image' | 'video' | 'copy'
+type StatusFilter = 'all'
+type DateFilter = 'all' | 'today' | 'week' | 'month'
+type SortOrder = 'newest' | 'oldest'
+type ViewMode = 'grid' | 'list'
 
 function kindLabel(kind: SavedAsset['kind']) {
   if (kind === 'video') return 'Video'
@@ -25,14 +30,102 @@ function kindLabel(kind: SavedAsset['kind']) {
   return 'Image'
 }
 
+function matchesDate(savedAt: number, filter: DateFilter) {
+  if (filter === 'all') return true
+  const age = Date.now() - savedAt
+  if (filter === 'today') return age < 86_400_000
+  if (filter === 'week') return age < 7 * 86_400_000
+  return age < 30 * 86_400_000
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: { value: string; label: string }[]
+  onChange: (value: string) => void
+}) {
+  const selected = options.find((o) => o.value === value)
+  const showValue = value !== 'all' && selected
+
+  return (
+    <label className="library-filter-pill">
+      <span className="library-filter-pill-label">
+        {label}
+        {showValue ? `: ${selected.label}` : ''}
+      </span>
+      <select
+        value={value}
+        aria-label={label}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <path
+          d="M3 4.5L6 7.5L9 4.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </label>
+  )
+}
+
+function EmptyBoxIllustration({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="88"
+      height="88"
+      viewBox="0 0 88 88"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M18 34 L44 22 L70 34 L70 58 L44 70 L18 58 Z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M18 34 L44 46 L70 34"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+      <path d="M44 46 L44 70" stroke="currentColor" strokeWidth="1.75" />
+      <path
+        d="M32 28 L38 18 M44 26 L44 14 M56 28 L50 18"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 function SavedCard({
   asset,
+  view,
   onRemove,
   onExport,
   onPreview,
   busy,
 }: {
   asset: SavedAsset
+  view: ViewMode
   onRemove: () => void
   onExport: () => void
   onPreview: () => void
@@ -40,37 +133,98 @@ function SavedCard({
 }) {
   const label = kindLabel(asset.kind)
 
-  return (
-    <article className="ws-card">
-      <button type="button" className="ws-card-media" onClick={onPreview}>
-        {asset.kind === 'video' && asset.videoUrl ? (
-          <video
-            src={asset.videoUrl}
-            poster={asset.imageUrl}
-            muted
-            playsInline
-            loop
-            preload="metadata"
-          />
-        ) : asset.imageUrl ? (
-          <img src={asset.imageUrl} alt="" loading="lazy" decoding="async" />
-        ) : asset.text ? (
-          <span className="ws-card-copy-preview">{asset.text}</span>
-        ) : (
-          <span className="ws-card-fallback" aria-hidden="true">
+  const media = (
+    <button
+      type="button"
+      className={view === 'list' ? 'library-list-media' : 'ws-card-media'}
+      onClick={onPreview}
+    >
+      {asset.kind === 'video' && asset.videoUrl ? (
+        <video
+          src={asset.videoUrl}
+          poster={asset.imageUrl}
+          muted
+          playsInline
+          loop
+          preload="metadata"
+        />
+      ) : asset.imageUrl ? (
+        <img src={asset.imageUrl} alt="" loading="lazy" decoding="async" />
+      ) : asset.text ? (
+        <span className="ws-card-copy-preview">{asset.text}</span>
+      ) : (
+        <span className="ws-card-fallback" aria-hidden="true">
+          {label}
+        </span>
+      )}
+      {view === 'grid' ? (
+        <>
+          <span className={`ws-card-tag${asset.kind === 'video' ? ' is-done' : ''}`}>
             {label}
           </span>
-        )}
-        <span className={`ws-card-tag${asset.kind === 'video' ? ' is-done' : ''}`}>{label}</span>
-        {asset.kind === 'video' ? (
-          <span className="ws-card-play" aria-hidden="true">
-            ▶
+          {asset.kind === 'video' ? (
+            <span className="ws-card-play" aria-hidden="true">
+              ▶
+            </span>
+          ) : null}
+          <span className="ws-card-export" aria-hidden="true">
+            Preview
           </span>
-        ) : null}
-        <span className="ws-card-export" aria-hidden="true">
-          Preview
-        </span>
+        </>
+      ) : null}
+    </button>
+  )
+
+  const actions = (
+    <div className={view === 'list' ? 'library-list-actions' : 'ws-card-actions'}>
+      <button
+        type="button"
+        className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
+        disabled={busy}
+        onClick={() => void onExport()}
+      >
+        Export
       </button>
+      <Link
+        className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
+        to={`/app/campaigns/${asset.campaignId}`}
+      >
+        Open
+      </Link>
+      <button
+        type="button"
+        className="dash-campaign-delete-btn"
+        disabled={busy}
+        aria-label={`Remove ${asset.label} from library`}
+        onClick={() => void onRemove()}
+      >
+        Remove
+      </button>
+    </div>
+  )
+
+  if (view === 'list') {
+    return (
+      <article className="library-list-row">
+        {media}
+        <div className="library-list-body">
+          <strong>{asset.label}</strong>
+          <span>
+            {label}
+            <span aria-hidden="true"> · </span>
+            {asset.productName}
+            <span aria-hidden="true"> · </span>
+            {relativeSaved(asset.savedAt)}
+          </span>
+        </div>
+        {actions}
+      </article>
+    )
+  }
+
+  return (
+    <article className="ws-card">
+      {media}
       <div className="ws-card-body">
         <strong>{asset.label}</strong>
         <span>
@@ -79,31 +233,7 @@ function SavedCard({
           {relativeSaved(asset.savedAt)}
         </span>
       </div>
-      <div className="ws-card-actions">
-        <button
-          type="button"
-          className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
-          disabled={busy}
-          onClick={() => void onExport()}
-        >
-          Export
-        </button>
-        <Link
-          className="dash-campaign-delete-btn dash-campaign-delete-btn-cancel"
-          to={`/app/campaigns/${asset.campaignId}`}
-        >
-          Open
-        </Link>
-        <button
-          type="button"
-          className="dash-campaign-delete-btn"
-          disabled={busy}
-          aria-label={`Remove ${asset.label} from saved`}
-          onClick={() => void onRemove()}
-        >
-          Remove
-        </button>
-      </div>
+      {actions}
     </article>
   )
 }
@@ -114,8 +244,14 @@ export default function LibraryPage() {
   const [listError, setListError] = useState<string | null>(null)
   const [listing, setListing] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [filter, setFilter] = useState<LibraryFilter>('all')
   const [previewId, setPreviewId] = useState<string | null>(null)
+
+  const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest')
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
 
   async function refresh() {
     if (!user) return
@@ -167,9 +303,20 @@ export default function LibraryPage() {
   }, [user])
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return assets
-    return assets.filter((a) => a.kind === filter)
-  }, [assets, filter])
+    const q = search.trim().toLowerCase()
+    let rows = assets.filter((a) => {
+      if (typeFilter !== 'all' && a.kind !== typeFilter) return false
+      if (statusFilter !== 'all') return false
+      if (!matchesDate(a.savedAt, dateFilter)) return false
+      if (!q) return true
+      const hay = `${a.label} ${a.productName} ${a.text || ''} ${a.assetType}`.toLowerCase()
+      return hay.includes(q)
+    })
+    rows = [...rows].sort((a, b) =>
+      sortOrder === 'newest' ? b.savedAt - a.savedAt : a.savedAt - b.savedAt,
+    )
+    return rows
+  }, [assets, search, typeFilter, statusFilter, dateFilter, sortOrder])
 
   const preview = previewId ? assets.find((a) => a.id === previewId) || null : null
 
@@ -192,40 +339,159 @@ export default function LibraryPage() {
 
   if (!user) return <Navigate to="/login" replace />
 
+  const isEmptyLibrary = !listing && assets.length === 0
+  const isEmptyFiltered = !listing && assets.length > 0 && filtered.length === 0
+
   return (
     <AppLayout>
-      <main className="dash workspace-page">
-        <header className="workspace-page-header">
-          <div className="workspace-page-title-row">
-            <h1>Saved</h1>
-            <Link className="dash-create-btn" to="/app">
-              <span aria-hidden="true">+</span> Create
-            </Link>
-          </div>
+      <main className="dash workspace-page library-page">
+        <header className="library-header">
+          <h1 className="library-title">Library</h1>
 
-          <div className="workspace-page-toolbar">
-            <div className="workspace-filters" role="tablist" aria-label="Filter saved">
-              {(
-                [
-                  ['all', 'All'],
-                  ['image', 'Images'],
-                  ['video', 'Videos'],
-                  ['copy', 'Copy'],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={filter === id}
-                  className={filter === id ? 'is-active' : ''}
-                  onClick={() => setFilter(id)}
-                >
-                  {label}
-                </button>
-              ))}
+          <div className="library-toolbar">
+            <label className="library-search">
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <circle
+                  cx="7"
+                  cy="7"
+                  r="4.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <path
+                  d="M10.5 10.5L13.5 13.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <input
+                type="search"
+                placeholder="Search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Search library"
+              />
+            </label>
+
+            <div className="library-filters">
+              <FilterSelect
+                label="Type"
+                value={typeFilter}
+                onChange={(v) => setTypeFilter(v as TypeFilter)}
+                options={[
+                  { value: 'all', label: 'All' },
+                  { value: 'image', label: 'Images' },
+                  { value: 'video', label: 'Videos' },
+                  { value: 'copy', label: 'Copy' },
+                ]}
+              />
+              <FilterSelect
+                label="Status"
+                value={statusFilter}
+                onChange={(v) => setStatusFilter(v as StatusFilter)}
+                options={[{ value: 'all', label: 'All' }]}
+              />
+              <FilterSelect
+                label="Date"
+                value={dateFilter}
+                onChange={(v) => setDateFilter(v as DateFilter)}
+                options={[
+                  { value: 'all', label: 'All' },
+                  { value: 'today', label: 'Today' },
+                  { value: 'week', label: 'Past week' },
+                  { value: 'month', label: 'Past month' },
+                ]}
+              />
+            </div>
+
+            <div className="library-toolbar-actions">
+              <Link className="library-btn library-btn-outline" to="/app">
+                <span aria-hidden="true">+</span> Add new
+              </Link>
+              <button type="button" className="library-btn library-btn-ghost" disabled>
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                  <path
+                    d="M12 2L6.5 7.5M12 2L8.5 12L6.5 7.5M12 2L2 5.5L6.5 7.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Launch Ads
+              </button>
+            </div>
+
+            <div className="library-view-toggles" role="group" aria-label="View options">
+              <button
+                type="button"
+                className={sortOrder === 'oldest' ? 'is-active' : ''}
+                aria-label={
+                  sortOrder === 'newest' ? 'Sort oldest first' : 'Sort newest first'
+                }
+                title={sortOrder === 'newest' ? 'Newest first' : 'Oldest first'}
+                onClick={() =>
+                  setSortOrder((s) => (s === 'newest' ? 'oldest' : 'newest'))
+                }
+              >
+                <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+                  <path
+                    d="M4.5 2.5V12.5M4.5 2.5L2.5 4.5M4.5 2.5L6.5 4.5M10.5 12.5V2.5M10.5 12.5L8.5 10.5M10.5 12.5L12.5 10.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'grid' ? 'is-active' : ''}
+                aria-label="Grid view"
+                aria-pressed={viewMode === 'grid'}
+                onClick={() => setViewMode('grid')}
+              >
+                <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+                  <rect x="2" y="2" width="4.5" height="4.5" rx="0.8" fill="currentColor" />
+                  <rect x="8.5" y="2" width="4.5" height="4.5" rx="0.8" fill="currentColor" />
+                  <rect x="2" y="8.5" width="4.5" height="4.5" rx="0.8" fill="currentColor" />
+                  <rect
+                    x="8.5"
+                    y="8.5"
+                    width="4.5"
+                    height="4.5"
+                    rx="0.8"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'list' ? 'is-active' : ''}
+                aria-label="List view"
+                aria-pressed={viewMode === 'list'}
+                onClick={() => setViewMode('list')}
+              >
+                <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+                  <path
+                    d="M2.5 3.5H12.5M2.5 7.5H12.5M2.5 11.5H12.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
             </div>
           </div>
+
+          <p className="library-files-count">
+            Files <span>{filtered.length}</span>
+          </p>
         </header>
 
         {listError && (
@@ -236,21 +502,29 @@ export default function LibraryPage() {
 
         {listing ? (
           <p className="workspace-page-empty">Loading…</p>
-        ) : filtered.length === 0 ? (
-          <div className="workspace-page-empty-card">
-            <p>{assets.length === 0 ? 'Nothing saved yet.' : 'Nothing matches.'}</p>
-            {assets.length === 0 ? (
-              <Link className="dash-create-btn dash-create-btn-sm" to="/app/campaigns">
-                Browse projects
-              </Link>
-            ) : null}
+        ) : isEmptyLibrary ? (
+          <div className="library-empty" role="status">
+            <EmptyBoxIllustration className="library-empty-icon" />
+            <h2>No files yet</h2>
+            <p>Videos and images you create show up here.</p>
+          </div>
+        ) : isEmptyFiltered ? (
+          <div className="library-empty library-empty-filtered" role="status">
+            <EmptyBoxIllustration className="library-empty-icon" />
+            <h2>No matching files</h2>
+            <p>Try a different search or filter.</p>
           </div>
         ) : (
-          <ul className="ws-card-grid">
+          <ul
+            className={
+              viewMode === 'list' ? 'library-list' : 'ws-card-grid library-grid'
+            }
+          >
             {filtered.map((asset) => (
               <li key={asset.id}>
                 <SavedCard
                   asset={asset}
+                  view={viewMode}
                   busy={busyId === asset.id}
                   onPreview={() => setPreviewId(asset.id)}
                   onExport={async () => {
@@ -296,87 +570,58 @@ export default function LibraryPage() {
         )}
 
         {preview ? (
-          <div
-            className="ws-preview-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-label={preview.label}
-            onClick={() => setPreviewId(null)}
-          >
-            <div className="ws-preview-panel" onClick={(e) => e.stopPropagation()}>
-              <button
-                type="button"
-                className="ws-preview-close"
-                aria-label="Close preview"
-                onClick={() => setPreviewId(null)}
-              >
-                ×
-              </button>
-              <div className="ws-preview-media">
-                {preview.kind === 'video' && preview.videoUrl ? (
-                  <video
-                    key={preview.id}
-                    src={preview.videoUrl}
-                    poster={preview.imageUrl}
-                    controls
-                    autoPlay
-                    playsInline
-                    loop
-                  />
-                ) : preview.imageUrl ? (
-                  <img src={preview.imageUrl} alt={preview.label} />
-                ) : preview.text ? (
-                  <blockquote>{preview.text}</blockquote>
-                ) : (
-                  <p>No preview available.</p>
-                )}
-              </div>
-              <div className="ws-preview-meta">
-                <div>
-                  <strong>{preview.label}</strong>
-                  <span>
-                    {kindLabel(preview.kind)} · {preview.productName}
-                  </span>
-                </div>
-                <div className="ws-preview-actions">
-                  <button
-                    type="button"
-                    className="dash-create-btn dash-create-btn-sm"
-                    disabled={busyId === preview.id}
-                    onClick={() => {
-                      void (async () => {
-                        setBusyId(preview.id)
-                        try {
-                          await downloadMockOutput(
-                            {
-                              id: preview.outputId,
-                              assetType: preview.assetType,
-                              label: preview.label,
-                              kind: preview.kind,
-                              imageUrl: preview.imageUrl,
-                              videoUrl: preview.videoUrl,
-                              text: preview.text,
-                            },
-                            preview.productName,
-                          )
-                        } finally {
-                          setBusyId(null)
-                        }
-                      })()
-                    }}
-                  >
-                    Export
-                  </button>
-                  <Link
-                    className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
-                    to={`/app/campaigns/${preview.campaignId}`}
-                  >
-                    Open project
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
+          <CreativeFormatPreview
+            open
+            item={{
+              id: preview.id,
+              label: preview.label,
+              kind: preview.kind,
+              imageUrl: preview.imageUrl,
+              videoUrl: preview.videoUrl,
+              text: preview.text,
+              productName: preview.productName,
+            }}
+            onClose={() => setPreviewId(null)}
+            actions={
+              <>
+                <button
+                  type="button"
+                  className="dash-create-btn dash-create-btn-sm"
+                  disabled={busyId === preview.id}
+                  onClick={() => {
+                    void (async () => {
+                      setBusyId(preview.id)
+                      try {
+                        await downloadMockOutput(
+                          {
+                            id: preview.outputId,
+                            assetType: preview.assetType,
+                            label: preview.label,
+                            kind: preview.kind,
+                            imageUrl: preview.imageUrl,
+                            videoUrl: preview.videoUrl,
+                            text: preview.text,
+                          },
+                          preview.productName,
+                        )
+                      } finally {
+                        setBusyId(null)
+                      }
+                    })()
+                  }}
+                >
+                  Export
+                </button>
+                <Link
+                  className="dash-create-btn dash-create-btn-ghost dash-create-btn-sm"
+                  to={`/app/campaigns/${preview.campaignId}`}
+                  onClick={() => setPreviewId(null)}
+                >
+                  Open project
+                </Link>
+              </>
+            }
+          />
         ) : null}
       </main>
     </AppLayout>

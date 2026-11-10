@@ -25,10 +25,12 @@ import { getPlanLimits } from '../lib/planLimits'
 import PaywallModal from '../components/PaywallModal'
 import type {
   BackgroundId,
+  CreativeDirection,
   LightingId,
   MoodId,
   StyleThemeId,
 } from '../lib/creativeDirection'
+import { withBrandKit } from '../lib/creativeDirection'
 import {
   DEFAULT_PHOTO_STYLES,
   DEFAULT_VIDEO_STYLES,
@@ -73,9 +75,15 @@ import {
 } from '../lib/localDemoCampaign'
 
 export default function NewCampaignPage() {
-  const { user, plan, freeImageUsed, loading } = useAuth()
+  const { user, plan, freeImageUsed, loading, workspace } = useAuth()
   const [searchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function campaignDirection(
+    partial: CreativeDirection,
+  ): CreativeDirection | undefined {
+    return withBrandKit(partial, workspace)
+  }
 
   const [sourceType, setSourceType] = useState<ProductSourceType>('upload')
   const [productName, setProductName] = useState('')
@@ -327,6 +335,13 @@ export default function NewCampaignPage() {
     } else if (searchParams.get('source') === 'upload') {
       setSourceType('upload')
     }
+    const url = searchParams.get('url')?.trim()
+    if (url) {
+      setSourceType('url')
+      setProductUrl(url)
+    }
+    const name = searchParams.get('name')?.trim()
+    if (name) setProductName(name)
   }, [searchParams])
 
   useEffect(() => {
@@ -479,13 +494,13 @@ export default function NewCampaignPage() {
             referenceImage: opts.referenceDataUrl?.startsWith('data:image/')
               ? opts.referenceDataUrl
               : undefined,
-            creativeDirection: {
+            creativeDirection: campaignDirection({
               prompt: prompt || undefined,
               lighting: lighting || undefined,
               background: background || undefined,
               mood: mood || undefined,
               styleTheme: styleTheme || undefined,
-            },
+            }),
             assets: [item.assetType as ImageAssetKind],
             recreateNote: opts.referenceDataUrl
               ? 'Match the reference look; keep product packaging exact.'
@@ -556,13 +571,13 @@ export default function NewCampaignPage() {
             productName: opts.productName,
             productImage: opts.productImage,
             referenceFrameImage,
-            creativeDirection: {
+            creativeDirection: campaignDirection({
               prompt: prompt || undefined,
               lighting: lighting || undefined,
               background: background || undefined,
               mood: mood || undefined,
               styleTheme: styleTheme || undefined,
-            },
+            }),
             assets: [item.assetType as VideoAssetKind],
             durationSeconds,
           })
@@ -798,13 +813,13 @@ export default function NewCampaignPage() {
           includeAdCreative,
           includeAdCopy,
           includeStrategy,
-          creativeDirection: {
+          creativeDirection: campaignDirection({
             prompt,
             lighting: lighting || undefined,
             background: background || undefined,
             mood: mood || undefined,
             styleTheme: styleTheme || undefined,
-          },
+          }),
         }),
         45_000,
         'create-campaign',

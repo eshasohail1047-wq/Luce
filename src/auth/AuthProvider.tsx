@@ -40,6 +40,7 @@ import {
 import { isPaidPlan, normalizeUserPlan, planLabel } from '../lib/plans'
 import { resetPostLoginCache } from '../lib/postLogin'
 import { sendTransactionalEmail } from '../lib/transactionalEmail'
+import { loadOnboarding } from '../lib/onboarding'
 
 export type { UserPlan } from '../lib/userSettings'
 
@@ -48,6 +49,8 @@ type AuthContextValue = {
   plan: UserPlan
   freeImageUsed: boolean
   workspace: WorkspaceSettings
+  /** True when the user skipped brand onboarding (classic home). */
+  onboardingSkipped: boolean
   loading: boolean
   error: string | null
   signInWithGoogle: () => Promise<void>
@@ -65,6 +68,8 @@ type AuthContextValue = {
   updatePlan: (plan: UserPlan) => Promise<void>
   markFreeImageUsed: () => Promise<void>
   updateWorkspace: (workspace: Partial<WorkspaceSettings>) => Promise<void>
+  /** Refresh skipped/completed flag after onboarding finish. */
+  refreshOnboardingStatus: () => Promise<void>
   signOut: () => Promise<void>
   clearError: () => void
 }
@@ -178,6 +183,11 @@ async function ensureUserDocument(
     freeImageUsed: false,
     welcomeEmailSent: false,
     authProvider: detectProvider(user),
+    onboarding: {
+      completed: false,
+      step: 'personal',
+      data: {},
+    },
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
@@ -228,8 +238,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState<UserPlan>('free')
   const [freeImageUsed, setFreeImageUsed] = useState(false)
   const [workspace, setWorkspace] = useState<WorkspaceSettings>(DEFAULT_WORKSPACE)
+  const [onboardingSkipped, setOnboardingSkipped] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  async function syncOnboardingStatus(userId: string) {
+    try {
+      const onboarding = await loadOnboarding(userId)
+      setOnboardingSkipped(Boolean(onboarding.skipped))
+    } catch {
+      setOnboardingSkipped(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -293,6 +313,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setFreeImageUsed(settings.freeImageUsed)
             setWorkspace(settings.workspace)
           }
+          if (active) await syncOnboardingStatus(next.uid)
           // Welcome once per account (first signup — not every sign-in)
           if (!created.welcomeEmailSent) {
             void maybeSendWelcomeEmail(next, false)
@@ -303,12 +324,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setPlan('free')
             setFreeImageUsed(false)
             setWorkspace(DEFAULT_WORKSPACE)
+            setOnboardingSkipped(false)
           }
         }
       } else if (active) {
         setPlan('free')
         setFreeImageUsed(false)
         setWorkspace(DEFAULT_WORKSPACE)
+        setOnboardingSkipped(false)
       }
     })
 
@@ -325,9 +348,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       plan,
       freeImageUsed,
       workspace,
+      onboardingSkipped,
       loading,
       error,
       clearError: () => setError(null),
+      async refreshOnboardingStatus() {
+        if (!user) return
+        await syncOnboardingStatus(user.uid)
+      },
       async updateDisplayName(name) {
         if (!user) throw new Error('Not signed in.')
         await saveDisplayName(user, name)
@@ -515,7 +543,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await firebaseSignOut(requireAuth())
       },
     }),
-    [user, plan, freeImageUsed, workspace, loading, error],
+    [user, plan, freeImageUsed, workspace, onboardingSkipped, loading, error],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

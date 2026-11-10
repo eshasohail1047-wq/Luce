@@ -31,12 +31,150 @@ export type FormatSpec = {
   resolutionHint?: string
 }
 
+export type BrandKitBits = {
+  brandName?: string
+  colors?: string[]
+  fonts?: string[]
+  voice?: string
+  styleNotes?: string
+  industry?: string
+  positioning?: string[]
+  photographyStyle?: string
+  lightingPreferences?: string
+  compositionPreferences?: string
+  packagingIdentity?: string
+  graphicDesignDirection?: string
+  socialMediaDirection?: string
+  advertisingStyle?: string
+  ctaPreferences?: string
+  thingsToAvoid?: string[]
+  brandRestrictions?: string[]
+  brandKeywords?: string[]
+}
+
 export type CreativeDirectionBits = {
   prompt?: string
   lighting?: string
   background?: string
   mood?: string
   styleTheme?: string
+  /** User-selected Size in Studio — hard override of format default when set. */
+  aspectRatio?: AspectRatioId
+  brandKit?: BrandKitBits
+}
+
+export function isAspectRatioId(value: unknown): value is AspectRatioId {
+  return (
+    value === '1:1' ||
+    value === '4:5' ||
+    value === '9:16' ||
+    value === '16:9' ||
+    value === '3:4'
+  )
+}
+
+/** Apply Studio Size selection on top of the format’s default frame. */
+export function withAspectOverride(
+  format: FormatSpec,
+  aspectRatio?: AspectRatioId | string,
+): FormatSpec {
+  if (!isAspectRatioId(aspectRatio) || aspectRatio === format.aspectRatio) {
+    return format
+  }
+  const orientation: OrientationId =
+    aspectRatio === '1:1'
+      ? 'square'
+      : aspectRatio === '16:9'
+        ? 'landscape'
+        : aspectRatio === '9:16'
+          ? 'vertical'
+          : 'portrait'
+  const platform =
+    aspectRatio === '9:16'
+      ? ('instagram_story' as PlatformHint)
+      : aspectRatio === '16:9'
+        ? ('youtube' as PlatformHint)
+        : format.platform
+  return {
+    ...format,
+    aspectRatio,
+    orientation,
+    platform,
+    label: `${format.label.split('·')[0]?.trim() || format.label} · ${aspectRatio}`,
+    resolutionHint:
+      aspectRatio === '1:1'
+        ? '1080×1080'
+        : aspectRatio === '4:5'
+          ? '1080×1350'
+          : aspectRatio === '9:16'
+            ? '1080×1920'
+            : aspectRatio === '16:9'
+              ? '1920×1080'
+              : format.resolutionHint,
+  }
+}
+
+/** Render brand kit constraints for image/video prompts. */
+export function renderBrandKitBlock(kit?: BrandKitBits): string {
+  if (!kit) return ''
+  const lines: string[] = [
+    '=== BRAND KIT (HARD REQUIREMENT — FETCHED BRAND DETAILS) ===',
+    'These fields were extracted from the brand’s real website/kit. KEEP THEM FRONT OF MIND for every creative decision.',
+    'Apply them to lighting, palette, set, mood, typography feel, motion style, and advertising look — not as optional flavor.',
+  ]
+  if (kit.brandName?.trim()) lines.push(`Brand name: ${kit.brandName.trim()}`)
+  if (kit.industry?.trim()) lines.push(`Industry: ${kit.industry.trim()}`)
+  if (kit.colors?.length) lines.push(`Verified brand colors: ${kit.colors.join(', ')}`)
+  if (kit.fonts?.length) lines.push(`Brand fonts (typography feel): ${kit.fonts.join(', ')}`)
+  if (kit.voice?.trim()) lines.push(`Brand voice / tone: ${kit.voice.trim()}`)
+  if (kit.brandKeywords?.length) {
+    lines.push(`Brand keywords: ${kit.brandKeywords.join(', ')}`)
+  }
+  if (kit.styleNotes?.trim()) lines.push(`Style notes: ${kit.styleNotes.trim()}`)
+  if (kit.photographyStyle?.trim()) {
+    lines.push(`Photography style: ${kit.photographyStyle.trim()}`)
+  }
+  if (kit.lightingPreferences?.trim()) {
+    lines.push(`Lighting: ${kit.lightingPreferences.trim()}`)
+  }
+  if (kit.compositionPreferences?.trim()) {
+    lines.push(`Composition: ${kit.compositionPreferences.trim()}`)
+  }
+  if (kit.graphicDesignDirection?.trim()) {
+    lines.push(`Graphic direction: ${kit.graphicDesignDirection.trim()}`)
+  }
+  if (kit.packagingIdentity?.trim()) {
+    lines.push(
+      `Packaging identity (do not redesign SKU): ${kit.packagingIdentity.trim()}`,
+    )
+  }
+  if (kit.socialMediaDirection?.trim()) {
+    lines.push(`Social direction: ${kit.socialMediaDirection.trim()}`)
+  }
+  if (kit.advertisingStyle?.trim()) {
+    lines.push(`Advertising style: ${kit.advertisingStyle.trim()}`)
+  }
+  if (kit.ctaPreferences?.trim()) lines.push(`CTA style: ${kit.ctaPreferences.trim()}`)
+  if (kit.positioning?.length) {
+    lines.push(`Positioning: ${kit.positioning.filter(Boolean).join('; ')}`)
+  }
+  if (kit.thingsToAvoid?.length) {
+    lines.push(`Avoid: ${kit.thingsToAvoid.join('; ')}`)
+  }
+  if (kit.brandRestrictions?.length) {
+    lines.push(`Restrictions: ${kit.brandRestrictions.join('; ')}`)
+  }
+  if (lines.length <= 3) return ''
+  lines.push(
+    'Brand-kit lock: lighting, palette, typography feel, photography style, graphic/ad direction, and overall aesthetic MUST match this kit unless the user prompt explicitly overrides a specific field.',
+  )
+  lines.push(
+    'Generic stock “AI product photo” look that ignores this brand kit → failure.',
+  )
+  lines.push(
+    'PRODUCT RULE: brand styling must never distort the actual uploaded product packaging, label, or shape.',
+  )
+  return lines.join('\n')
 }
 
 export type LuceGenerationSpec = {
@@ -64,16 +202,17 @@ export type LuceGenerationSpec = {
 export const LUCE_PRIORITY = `CONFLICT PRIORITY (highest first):
 1) Product accuracy (IMAGE 1) — exact packaging, shape, colors, label, brand (NEVER redesign the SKU)
 2) Selected format — FOLLOW ACCORDINGLY: asset type rules + aspect ratio + orientation + camera/framing for that format (packshot / window / flatlay / hand / editorial / promo, etc.)
-3) Reference look (IMAGE 2, when provided) — FOLLOW ACCORDINGLY: lighting quality, color palette, mood, backdrop character, props, pour/drip, material feel from the reference
-4) User creative prompt — refine inside the mix
-5) LUCE default — only if no reference and no user prompt
+3) Brand kit (when provided) — KEEP FETCHED BRAND DETAILS FRONT OF MIND: verified colors, voice, photography/lighting/composition, graphic & advertising direction, packaging identity, keywords, things to avoid. The output must look like THIS brand, not a generic DTC template.
+4) Reference look (IMAGE 2, when provided) — FOLLOW ACCORDINGLY: lighting quality, color palette, mood, backdrop character, props, pour/drip, material feel from the reference — still inside brand-kit constraints
+5) User creative prompt — refine inside product + format + brand kit (+ reference when present)
+6) LUCE default — only if no brand kit, no reference, and no user prompt
 
-MIX RULE (reference + format together):
-Result = IMAGE 1 product + IMAGE 2 visual language + selected format’s shoot structure.
+MIX RULE (brand + reference + format together):
+Result = IMAGE 1 product + brand kit identity + IMAGE 2 visual language (if any) + selected format’s shoot structure.
 - Format answers: “what kind of shot is this?” (hero packshot vs flatlay vs in-hand vs window, etc.) and the exact frame ratio.
-- Reference answers: “what should it feel/look like?” (colors, light, set character, effects).
-- Blend them: keep the format’s composition intent while painting it with the reference’s look.
-- Never drop the product. Never ignore the format type. Never ignore the reference when IMAGE 2 is present.`
+- Brand kit answers: “who is this brand?” (palette, voice, photo style, ad direction, avoid list).
+- Reference answers: “what should it feel/look like?” (colors, light, set character, effects) — blend with brand kit, do not overwrite brand identity.
+- Never drop the product. Never ignore the format type. Never ignore the brand kit when provided. Never ignore the reference when IMAGE 2 is present.`
 
 export const LUCE_PRODUCT_RULES = `PRODUCT + REFERENCE + FORMAT MIX (IMAGE EDIT):
 - IMAGE 1 = product packaging ground truth. Same physical item: shape, proportions, label, logo, colors, materials.
@@ -237,7 +376,10 @@ export function renderImagePrompt(spec: LuceGenerationSpec): string {
   const refGoal = spec.hasReferenceImage
     ? `MIX accordingly: IMAGE 1 product + IMAGE 2 reference look + ${format.label} format (${format.aspectRatio}) — follow both reference and format.`
     : `Reshoot IMAGE 1 for this format — keep packaging and IMAGE 1’s styled look; follow ${format.label} (${format.aspectRatio}).`
+  const brandBlock = renderBrandKitBlock(spec.creativeDirection?.brandKit)
   return `You are the LUCE AI generation engine for a marketing campaign platform.
+
+SYSTEM: When a BRAND KIT block is present below, treat those fetched brand details as hard creative constraints for this image — colors, voice, photography, lighting, composition, graphic/ad direction, and avoid lists must shape the final still.
 
 TASK: IMAGE EDIT — produce ONE ${spec.assetLabel} still. ${refGoal}
 ASSET TYPE: ${spec.assetType} (${spec.assetLabel})
@@ -258,6 +400,8 @@ ${LUCE_PRODUCT_RULES}
 === FORMAT CONTRACT ===
 ${spec.formatContractBody}
 
+${brandBlock}
+
 === OPTIONAL CREATIVE DIRECTION ===
 ${userPromptBlock(spec)}
 Lighting preference: ${spec.creativeDirection?.lighting || 'default'}
@@ -272,6 +416,7 @@ ${LUCE_PRIORITY}
 - No watermarks, no fake UI, no invented price tags or captions burned in.
 - Must be ${format.aspectRatio}. Must look like the same product as IMAGE 1.
 - Must clearly read as ${spec.assetLabel} (format followed).
+- If a brand kit was provided: must clearly read as that brand’s look (palette/style/direction) — generic kit-ignored output → failure.
 - If packaging drifts → failure. If format is wrong → failure. If aspect ratio is wrong → failure.
 ${
   spec.hasReferenceImage
@@ -289,7 +434,10 @@ Generate the final ${format.aspectRatio} ${spec.assetLabel} image now.`
 export function renderVideoMotionPrompt(spec: LuceGenerationSpec): string {
   const { format } = spec
   const duration = spec.durationSeconds ?? 5
+  const brandBlock = renderBrandKitBlock(spec.creativeDirection?.brandKit)
   return `You are the LUCE AI generation engine for a marketing campaign platform.
+
+SYSTEM: When a BRAND KIT block is present below, keep those fetched brand details front of mind for motion, lighting continuity, mood, and advertising feel throughout the clip.
 
 TASK: Generate ONE VIDEO clip via image-to-video from the provided first frame.
 ASSET TYPE: ${spec.assetType} (${spec.assetLabel})
@@ -313,6 +461,8 @@ ${LUCE_PRODUCT_RULES}
 ${spec.structureBeat || ''}
 ${spec.formatContractBody ? `\nMotion detail:\n${spec.formatContractBody}` : ''}
 
+${brandBlock}
+
 === OPTIONAL CREATIVE DIRECTION ===
 ${userPromptBlock(spec)}
 
@@ -322,6 +472,7 @@ ${LUCE_PRIORITY}
 - Photorealistic, smooth motion, natural pacing for ${format.platform}.
 - No watermarks, no UI chrome, no fake burned-in captions/subtitles.
 - Clip must read as ${spec.assetLabel} content in ${format.aspectRatio} for ${duration}s.
+- If a brand kit was provided: motion mood, lighting continuity, and overall ad feel must stay on-brand — kit-ignored generic motion → failure.
 
 Generate the ${duration}s ${format.aspectRatio} ${spec.assetLabel} video now.`
 }
@@ -331,7 +482,10 @@ Generate the ${duration}s ${format.aspectRatio} ${spec.assetLabel} video now.`
  */
 export function renderVideoKeyframePrompt(spec: LuceGenerationSpec): string {
   const { format } = spec
+  const brandBlock = renderBrandKitBlock(spec.creativeDirection?.brandKit)
   return `You are the LUCE AI generation engine. Create the FIRST FRAME still for a ${spec.assetLabel} video.
+
+SYSTEM: When a BRAND KIT block is present, apply those fetched brand details to the keyframe look before motion starts.
 
 PRODUCT: "${spec.productName}"
 FORMAT: ${format.label} (${format.aspectRatio})
@@ -344,6 +498,8 @@ ${LUCE_PRODUCT_RULES}
 
 === KEYFRAME SCENE ===
 ${spec.formatContractBody}
+
+${brandBlock}
 
 === OPTIONAL CREATIVE DIRECTION ===
 ${userPromptBlock(spec)}

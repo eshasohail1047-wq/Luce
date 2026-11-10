@@ -5,6 +5,7 @@ import {
   IMAGE_ASSET_KINDS,
   type ImageAssetKind,
 } from './_lib/generateImages.js'
+import { parseCreativeDirectionBody } from './_lib/parseCreativeDirection.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -29,31 +30,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         (IMAGE_ASSET_KINDS as string[]).includes(a),
       )
 
-    const creativeDirection =
-      body.creativeDirection && typeof body.creativeDirection === 'object'
-        ? {
-            prompt:
-              typeof body.creativeDirection.prompt === 'string'
-                ? body.creativeDirection.prompt
-                : undefined,
-            lighting:
-              typeof body.creativeDirection.lighting === 'string'
-                ? body.creativeDirection.lighting
-                : undefined,
-            background:
-              typeof body.creativeDirection.background === 'string'
-                ? body.creativeDirection.background
-                : undefined,
-            mood:
-              typeof body.creativeDirection.mood === 'string'
-                ? body.creativeDirection.mood
-                : undefined,
-            styleTheme:
-              typeof body.creativeDirection.styleTheme === 'string'
-                ? body.creativeDirection.styleTheme
-                : undefined,
-          }
-        : undefined
+    const creativeDirection = parseCreativeDirectionBody(body.creativeDirection)
 
     const result = await generateCampaignImages({
       productName: String(body.productName ?? ''),

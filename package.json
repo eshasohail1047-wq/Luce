@@ -7,7 +7,7 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5176",
+    "dev": "vite --host localhost --port 5176",
     "dev:full": "vercel dev",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
@@ -17,6 +17,7 @@
     "firebase": "^13.0.0",
     "firebase-admin": "^13.10.0",
     "jszip": "^3.10.2",
+    "playwright": "^1.65.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.18.4",

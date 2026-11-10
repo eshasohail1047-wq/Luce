@@ -5,6 +5,7 @@ import {
   VIDEO_ASSET_KINDS,
   type VideoAssetKind,
 } from './_lib/generateVideos.js'
+import { parseCreativeDirectionBody } from './_lib/parseCreativeDirection.js'
 
 export const config = {
   maxDuration: 300,
@@ -32,31 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (VIDEO_ASSET_KINDS as string[]).includes(a),
     )
 
-  const creativeDirection =
-    body.creativeDirection && typeof body.creativeDirection === 'object'
-      ? {
-          prompt:
-            typeof body.creativeDirection.prompt === 'string'
-              ? body.creativeDirection.prompt
-              : undefined,
-          lighting:
-            typeof body.creativeDirection.lighting === 'string'
-              ? body.creativeDirection.lighting
-              : undefined,
-          background:
-            typeof body.creativeDirection.background === 'string'
-              ? body.creativeDirection.background
-              : undefined,
-          mood:
-            typeof body.creativeDirection.mood === 'string'
-              ? body.creativeDirection.mood
-              : undefined,
-          styleTheme:
-            typeof body.creativeDirection.styleTheme === 'string'
-              ? body.creativeDirection.styleTheme
-              : undefined,
-        }
-      : undefined
+  const creativeDirection = parseCreativeDirectionBody(body.creativeDirection)
 
   const result = await generateCampaignVideos({
     productName: String(body.productName ?? ''),

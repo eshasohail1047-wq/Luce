@@ -24,11 +24,14 @@ import {
   type ProductSourceType,
 } from '../lib/campaigns'
 import type {
+  AspectRatioId,
   BackgroundId,
+  CreativeDirection,
   LightingId,
   MoodId,
   StyleThemeId,
 } from '../lib/creativeDirection'
+import { ASPECT_RATIO_OPTIONS, withBrandKit } from '../lib/creativeDirection'
 import {
   AD_STYLES,
   DEFAULT_PHOTO_STYLES,
@@ -116,7 +119,14 @@ export default function StudioPage({
   const { kind: kindParam } = useParams()
   const kind = forcedKind ?? (isStudioKind(kindParam) ? kindParam : null)
   const [searchParams] = useSearchParams()
-  const { user, plan, freeImageUsed, markFreeImageUsed, loading } = useAuth()
+  const { user, plan, freeImageUsed, markFreeImageUsed, loading, workspace } =
+    useAuth()
+
+  function studioDirection(
+    partial: CreativeDirection,
+  ): CreativeDirection | undefined {
+    return withBrandKit(partial, workspace)
+  }
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -148,6 +158,9 @@ export default function StudioPage({
   const [background, setBackground] = useState<BackgroundId | ''>('')
   const [mood, setMood] = useState<MoodId | ''>('')
   const [styleTheme, setStyleTheme] = useState<StyleThemeId | ''>('')
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioId>(
+    kind === 'videos' ? '9:16' : '4:5',
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
@@ -215,6 +228,10 @@ export default function StudioPage({
     setReferencePreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [referenceFile])
+
+  useEffect(() => {
+    setAspectRatio(kind === 'videos' ? '9:16' : '4:5')
+  }, [kind])
 
   useEffect(() => {
     if (sourceType !== 'url') return
@@ -414,6 +431,26 @@ export default function StudioPage({
         }
       }
 
+      const fromUrl = searchParams.get('url')?.trim()
+      const fromName = searchParams.get('name')?.trim()
+      const fromImage = searchParams.get('image')?.trim()
+      if (fromUrl || fromImage || fromName) {
+        if (fromName) setProductName(fromName)
+        setShowDetails(true)
+        if (fromUrl) {
+          setSourceType('url')
+          setProductUrl(fromUrl)
+        }
+        if (fromImage) {
+          try {
+            await applyProductUrlImage(fromImage)
+          } catch {
+            /* keep url flow if image hydrate fails */
+          }
+        }
+        return
+      }
+
       const pending = await consumePendingProduct()
       if (cancelled) return
       if (pending.tryFree) setTryFree(true)
@@ -597,13 +634,14 @@ export default function StudioPage({
           productName: productName.trim() || session.productName,
           productImage,
           referenceImage,
-          creativeDirection: {
+          creativeDirection: studioDirection({
             prompt: directionNote || undefined,
             lighting: lighting || undefined,
             background: background || undefined,
             mood: mood || undefined,
             styleTheme: styleTheme || undefined,
-          },
+            aspectRatio,
+          }),
           assets: [current.assetType],
           recreateNote: directionNote || undefined,
         })
@@ -681,13 +719,14 @@ export default function StudioPage({
           productName: productName.trim() || session.productName,
           productImage,
           referenceFrameImage,
-          creativeDirection: {
+          creativeDirection: studioDirection({
             prompt: directionNote || undefined,
             lighting: lighting || undefined,
             background: background || undefined,
             mood: mood || undefined,
             styleTheme: styleTheme || undefined,
-          },
+            aspectRatio,
+          }),
           assets: [current.assetType],
           recreateNote: directionNote || undefined,
           durationSeconds,
@@ -728,13 +767,14 @@ export default function StudioPage({
       try {
         const ai = await requestGenerateCopy({
           productName: productName.trim() || session.productName,
-          creativeDirection: {
+          creativeDirection: studioDirection({
             prompt: directionNote || undefined,
             lighting: lighting || undefined,
             background: background || undefined,
             mood: mood || undefined,
             styleTheme: styleTheme || undefined,
-          },
+            aspectRatio,
+          }),
           assets: [current.assetType],
           recreateNote: directionNote || undefined,
         })
@@ -856,13 +896,14 @@ export default function StudioPage({
               opts.referenceDataUrl?.startsWith('data:image/')
                 ? opts.referenceDataUrl
                 : undefined,
-            creativeDirection: {
+            creativeDirection: studioDirection({
               prompt: prompt || undefined,
               lighting: lighting || undefined,
               background: background || undefined,
               mood: mood || undefined,
               styleTheme: styleTheme || undefined,
-            },
+              aspectRatio,
+            }),
             assets: [item.assetType as ImageAssetKind],
             recreateNote: opts.referenceDataUrl
               ? 'Match the reference look; keep product packaging exact.'
@@ -933,13 +974,14 @@ export default function StudioPage({
             productName: opts.productName,
             productImage: opts.productImage,
             referenceFrameImage,
-            creativeDirection: {
+            creativeDirection: studioDirection({
               prompt: prompt || undefined,
               lighting: lighting || undefined,
               background: background || undefined,
               mood: mood || undefined,
               styleTheme: styleTheme || undefined,
-            },
+              aspectRatio,
+            }),
             assets: [item.assetType as VideoAssetKind],
             durationSeconds,
           })
@@ -1166,13 +1208,14 @@ export default function StudioPage({
                   videoDurations,
                 ) as Record<string, number>)
               : undefined,
-          creativeDirection: {
+          creativeDirection: studioDirection({
             prompt,
             lighting: lighting || undefined,
             background: background || undefined,
             mood: mood || undefined,
             styleTheme: styleTheme || undefined,
-          },
+            aspectRatio,
+          }),
         }),
         45_000,
         'create-studio',
@@ -1800,6 +1843,32 @@ export default function StudioPage({
                 ariaLabel="Ad outputs"
               />
             )}
+
+            <div className="studio-size-block">
+              <div className="studio-size-head">
+                <h3>Size</h3>
+                <p>Generation frames to this ratio</p>
+              </div>
+              <div className="studio-size-row" role="radiogroup" aria-label="Output size">
+                {ASPECT_RATIO_OPTIONS.map((opt) => {
+                  const active = aspectRatio === opt.id
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      className={`studio-size-btn${active ? ' is-active' : ''}`}
+                      disabled={busy}
+                      title={opt.hint}
+                      onClick={() => setAspectRatio(opt.id)}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
           </section>
 
           {error && (
@@ -1844,7 +1913,7 @@ export default function StudioPage({
         className={`app-main campaign-create studio-page studio-page-${studioMeta.accent}${isSplitStudio ? ' studio-page-split' : ''}`}
       >
         {isSplitStudio ? (
-          <div className="studio-split">
+          <div className="studio-split" data-kind={kind || undefined}>
             <div className="studio-split-controls">{formBody}</div>
             <StudioStagePanel
               kind={kind}

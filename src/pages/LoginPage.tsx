@@ -1,14 +1,78 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
-import Logo from '../Logo'
-import ThemeToggle from '../components/ThemeToggle'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  browserLocalPersistence,
+  browserSessionPersistence,
+  setPersistence,
+} from 'firebase/auth'
 import { useAuth } from '../auth/AuthProvider'
+import Logo from '../Logo'
 import { requireAuth } from '../lib/firebase'
+import { loadOnboarding, stepPath } from '../lib/onboarding'
 import { resolvePostLoginPath } from '../lib/postLogin'
 
 type AuthMode = 'signin' | 'signup' | 'forgot' | 'forgot-sent' | 'forgot-google'
 
 const REMEMBER_KEY = 'luce.auth.rememberEmail'
+
+type AuthStoryBeat =
+  | {
+      id: string
+      caption: string
+      kind: 'image'
+      src: string
+    }
+  | {
+      id: string
+      caption: string
+      kind: 'upload'
+      src: string
+      hint: string
+    }
+  | {
+      id: string
+      caption: string
+      kind: 'video'
+      src: string
+      poster: string
+    }
+
+/** Click product → give to LUCE → pro photo → pro video (looping story). */
+const AUTH_STORY_BEATS: AuthStoryBeat[] = [
+  {
+    id: 'product',
+    caption: '1 · Click your product photo',
+    kind: 'image',
+    // Plain white packshot — looks like a normal product upload
+    src: '/images/fidelity-studio.jpg',
+  },
+  {
+    id: 'upload',
+    caption: '2 · Give it to LUCE',
+    kind: 'upload',
+    src: '/images/fidelity-studio.jpg',
+    hint: 'Drop your product photo',
+  },
+  {
+    id: 'photo',
+    caption: '3 · Get professional photography',
+    kind: 'image',
+    // Same bottle, elevated lifestyle daylight shoot
+    src: '/images/fidelity-daylight.jpg',
+  },
+  {
+    id: 'video',
+    caption: '4 · And perfume UGC video',
+    kind: 'video',
+    // Same rose-gold bottle family as the fidelity stills (not formats/ugc)
+    src: '/videos/formats/unboxing.mp4',
+    poster: '/images/video-poster-unbox.jpg',
+  },
+]
+
+const AUTH_STORY_BEAT_MS = 2200
+const AUTH_STORY_TAGLINE =
+  'One product photo in. Studio images and video out.'
 
 function GoogleMark() {
   return (
@@ -36,32 +100,177 @@ function GoogleMark() {
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
     return (
-      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-        <path
-          fill="currentColor"
-          d="M12 5c-5 0-9.3 3.1-11 7 1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-2.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"
-        />
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7">
+        <path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0" />
+        <circle cx="12" cy="12" r="3" />
       </svg>
     )
   }
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M3.3 2.3 2 3.6l3.1 3.1C3.3 8 1.7 9.8 1 12c1.7 3.9 6 7 11 7 1.8 0 3.5-.4 5-1.1l3.4 3.4 1.3-1.3L3.3 2.3zM12 17c-3.9 0-7.2-2.2-9-5 .7-1.2 1.8-2.4 3.2-3.3l1.8 1.8A5 5 0 0 0 12 17zm9.9-1.9-2.2-2.2c.2-.3.3-.6.3-.9 0-2.8-2.2-5-5-5-.3 0-.6.1-.9.3L11.7 4.9C11.8 4.9 11.9 5 12 5c5 0 9.3 3.1 11 7-.4 1-.9 1.9-1.6 2.7l.5.4z"
-      />
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c5 0 9.27 3.11 11 7a10.6 10.6 0 0 1-1.73 2.82" />
+      <path d="M6.61 6.61A13.5 13.5 0 0 0 1 12c1.73 3.89 6 7 11 7a10.4 10.4 0 0 0 5.39-1.61" />
+      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+      <path d="m2 2 20 20" />
     </svg>
   )
 }
 
-function MailIcon() {
+function AlertIcon() {
   return (
-    <svg className="auth-sent-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4-8 5-8-5V6l8 5 8-5v2z"
-      />
+    <svg className="auth-alert-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
     </svg>
+  )
+}
+
+function AuthError({ message }: { message: string }) {
+  return (
+    <div className="auth-error" role="alert">
+      <AlertIcon />
+      <span>{message}</span>
+    </div>
+  )
+}
+
+function AuthStoryPanel({ compact = false }: { compact?: boolean }) {
+  const [beat, setBeat] = useState(0)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const reduceMotion = useRef(false)
+
+  useEffect(() => {
+    reduceMotion.current =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduceMotion.current) return
+
+    const id = window.setInterval(() => {
+      setBeat((i) => (i + 1) % AUTH_STORY_BEATS.length)
+    }, AUTH_STORY_BEAT_MS)
+    return () => window.clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    const active = AUTH_STORY_BEATS[beat]
+    if (active.kind === 'video') {
+      video.currentTime = 0
+      void video.play().catch(() => {})
+    } else {
+      video.pause()
+    }
+  }, [beat])
+
+  return (
+    <aside
+      className={
+        compact
+          ? 'auth-media auth-media--compact auth-story'
+          : 'auth-media auth-story'
+      }
+      aria-label="How LUCE turns a product photo into studio photos and video"
+    >
+      <div className="auth-story-stage" aria-hidden="true">
+        {AUTH_STORY_BEATS.map((slide, index) => {
+          const active = index === beat
+          if (slide.kind === 'video') {
+            return (
+              <div
+                key={slide.id}
+                className={
+                  active
+                    ? 'auth-story-slide auth-story-slide--active'
+                    : 'auth-story-slide'
+                }
+              >
+                <video
+                  ref={videoRef}
+                  className="auth-story-media"
+                  src={slide.src}
+                  poster={slide.poster}
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+              </div>
+            )
+          }
+
+          if (slide.kind === 'upload') {
+            return (
+              <div
+                key={slide.id}
+                className={
+                  active
+                    ? 'auth-story-slide auth-story-slide--upload auth-story-slide--active'
+                    : 'auth-story-slide auth-story-slide--upload'
+                }
+              >
+                <div className="auth-story-upload">
+                  <div className="auth-story-upload-frame">
+                    <img
+                      className="auth-story-upload-img"
+                      src={slide.src}
+                      alt=""
+                      draggable={false}
+                    />
+                    <p className="auth-story-upload-hint">{slide.hint}</p>
+                  </div>
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <div
+              key={slide.id}
+              className={
+                active
+                  ? 'auth-story-slide auth-story-slide--active'
+                  : 'auth-story-slide'
+              }
+            >
+              <img
+                className="auth-story-media"
+                src={slide.src}
+                alt=""
+                draggable={false}
+              />
+              {slide.id === 'product' ? (
+                <span className="auth-story-pointer" aria-hidden="true" />
+              ) : null}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="auth-media-overlay" aria-hidden="true" />
+
+      <div className="auth-story-ui">
+        <p className="auth-story-caption" key={AUTH_STORY_BEATS[beat].id}>
+          {AUTH_STORY_BEATS[beat].caption}
+        </p>
+        <div className="auth-story-dots" aria-hidden="true">
+          {AUTH_STORY_BEATS.map((slide, index) => (
+            <span
+              key={slide.id}
+              className={
+                index === beat
+                  ? 'auth-story-dot auth-story-dot--active'
+                  : 'auth-story-dot'
+              }
+            />
+          ))}
+        </div>
+        <p className="auth-media-tagline auth-story-tagline">
+          {AUTH_STORY_TAGLINE}
+        </p>
+      </div>
+    </aside>
   )
 }
 
@@ -77,21 +286,37 @@ export default function LoginPage() {
     clearError,
   } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const destRef = useRef<string | null>(null)
-  const [mode, setMode] = useState<AuthMode>('signin')
+
+  const initialMode: AuthMode =
+    searchParams.get('mode') === 'signup' ? 'signup' : 'signin'
+
+  const [mode, setMode] = useState<AuthMode>(initialMode)
   const [busy, setBusy] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
+  const [authDest, setAuthDest] = useState<string | null>(null)
 
-  function destination() {
-    if (!destRef.current) destRef.current = resolvePostLoginPath()
+  async function resolveDestination(uid: string) {
+    if (destRef.current) return destRef.current
+    try {
+      const onboarding = await loadOnboarding(uid)
+      if (!onboarding.completed) {
+        destRef.current = stepPath(onboarding.step || 'personal')
+        return destRef.current
+      }
+    } catch {
+      /* fall through */
+    }
+    destRef.current = resolvePostLoginPath()
     return destRef.current
   }
+
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [remember, setRemember] = useState(false)
+  const [remember, setRemember] = useState(true)
   const [resetEmail, setResetEmail] = useState('')
   const [resetViaFirebase, setResetViaFirebase] = useState(false)
 
@@ -107,8 +332,31 @@ export default function LoginPage() {
     }
   }, [])
 
-  if (!loading && user) {
-    return <Navigate to={destination()} replace />
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      if (loading || !user) {
+        if (alive) setAuthDest(null)
+        return
+      }
+      const next = await resolveDestination(user.uid)
+      if (alive) setAuthDest(next)
+    })()
+    return () => {
+      alive = false
+    }
+  }, [user, loading])
+
+  if (!loading && user && authDest) {
+    return <Navigate to={authDest} replace />
+  }
+
+  if (!loading && user && !authDest) {
+    return (
+      <div className="auth-page auth-page--loading">
+        <p className="app-loading">Preparing your workspace…</p>
+      </div>
+    )
   }
 
   function switchMode(next: AuthMode) {
@@ -126,12 +374,11 @@ export default function LoginPage() {
     clearError()
     try {
       await signInWithGoogle()
-      // Popup path sets currentUser before returning. Redirect path unloads this page.
-      // Avoid racing into /app while React auth state is still null (bounces back here).
       const started = Date.now()
       while (Date.now() - started < 3000) {
-        if (requireAuth().currentUser) {
-          navigate(destination(), { replace: true })
+        const current = requireAuth().currentUser
+        if (current) {
+          navigate(await resolveDestination(current.uid), { replace: true })
           return
         }
         await new Promise((r) => setTimeout(r, 40))
@@ -204,8 +451,8 @@ export default function LoginPage() {
 
     try {
       if (mode === 'signup') {
-        if (password !== confirmPassword) {
-          setLocalError('Passwords do not match.')
+        if (!name.trim()) {
+          setLocalError('Enter your full name.')
           return
         }
         if (password.length < 6) {
@@ -218,6 +465,10 @@ export default function LoginPage() {
           password,
         })
       } else {
+        await setPersistence(
+          requireAuth(),
+          remember ? browserLocalPersistence : browserSessionPersistence,
+        )
         await signInWithEmail(email.trim(), password)
         try {
           if (remember) localStorage.setItem(REMEMBER_KEY, email.trim())
@@ -226,7 +477,10 @@ export default function LoginPage() {
           /* ignore */
         }
       }
-      navigate(destination(), { replace: true })
+      const current = requireAuth().currentUser
+      if (current) {
+        navigate(await resolveDestination(current.uid), { replace: true })
+      }
     } catch (err) {
       console.error('[login] email auth failed', err)
       setLocalError(
@@ -243,50 +497,50 @@ export default function LoginPage() {
   const isForgotSent = mode === 'forgot-sent'
   const isForgotGoogle = mode === 'forgot-google'
   const sentTo = resetEmail.trim() || email.trim()
+  const canSubmit =
+    !busy &&
+    email.trim().length > 0 &&
+    password.length >= 6 &&
+    (!isSignup || name.trim().length > 0)
+
+  const title = isSignup
+    ? 'Create account'
+    : isForgot
+      ? 'Forgot your password?'
+      : isForgotSent
+        ? resetViaFirebase
+          ? 'Email may not arrive'
+          : 'Check your inbox'
+        : isForgotGoogle
+          ? 'Use Google to sign in'
+          : 'Welcome back'
 
   return (
     <div className="auth-page">
-      <div className="auth-shell">
-        <aside className="auth-visual" aria-hidden="true">
-          <img
-            className="auth-visual-img"
-            src="/images/campaign-perfume-studio.jpg"
-            alt=""
-          />
-          <div className="auth-visual-shade" />
-          <div className="auth-visual-content">
-            <Logo href="/" />
-            <p className="auth-visual-kicker">LUCE</p>
-            <h2 className="auth-visual-title">
-              Campaigns that stay true to your product.
-            </h2>
-            <p className="auth-visual-copy">
-              Research, strategy, and creative from one product photo.
-            </p>
-          </div>
-        </aside>
-
+      <div className="auth-split">
         <section className="auth-panel" aria-labelledby="login-title">
+          <AuthStoryPanel compact />
+
           <div className="auth-panel-inner">
-            <div className="auth-theme-row">
-              <ThemeToggle />
-            </div>
+            <Link to="/" className="auth-wordmark" aria-label="LUCE home">
+              <Logo href={null} />
+            </Link>
+
+            <header className="auth-header">
+              <h1 id="login-title" className="auth-title">
+                {title}
+              </h1>
+            </header>
+
             {isForgotGoogle ? (
               <>
-                <div className="auth-card-head">
-                  <h1 id="login-title">Use Google to sign in</h1>
-                  <p className="auth-card-lead">
-                    <strong className="auth-sent-email">{sentTo}</strong> was
-                    created with Google, so Firebase does not send a password
-                    reset email for it. Sign in with Google instead.
-                  </p>
-                </div>
+                <p className="auth-lead">
+                  <strong className="auth-sent-email">{sentTo}</strong> was created
+                  with Google, so a password reset email is not available. Sign in
+                  with Google instead.
+                </p>
 
-                {shownError && (
-                  <p className="auth-error" role="alert">
-                    {shownError}
-                  </p>
-                )}
+                {shownError && <AuthError message={shownError} />}
 
                 <button
                   type="button"
@@ -295,70 +549,36 @@ export default function LoginPage() {
                   disabled={busy}
                 >
                   <GoogleMark />
-                  <span>{busy ? 'Connecting…' : 'Continue with Google'}</span>
+                  <span>{busy ? 'Connecting…' : 'Sign in with Google'}</span>
                 </button>
 
-                <p className="auth-switch">
-                  Want email login instead?{' '}
-                  <button type="button" onClick={() => switchMode('signup')} disabled={busy}>
-                    Create an email account
-                  </button>
-                </p>
-
-                <p className="auth-switch">
+                <p className="auth-footer">
                   <button type="button" onClick={() => switchMode('signin')} disabled={busy}>
-                    ← Back to login
+                    Back to sign in
                   </button>
                 </p>
               </>
             ) : isForgotSent ? (
               <>
-                <div className="auth-sent">
-                  <MailIcon />
-                  <div className="auth-card-head">
-                    <h1 id="login-title">
-                      {resetViaFirebase ? 'Email may not arrive' : 'Check your email'}
-                    </h1>
-                    {resetViaFirebase ? (
-                      <>
-                        <p className="auth-card-lead">
-                          LUCE asked Firebase to email{' '}
-                          <strong className="auth-sent-email">{sentTo}</strong>,
-                          but Firebase&apos;s built-in mail often never reaches
-                          Gmail (even for Sign Up accounts).
-                        </p>
-                        <p className="auth-error" role="status">
-                          To get real reset emails: add a Resend API key + Firebase
-                          service account in <code>.env.local</code>, then run{' '}
-                          <code>npm run dev:full</code>.
-                        </p>
-                      </>
-                    ) : (
-                      <p className="auth-card-lead">
-                        A reset link was sent to{' '}
-                        <strong className="auth-sent-email">{sentTo}</strong>.
-                        Check Inbox and Spam, open the link, set a new password,
-                        then log in.
-                      </p>
-                    )}
-                  </div>
-                </div>
+                <p className="auth-lead">
+                  {resetViaFirebase ? (
+                    <>
+                      LUCE asked Firebase to email{' '}
+                      <strong className="auth-sent-email">{sentTo}</strong>, but
+                      Firebase&apos;s built-in mail often never reaches Gmail. Add a
+                      Resend API key + Firebase service account in{' '}
+                      <code>.env.local</code>, then run <code>npm run dev:full</code>.
+                    </>
+                  ) : (
+                    <>
+                      If an account exists for{' '}
+                      <strong className="auth-sent-email">{sentTo}</strong>, a reset
+                      link is on its way. Check inbox and spam.
+                    </>
+                  )}
+                </p>
 
-                {shownError && (
-                  <p className="auth-error" role="alert">
-                    {shownError}
-                  </p>
-                )}
-
-                <button
-                  type="button"
-                  className="auth-google-btn"
-                  onClick={onGoogle}
-                  disabled={busy}
-                >
-                  <GoogleMark />
-                  <span>{busy ? 'Connecting…' : 'Continue with Google'}</span>
-                </button>
+                {shownError && <AuthError message={shownError} />}
 
                 <button
                   type="button"
@@ -366,10 +586,10 @@ export default function LoginPage() {
                   onClick={() => switchMode('signin')}
                   disabled={busy}
                 >
-                  Back to login
+                  Back to sign in
                 </button>
 
-                <p className="auth-switch">
+                <p className="auth-footer">
                   Didn&apos;t get it?{' '}
                   <button type="button" onClick={onResendReset} disabled={busy}>
                     {busy ? 'Sending…' : 'Resend email'}
@@ -378,13 +598,9 @@ export default function LoginPage() {
               </>
             ) : isForgot ? (
               <>
-                <div className="auth-card-head">
-                  <h1 id="login-title">Forgot password?</h1>
-                  <p className="auth-card-lead">
-                    Enter your email and we&apos;ll send you a link to reset your
-                    password.
-                  </p>
-                </div>
+                <p className="auth-lead">
+                  Enter your email and we&apos;ll send a link to reset your password.
+                </p>
 
                 <form className="auth-form" onSubmit={onForgotSubmit}>
                   <div className="auth-field">
@@ -395,7 +611,7 @@ export default function LoginPage() {
                       type="email"
                       required
                       autoComplete="email"
-                      placeholder="example@gmail.com"
+                      placeholder="you@company.com"
                       value={resetEmail}
                       onChange={(e) => setResetEmail(e.target.value)}
                       disabled={busy}
@@ -403,30 +619,39 @@ export default function LoginPage() {
                     />
                   </div>
 
-                  {shownError && (
-                    <p className="auth-error" role="alert">
-                      {shownError}
-                    </p>
-                  )}
+                  {shownError && <AuthError message={shownError} />}
 
-                  <button type="submit" className="auth-submit" disabled={busy}>
+                  <button
+                    type="submit"
+                    className="auth-submit"
+                    disabled={busy || !resetEmail.trim()}
+                  >
                     {busy ? 'Sending…' : 'Send reset link'}
                   </button>
                 </form>
 
-                <p className="auth-switch">
+                <p className="auth-footer">
                   <button type="button" onClick={() => switchMode('signin')} disabled={busy}>
-                    ← Back to login
+                    Back to sign in
                   </button>
                 </p>
               </>
             ) : (
               <>
-                <div className="auth-card-head">
-                  <h1 id="login-title">Welcome!</h1>
-                  <p className="auth-card-lead">
-                    {isSignup ? 'Create your LUCE account' : 'Log in to your account'}
-                  </p>
+                <button
+                  type="button"
+                  className="auth-google-btn"
+                  onClick={onGoogle}
+                  disabled={busy}
+                >
+                  <GoogleMark />
+                  <span>
+                    {isSignup ? 'Sign up with Google' : 'Sign in with Google'}
+                  </span>
+                </button>
+
+                <div className="auth-or" role="separator">
+                  <span>or</span>
                 </div>
 
                 <form className="auth-form" onSubmit={onEmailSubmit}>
@@ -436,32 +661,48 @@ export default function LoginPage() {
                       <input
                         id="auth-name"
                         name="name"
+                        type="text"
+                        required
                         autoComplete="name"
-                        placeholder="Maya Rahman"
+                        placeholder="Jane Smith"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         disabled={busy}
+                        autoFocus
                       />
                     </div>
                   )}
 
                   <div className="auth-field">
-                    <label htmlFor="auth-email">Your Email</label>
+                    <label htmlFor="auth-email">Email</label>
                     <input
                       id="auth-email"
                       name="email"
                       type="email"
                       required
                       autoComplete="email"
-                      placeholder="example@gmail.com"
+                      placeholder="you@company.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={busy}
+                      autoFocus={!isSignup}
                     />
                   </div>
 
                   <div className="auth-field">
-                    <label htmlFor="auth-password">Password</label>
+                    <div className="auth-label-row">
+                      <label htmlFor="auth-password">Password</label>
+                      {!isSignup && (
+                        <button
+                          type="button"
+                          className="auth-forgot"
+                          onClick={() => switchMode('forgot')}
+                          disabled={busy}
+                        >
+                          Forgot password?
+                        </button>
+                      )}
+                    </div>
                     <div className="auth-password-wrap">
                       <input
                         id="auth-password"
@@ -486,104 +727,66 @@ export default function LoginPage() {
                     </div>
                   </div>
 
-                  {isSignup && (
-                    <div className="auth-field">
-                      <label htmlFor="auth-confirm">Confirm password</label>
+                  {!isSignup && (
+                    <label className="auth-remember">
                       <input
-                        id="auth-confirm"
-                        name="confirmPassword"
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        minLength={6}
-                        autoComplete="new-password"
-                        placeholder="••••••••"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        type="checkbox"
+                        checked={remember}
+                        onChange={(e) => setRemember(e.target.checked)}
                         disabled={busy}
                       />
-                    </div>
+                      <span>Keep me signed in</span>
+                    </label>
                   )}
 
-                  {!isSignup && (
-                    <div className="auth-row">
-                      <label className="auth-remember">
-                        <input
-                          type="checkbox"
-                          checked={remember}
-                          onChange={(e) => setRemember(e.target.checked)}
-                          disabled={busy}
-                        />
-                        <span>Remember Me</span>
-                      </label>
-                      <button
-                        type="button"
-                        className="auth-forgot"
-                        onClick={() => switchMode('forgot')}
-                        disabled={busy}
-                      >
-                        Forgot Password?
-                      </button>
-                    </div>
-                  )}
+                  {shownError && <AuthError message={shownError} />}
 
-                  {shownError && (
-                    <p className="auth-error" role="alert">
-                      {shownError}
-                    </p>
-                  )}
-
-                  <button type="submit" className="auth-submit" disabled={busy}>
+                  <button
+                    type="submit"
+                    className="auth-submit"
+                    disabled={!canSubmit}
+                  >
                     {busy
                       ? isSignup
                         ? 'Creating…'
                         : 'Signing in…'
                       : isSignup
-                        ? 'Sign Up'
-                        : 'Login'}
+                        ? 'Sign up'
+                        : 'Sign in'}
                   </button>
                 </form>
 
-                <div className="auth-or" role="separator" aria-label="or">
-                  <span>or</span>
-                </div>
+                {isSignup && (
+                  <p className="auth-legal">
+                    By creating an account you agree to our{' '}
+                    <Link to="/terms">Terms of Service</Link> and{' '}
+                    <Link to="/privacy">Privacy Policy</Link>.
+                  </p>
+                )}
 
-                <div className="auth-social">
-                  <button
-                    type="button"
-                    className="auth-google-btn"
-                    onClick={onGoogle}
-                    disabled={busy}
-                  >
-                    <GoogleMark />
-                    <span>Continue with Google</span>
-                  </button>
-                </div>
-
-                <p className="auth-switch">
+                <p className="auth-footer">
                   {isSignup ? (
                     <>
                       Already have an account?{' '}
                       <button type="button" onClick={() => switchMode('signin')} disabled={busy}>
-                        Log In
+                        Sign in
                       </button>
                     </>
                   ) : (
                     <>
                       Don&apos;t have an account?{' '}
                       <button type="button" onClick={() => switchMode('signup')} disabled={busy}>
-                        Sign Up
+                        Sign up
                       </button>
                     </>
                   )}
                 </p>
               </>
             )}
-
-            <Link to="/" className="auth-home-link">
-              ← Back to home
-            </Link>
           </div>
         </section>
+
+        <AuthStoryPanel />
       </div>
     </div>
   )

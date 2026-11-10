@@ -1,49 +1,48 @@
 :root {
   color-scheme: light;
-  --bg: #f8f5fa;
-  --bg-elevated: #fcfafc;
-  --surface: rgba(255, 255, 255, 0.92);
+  --bg: #ffffff;
+  --bg-elevated: #fafafa;
+  --surface: #fafafa;
   --surface-solid: #ffffff;
-  --shell-bg: #f6f5f8;
-  --rail-bg: #f4f7fb;
+  --surface-2: #f4f4f5;
+  --shell-bg: #fafafa;
+  --rail-bg: #fafafa;
   --topbar-bg: #ffffff;
   --panel-bg: #ffffff;
-  --panel-muted: #f3f5f8;
-  --ink: #121218;
-  --ink-soft: #2c2c35;
-  --muted: #656570;
-  --muted-soft: #8c8c98;
-  --line: rgba(85, 40, 115, 0.1);
-  --line-strong: rgba(85, 40, 115, 0.16);
-  --accent: #7c3aed;
-  --accent-deep: #6d28d9;
-  --accent-soft: #f3e8ff;
-  --pink: #f0d4e4;
-  --lavender: #e9d5ff;
-  --sky: #f5f0f8;
-  --mint: #c084fc;
-  --mint-soft: #fae8ff;
-  --grad: linear-gradient(115deg, #6d28d9 0%, #7c3aed 48%, #c084fc 88%, #e879c0 100%);
-  --shadow: 0 20px 50px rgba(109, 40, 200, 0.12);
-  --shadow-soft: 0 10px 28px rgba(109, 40, 200, 0.08);
-  --radius: 16px;
-  --radius-lg: 24px;
-  --font-display: 'Outfit', system-ui, sans-serif;
-  --font-logo: 'Outfit', system-ui, sans-serif;
-  --font-body: 'Outfit', system-ui, sans-serif;
+  --panel-muted: #f4f4f5;
+  --ink: #0a0a0a;
+  --ink-2: #3f3f46;
+  --ink-soft: #3f3f46;
+  --muted: #71717a;
+  --muted-soft: #a1a1aa;
+  --nav-text: #52525b;
+  --border: #ebebeb;
+  --border-strong: #e4e4e7;
+  --line: #ebebeb;
+  --line-strong: #e4e4e7;
+  --accent: #0a0a0a;
+  --accent-deep: #0a0a0a;
+  --accent-soft: #f4f4f5;
+  --pink: #f4f4f5;
+  --lavender: #f4f4f5;
+  --sky: #fafafa;
+  --mint: #71717a;
+  --mint-soft: #f4f4f5;
+  --grad: #0a0a0a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --radius: 12px;
+  --radius-lg: 16px;
+  --font-display: 'Geist', 'Inter', system-ui, sans-serif;
+  --font-logo: 'Geist', 'Inter', system-ui, sans-serif;
+  --font-body: 'Geist', 'Inter', system-ui, sans-serif;
   --max: 1140px;
-  --backdrop:
-    radial-gradient(ellipse 55% 70% at -4% 40%, rgba(124, 58, 237, 0.16), transparent 58%),
-    radial-gradient(ellipse 55% 70% at 104% 45%, rgba(232, 121, 192, 0.14), transparent 58%),
-    radial-gradient(ellipse 75% 48% at 10% -6%, rgba(124, 58, 237, 0.12), transparent 55%),
-    radial-gradient(ellipse 50% 38% at 92% 12%, rgba(232, 121, 192, 0.1), transparent 52%),
-    radial-gradient(ellipse 50% 38% at 50% 58%, rgba(192, 132, 252, 0.07), transparent 60%),
-    linear-gradient(180deg, #f8f5fa 0%, #f5f1f8 45%, #f1ecf6 100%);
+  --backdrop: #f4f4f5;
   --input-bg: #ffffff;
-  --hover-fill: rgba(20, 18, 28, 0.04);
-  --rail-link: #2f3540;
-  --rail-icon: #6b7380;
-  --rail-active-bg: #3d4a5c;
+  --hover-fill: rgba(10, 10, 10, 0.04);
+  --rail-link: #52525b;
+  --rail-icon: #71717a;
+  --rail-active-bg: #0a0a0a;
   --danger: #b42318;
   --danger-soft: rgba(180, 35, 24, 0.08);
 }
@@ -108,8 +107,8 @@ body {
   width: 100%;
   font-family: var(--font-body);
   font-weight: 400;
-  font-size: 1.02rem;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.5;
   letter-spacing: -0.01em;
   color: var(--ink);
   background: var(--bg);
@@ -124,8 +123,8 @@ h2,
 h3,
 h4 {
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-weight: 600;
+  letter-spacing: -0.025em;
   line-height: 1.15;
   color: var(--ink);
 }

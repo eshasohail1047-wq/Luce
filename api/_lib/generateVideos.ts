@@ -2,6 +2,8 @@ import { generateImageWithProviders } from './generateImages.js'
 import { generateHeyGenVideo, getHeyGenApiKey } from './heygen.js'
 import {
   buildLuceSpec,
+  formatForVideoAsset,
+  withAspectOverride,
   renderVideoKeyframePrompt,
   renderVideoMotionPrompt,
 } from './luceGeneration.js'
@@ -14,7 +16,7 @@ async function generateVideoWithProviders(input: {
   frameImages?: { url: string; frameType: 'first_frame' }[]
   inputReferences?: string[]
   duration?: number
-  aspectRatio?: '9:16'
+  aspectRatio?: string
   resolution?: '768p'
   generateAudio?: boolean
 }): Promise<{ videoUrl: string; videoDataUrl: string; provider: string }> {
@@ -137,6 +139,16 @@ export type CreativeDirectionSummary = {
   background?: string
   mood?: string
   styleTheme?: string
+  aspectRatio?: string
+  brandKit?: {
+    brandName?: string
+    colors?: string[]
+    fonts?: string[]
+    voice?: string
+    styleNotes?: string
+    industry?: string
+    positioning?: string[]
+  }
 }
 
 export type GenerateVideosInput = {
@@ -287,6 +299,7 @@ function buildKeyframePrompt(
     assetLabel: LABELS[type],
     productName,
     formatContractBody: `${scene}\n\n${personNote}`,
+    formatOverride: withAspectOverride(formatForVideoAsset(type), cd?.aspectRatio),
     creativeDirection: cd
       ? {
           prompt: cd.prompt,
@@ -294,6 +307,8 @@ function buildKeyframePrompt(
           background: cd.background ? humanize(cd.background) : undefined,
           mood: cd.mood ? humanize(cd.mood) : undefined,
           styleTheme: cd.styleTheme ? humanize(cd.styleTheme) : undefined,
+          aspectRatio: cd.aspectRatio,
+          brandKit: cd.brandKit,
         }
       : undefined,
     hasProductImage: true,
@@ -342,6 +357,7 @@ function buildMotionPrompt(
     formatContractBody: motionExtras.join(' '),
     structureBeat: FORMAT_BEATS[type],
     durationSeconds,
+    formatOverride: withAspectOverride(formatForVideoAsset(type), cd?.aspectRatio),
     creativeDirection: cd
       ? {
           prompt: cd.prompt,
@@ -349,6 +365,8 @@ function buildMotionPrompt(
           background: cd.background ? humanize(cd.background) : undefined,
           mood: cd.mood ? humanize(cd.mood) : undefined,
           styleTheme: cd.styleTheme ? humanize(cd.styleTheme) : undefined,
+          aspectRatio: cd.aspectRatio,
+          brandKit: cd.brandKit,
         }
       : undefined,
     recreateNote,
@@ -484,13 +502,17 @@ export async function generateCampaignVideos(
         duration,
       )
 
-      // Format → explicit model params (LUCE §4 / §13 — never let the model guess)
+      // Size picker (Studio) overrides format default; vertical remains the safe default.
+      const aspectRatio = withAspectOverride(
+        formatForVideoAsset(type),
+        input.creativeDirection?.aspectRatio,
+      ).aspectRatio
       const result = await generateVideoWithProviders({
         prompt: promptUsed,
         frameImages: [{ url: firstFrame, frameType: 'first_frame' }],
         inputReferences: undefined,
         duration,
-        aspectRatio: '9:16',
+        aspectRatio,
         resolution: '768p',
       })
 

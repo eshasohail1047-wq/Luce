@@ -6,17 +6,23 @@ const DEFAULT_MODEL = 'google/gemini-2.5-flash-image'
 const DEFAULT_VIDEO_MODEL = 'heygen/heygen-video-1'
 /**
  * Free OpenRouter text for captions / hooks / CTAs / hashtags / ad copy.
- * `openrouter/free` auto-picks a free :free model; override with OPENROUTER_CHAT_MODEL
- * (e.g. google/gemma-4-31b-it:free, meta-llama/llama-3.2-3b-instruct:free).
+ * `openrouter/free` auto-picks a free :free model; override with OPENROUTER_CHAT_MODEL.
  */
 const DEFAULT_CHAT_MODEL = 'openrouter/free'
 /** Free-only fallbacks if the primary free model is rate-limited / unavailable. */
 const FREE_CHAT_FALLBACKS = [
-  'google/gemma-4-31b-it:free',
-  'google/gemma-4-26b-a4b-it:free',
-  'meta-llama/llama-3.2-3b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen3-14b:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free',
   'nvidia/nemotron-3.5-lightning:free',
 ] as const
+/**
+ * Brand intelligence / website scan refine: FREE text only (same as captions).
+ * Override with OPENROUTER_BRAND_MODEL only when it is `openrouter/free` or `*:free`;
+ * paid ids are ignored so brand refine never bills chat.
+ */
+/** Prefer a stable free instruct model — `openrouter/free` often routes to empty/non-JSON hosts. */
+const DEFAULT_BRAND_CHAT_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
 const REQUEST_TIMEOUT_MS = 120_000
 const VIDEO_POLL_FIRST_MS = 5_000
 const VIDEO_POLL_MS = 8_000
@@ -65,20 +71,37 @@ export function getOpenRouterChatModel(): string {
   return configured
 }
 
+function isFreeOpenRouterModel(id: string): boolean {
+  const t = id.trim()
+  return Boolean(t) && (t === 'openrouter/free' || t.endsWith(':free'))
+}
+
 function chatModelsPreferFree(primary: string): string[] {
   const first = primary.trim() || DEFAULT_CHAT_MODEL
   const extras = FREE_CHAT_FALLBACKS.filter((id) => id !== first)
   // Only free models so OpenRouter never bills a paid hop.
   // OpenRouter allows at most 3 entries in the `models` fallback array
   // → keep primary + up to 3 free backups (4 ids total in our chain).
-  const freeOnly = [first, ...extras].filter(
-    (id) => id === 'openrouter/free' || id.endsWith(':free'),
-  )
+  const freeOnly = [first, ...extras].filter(isFreeOpenRouterModel)
   const chain =
     freeOnly.length > 0
       ? freeOnly
       : [DEFAULT_CHAT_MODEL, ...FREE_CHAT_FALLBACKS]
   return chain.slice(0, 4)
+}
+
+/**
+ * Brand refine model — free-only. Paid OPENROUTER_BRAND_MODEL values are ignored.
+ */
+export function getOpenRouterBrandModel(): string {
+  const configured = process.env.OPENROUTER_BRAND_MODEL?.trim()
+  if (configured && isFreeOpenRouterModel(configured)) return configured
+  if (configured) {
+    console.warn(
+      `[openrouter] Ignoring paid OPENROUTER_BRAND_MODEL="${configured}" — brand refine is free-only`,
+    )
+  }
+  return DEFAULT_BRAND_CHAT_MODEL
 }
 
 function openRouterHeaders(apiKey: string): Record<string, string> {
@@ -455,15 +478,51 @@ export type ChatCompletionInput = {
   model?: string
   temperature?: number
   maxTokens?: number
+  /** Optional image URLs or data URLs for vision-capable brand refine. */
+  imageUrls?: string[]
 }
+
+/**
+ * Free multimodal models for opt-in brand vision (OPENROUTER_BRAND_VISION=1).
+ * Never use paid Gemini for brand-scan vision.
+ */
+const BRAND_VISION_FALLBACKS = [
+  'meta-llama/llama-3.2-11b-vision-instruct:free',
+  'google/gemma-3-12b-it:free',
+  'openrouter/free',
+] as const
 
 export type ChatCompletionResult = {
   text: string
   model: string
 }
 
+/** Free-only brand text chain — same pattern as captions (`openrouter/free` + `:free`). */
+function brandChatModels(primary: string): string[] {
+  const first = isFreeOpenRouterModel(primary)
+    ? primary.trim()
+    : getOpenRouterBrandModel()
+  return chatModelsPreferFree(first)
+}
+
+/** Free-only multimodal chain for opt-in brand vision. */
+function brandVisionModels(primary: string): string[] {
+  const first = isFreeOpenRouterModel(primary)
+    ? primary.trim()
+    : getOpenRouterBrandModel()
+  const extras = BRAND_VISION_FALLBACKS.filter((id) => id !== first)
+  const freeOnly = [first, ...extras].filter(isFreeOpenRouterModel)
+  const chain =
+    freeOnly.length > 0
+      ? freeOnly
+      : [DEFAULT_BRAND_CHAT_MODEL, ...BRAND_VISION_FALLBACKS]
+  return [...new Set(chain)].slice(0, 4)
+}
+
 /**
- * OpenRouter chat completions — used for captions, hooks, CTAs, hashtags, ad copy.
+ * OpenRouter chat completions — captions/hooks and brand intelligence.
+ * Brand refine is always free-only. When imageUrls are provided (opt-in vision),
+ * uses free multimodal `:free` models only — never paid Gemini chat.
  */
 export async function generateChatCompletion(
   input: ChatCompletionInput,
@@ -477,49 +536,93 @@ export async function generateChatCompletion(
   if (!system || !user) {
     throw new Error('Chat system and user messages are required')
   }
-  const model =
-    (input.model || getOpenRouterChatModel()).trim() || DEFAULT_CHAT_MODEL
-  const models = chatModelsPreferFree(model)
+  const imageUrls = (input.imageUrls || [])
+    .filter((u) => typeof u === 'string' && u.trim())
+    .map((u) => u.trim())
+    .slice(0, 3)
+  const withVision = imageUrls.length > 0
+  // Brand refine path: caller passes a free brand model and/or high-token low-temp profile.
+  // Do NOT treat mere presence of OPENROUTER_BRAND_MODEL as forcing every chat call free.
+  const isBrandPass = Boolean(
+    (input.model && isFreeOpenRouterModel(input.model)) ||
+      withVision ||
+      (input.maxTokens != null &&
+        input.maxTokens >= 900 &&
+        (input.temperature ?? 1) <= 0.25),
+  )
+  const requested = input.model?.trim()
+  const model = (
+    isBrandPass
+      ? requested && isFreeOpenRouterModel(requested)
+        ? requested
+        : getOpenRouterBrandModel()
+      : requested || getOpenRouterChatModel()
+  ).trim() || DEFAULT_CHAT_MODEL
+  const models = isBrandPass
+    ? withVision
+      ? brandVisionModels(model)
+      : brandChatModels(model)
+    : chatModelsPreferFree(model)
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 60_000)
-  try {
-    const res = await fetch(OPENROUTER_CHAT_URL, {
-      method: 'POST',
-      headers: openRouterHeaders(apiKey),
-      body: JSON.stringify({
-        model: models[0],
-        // Free-only fallbacks — OpenRouter max 3 items in `models`
-        models: models.slice(1, 4),
-        temperature: input.temperature ?? 0.75,
-        max_tokens: input.maxTokens ?? 600,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-      }),
-      signal: controller.signal,
-    })
-    const raw = await res.json().catch(() => null)
-    if (!res.ok) {
-      throw new Error(parseOpenRouterError(raw, res.status))
+  const userContent: unknown = withVision
+    ? [
+        { type: 'text', text: user },
+        ...imageUrls.map((url) => ({
+          type: 'image_url',
+          image_url: { url },
+        })),
+      ]
+    : user
+
+  let lastError = 'OpenRouter chat returned empty text'
+  for (const candidate of models) {
+    const controller = new AbortController()
+    const timer = setTimeout(
+      () => controller.abort(),
+      withVision ? 90_000 : 60_000,
+    )
+    try {
+      const res = await fetch(OPENROUTER_CHAT_URL, {
+        method: 'POST',
+        headers: openRouterHeaders(apiKey),
+        body: JSON.stringify({
+          model: candidate,
+          temperature: input.temperature ?? 0.75,
+          max_tokens: input.maxTokens ?? 600,
+          // Avoid response_format — many free models reject json_object and return empty.
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: userContent },
+          ],
+        }),
+        signal: controller.signal,
+      })
+      const raw = await res.json().catch(() => null)
+      if (!res.ok) {
+        lastError = parseOpenRouterError(raw, res.status)
+        continue
+      }
+      const choice = (raw as {
+        choices?: { message?: { content?: string | null } }[]
+        model?: string
+      })?.choices?.[0]
+      const text = choice?.message?.content?.trim()
+      if (!text) {
+        lastError = `OpenRouter chat returned empty text (${candidate})`
+        continue
+      }
+      const usedModel =
+        typeof (raw as { model?: string })?.model === 'string'
+          ? (raw as { model: string }).model
+          : candidate
+      return { text, model: usedModel }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+    } finally {
+      clearTimeout(timer)
     }
-    const choice = (raw as {
-      choices?: { message?: { content?: string | null } }[]
-      model?: string
-    })?.choices?.[0]
-    const text = choice?.message?.content?.trim()
-    if (!text) {
-      throw new Error('OpenRouter free chat returned empty text')
-    }
-    const usedModel =
-      typeof (raw as { model?: string })?.model === 'string'
-        ? (raw as { model: string }).model
-        : models[0]!
-    return { text, model: usedModel }
-  } finally {
-    clearTimeout(timer)
   }
+  throw new Error(lastError)
 }
 
 /**

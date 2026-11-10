@@ -15,6 +15,7 @@ import { requireDb } from '../lib/firebase'
 import { canGenerate, type GenerateAction } from '../lib/planAccess'
 import { sendTransactionalEmail } from '../lib/transactionalEmail'
 import PaywallModal from '../components/PaywallModal'
+import CreativeFormatPreview from '../components/CreativeFormatPreview'
 import {
   CAMPAIGN_DELIVERABLES,
   formatLabel,
@@ -45,7 +46,7 @@ import {
   clampVideoDuration,
 } from '../lib/formatQuantities'
 import type { CreativeDirection } from '../lib/creativeDirection'
-import { sanitizeCreativeDirection } from '../lib/creativeDirection'
+import { sanitizeCreativeDirection, withBrandKit } from '../lib/creativeDirection'
 import {
   isImageAssetKind,
   requestGenerateImages,
@@ -207,6 +208,7 @@ export default function CampaignDetailPage() {
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
   const [previewId, setPreviewId] = useState<string | null>(null)
+  const [formatOpen, setFormatOpen] = useState(false)
   const [replacingPhoto, setReplacingPhoto] = useState(false)
   const [paywallOpen, setPaywallOpen] = useState(false)
   const [paywallReason, setPaywallReason] = useState<string | undefined>()
@@ -628,7 +630,10 @@ export default function CampaignDetailPage() {
               productName: campaign.productName,
               productImage: productImageUrl,
               referenceImage,
-              creativeDirection: campaign.creativeDirection,
+              creativeDirection: withBrandKit(
+                campaign.creativeDirection,
+                workspace,
+              ),
               assets: [item.assetType as ImageAssetKind],
               recreateNote:
                 (item.version || 1) > 1
@@ -705,17 +710,20 @@ export default function CampaignDetailPage() {
                 productName: campaign.productName,
                 productImage: productImageUrl,
                 referenceFrameImage,
-                creativeDirection: {
-                  ...campaign.creativeDirection,
-                  prompt: [
-                    campaign.creativeDirection?.prompt?.trim(),
-                    (item.version || 1) > 1
-                      ? `Variation ${item.version} of this format — distinct shot while keeping product true.`
-                      : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
-                },
+                creativeDirection: withBrandKit(
+                  {
+                    ...campaign.creativeDirection,
+                    prompt: [
+                      campaign.creativeDirection?.prompt?.trim(),
+                      (item.version || 1) > 1
+                        ? `Variation ${item.version} of this format — distinct shot while keeping product true.`
+                        : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' '),
+                  },
+                  workspace,
+                ),
                 assets: [kind],
                 durationSeconds,
               })
@@ -790,7 +798,11 @@ export default function CampaignDetailPage() {
           ]
           const ai = await requestGenerateCopy({
             productName: campaign.productName,
-            creativeDirection: campaign.creativeDirection,
+            brand: workspace.brandName || undefined,
+            creativeDirection: withBrandKit(
+              campaign.creativeDirection,
+              workspace,
+            ),
             assets: kinds,
           })
           for (const generated of ai.assets) {
@@ -1381,6 +1393,41 @@ export default function CampaignDetailPage() {
         reason={paywallReason}
         onClose={() => setPaywallOpen(false)}
       />
+      {preview && formatOpen ? (
+        <CreativeFormatPreview
+          open={formatOpen}
+          item={{
+            id: preview.id,
+            label: preview.label,
+            kind: preview.kind,
+            imageUrl: preview.imageUrl,
+            videoUrl: preview.videoUrl,
+            text: preview.text,
+            productName: campaign?.productName,
+          }}
+          onClose={() => setFormatOpen(false)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="dash-create-btn dash-create-btn-sm"
+                disabled={actionBusy || savingAsset}
+                onClick={() => void runExportOne(preview)}
+              >
+                Export
+              </button>
+              <button
+                type="button"
+                className="dash-create-btn dash-create-btn-sm dash-create-btn-ghost"
+                disabled={actionBusy || savingAsset}
+                onClick={() => void runSaveOne(preview)}
+              >
+                {previewSaved ? 'Unsave' : 'Save'}
+              </button>
+            </>
+          }
+        />
+      ) : null}
       <main
         className={`app-main campaign-create studio-page campaign-detail${resultsFocus ? ' campaign-results-focus' : ''}`}
       >
@@ -1519,7 +1566,11 @@ export default function CampaignDetailPage() {
                           {(preview.version || 1) > 1 ? ` · v${preview.version}` : ''}
                         </p>
                         {preview.kind === 'video' && preview.videoUrl ? (
-                          <div className="results-preview-media results-preview-video">
+                          <button
+                            type="button"
+                            className="results-preview-media results-preview-video results-preview-expand"
+                            onClick={() => setFormatOpen(true)}
+                          >
                             <video
                               key={preview.videoUrl}
                               src={preview.videoUrl}
@@ -1529,12 +1580,19 @@ export default function CampaignDetailPage() {
                               loop
                               playsInline
                               preload="auto"
+                              onClick={(e) => e.stopPropagation()}
                             />
-                          </div>
+                            <span className="results-preview-expand-label">View full screen</span>
+                          </button>
                         ) : preview.imageUrl ? (
-                          <div className="results-preview-media">
+                          <button
+                            type="button"
+                            className="results-preview-media results-preview-expand"
+                            onClick={() => setFormatOpen(true)}
+                          >
                             <img src={preview.imageUrl} alt={preview.label} />
-                          </div>
+                            <span className="results-preview-expand-label">View full screen</span>
+                          </button>
                         ) : null}
                         {preview.text ? (
                           <blockquote className="results-preview-copy">{preview.text}</blockquote>
@@ -1549,6 +1607,14 @@ export default function CampaignDetailPage() {
                         )}
                         <p className="results-preview-note">{preview.note}</p>
                         <div className="results-preview-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost results-preview-recreate"
+                            disabled={actionBusy || savingAsset}
+                            onClick={() => setFormatOpen(true)}
+                          >
+                            View formats
+                          </button>
                           <button
                             type="button"
                             className="btn btn-ghost results-preview-recreate"
@@ -1598,6 +1664,10 @@ export default function CampaignDetailPage() {
                           type="button"
                           className="results-card-hit"
                           onClick={() => setPreviewId(item.id)}
+                          onDoubleClick={() => {
+                            setPreviewId(item.id)
+                            setFormatOpen(true)
+                          }}
                         >
                           <span className="results-card-media">
                             {item.kind === 'video' && item.videoUrl ? (

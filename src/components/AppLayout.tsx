@@ -4,6 +4,10 @@ import Logo from '../Logo'
 import ThemeToggle from './ThemeToggle'
 import { useAuth } from '../auth/AuthProvider'
 import { isPaidPlan, planLabel as formatPlanLabel } from '../lib/plans'
+import {
+  formatBrandDisplayName,
+  workspaceInitials as workspaceInitialsFn,
+} from '../lib/userSettings'
 
 type NavIconName =
   | 'home'
@@ -18,6 +22,8 @@ type NavIconName =
   | 'plus'
   | 'crown'
   | 'guide'
+  | 'calendar'
+  | 'credits'
 
 type NavItem = {
   to: string
@@ -28,44 +34,17 @@ type NavItem = {
   comingSoon?: boolean
 }
 
-const ICON_RAIL: NavItem[] = [
+const PRIMARY_NAV: NavItem[] = [
   { to: '/app', label: 'Home', end: true, icon: 'home' },
-  { to: '/app/studio/photos', label: 'Image Studio', icon: 'image' },
-  { to: '/app/studio/videos', label: 'Video Studio', icon: 'video', pro: true },
-  { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark', pro: true },
-  { to: '/app/campaigns', label: 'Projects', icon: 'layers' },
-  { to: '/app/library', label: 'Saved', icon: 'folder' },
-]
-
-const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
-  {
-    label: 'Create',
-    items: [
-      { to: '/app', label: 'Home', end: true, icon: 'home' },
-      { to: '/app/studio/photos', label: 'Image Studio', icon: 'image' },
-      { to: '/app/studio/videos', label: 'Video Studio', icon: 'video', pro: true },
-      { to: '/app/campaigns/new', label: 'Full Campaign', icon: 'spark', pro: true },
-    ],
-  },
-  {
-    label: 'Manage',
-    items: [
-      { to: '/app/products', label: 'Products', icon: 'box' },
-      { to: '/app/campaigns', label: 'Projects', icon: 'layers' },
-      { to: '/app/library', label: 'Saved', icon: 'folder' },
-      {
-        to: '/app/studio/ads',
-        label: 'Ads & Social',
-        icon: 'tag',
-        pro: true,
-        comingSoon: true,
-      },
-    ],
-  },
-  {
-    label: 'Account',
-    items: [{ to: '/app/settings', label: 'Settings', icon: 'settings' }],
-  },
+  { to: '/app/studio/photos', label: 'Images', icon: 'image' },
+  { to: '/app/studio/videos', label: 'Videos', icon: 'video', pro: true },
+  { to: '/app/campaigns/new', label: 'Campaign', icon: 'spark', pro: true },
+  { to: '/app/products', label: 'Products', icon: 'box' },
+  { to: '/app/library', label: 'Library', icon: 'folder' },
+  { to: '/app/calendar', label: 'Calendar', icon: 'calendar' },
+  { to: '/app/brand', label: 'Brand kit', icon: 'tag' },
+  { to: '/app/plans', label: 'Plans & credits', icon: 'credits' },
+  { to: '/app/settings', label: 'Settings', icon: 'settings' },
 ]
 
 function NavIcon({ name }: { name: NavIconName }) {
@@ -168,6 +147,21 @@ function NavIcon({ name }: { name: NavIconName }) {
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" />
         </svg>
       )
+    case 'calendar':
+      return (
+        <svg {...common}>
+          <path d="M8 3v3M16 3v3" />
+          <rect x="3" y="5" width="18" height="16" rx="2" />
+          <path d="M3 10h18" />
+        </svg>
+      )
+    case 'credits':
+      return (
+        <svg {...common}>
+          <rect x="2" y="5" width="20" height="14" rx="2" />
+          <path d="M2 10h20" />
+        </svg>
+      )
   }
 }
 
@@ -206,8 +200,24 @@ type AppLayoutProps = {
 export default function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation()
   const isDashboardHome = location.pathname === '/app' || location.pathname === '/app/'
-  const { user, plan, signOut } = useAuth()
+  const { user, plan, workspace, onboardingSkipped, signOut } = useAuth()
   const displayName = user?.displayName?.trim() || user?.email?.split('@')[0] || 'Account'
+  const cleanedBrand = formatBrandDisplayName(workspace.brandName)
+  const workspaceName = onboardingSkipped
+    ? `${displayName}'s workspace`
+    : cleanedBrand && cleanedBrand !== 'Your brand'
+      ? cleanedBrand
+      : workspace.brandName.trim() || `${displayName}'s workspace`
+  const [logoFailed, setLogoFailed] = useState(false)
+  const workspaceMark =
+    !onboardingSkipped && workspace.brandLogoUrl && !logoFailed
+      ? workspace.brandLogoUrl
+      : ''
+  const workspaceInitials = workspaceInitialsFn(workspaceName)
+
+  useEffect(() => {
+    setLogoFailed(false)
+  }, [workspace.brandLogoUrl])
   const initial = displayName.slice(0, 1).toUpperCase()
   const planLabel = `${formatPlanLabel(plan)} plan`
   const paid = isPaidPlan(plan)
@@ -259,151 +269,93 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="studio-shell">
-      <aside className="studio-rail-dual" aria-label="App navigation">
-        <div className="studio-icon-rail">
-          <Link to="/app" className="studio-icon-rail-logo" aria-label="LUCE home">
-            <span className="studio-icon-rail-mark" aria-hidden="true">
-              L
-            </span>
+      <aside className="studio-rail studio-rail-single" aria-label="App navigation">
+        <div className="studio-rail-accent" aria-hidden="true" />
+        <div className="studio-rail-top">
+          <Link to="/app" className="studio-rail-brand" aria-label="LUCE home">
+            <Logo href={null} />
           </Link>
-          <nav className="studio-icon-rail-nav" aria-label="Quick links">
-            {ICON_RAIL.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                title={item.label}
-                aria-label={item.label}
-                className={({ isActive }) =>
-                  `studio-icon-rail-btn${isActive ? ' is-active' : ''}`
-                }
-              >
-                <NavIcon name={item.icon} />
-              </NavLink>
-            ))}
-          </nav>
-          <div className="studio-icon-rail-bottom">
-            <div className="studio-help-wrap" ref={helpRef}>
-              <button
-                type="button"
-                className={`studio-icon-rail-btn${helpOpen ? ' is-active' : ''}`}
-                title="Help"
-                aria-label="Help"
-                aria-expanded={helpOpen}
-                aria-controls={helpId}
-                onClick={() => {
-                  setHelpOpen((v) => !v)
-                  setMenuOpen(false)
-                  setNotifOpen(false)
-                }}
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4" strokeLinecap="round" />
-                  <circle cx="12" cy="17" r="0.8" fill="currentColor" stroke="none" />
-                </svg>
-              </button>
-              {helpOpen ? (
-                <div className="studio-help-menu" id={helpId} role="menu">
-                  <a
-                    role="menuitem"
-                    className="studio-help-item"
-                    href="/#how-it-works"
-                    onClick={() => setHelpOpen(false)}
-                  >
-                    <span className="studio-help-ico" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <path d="M22 10v6M2 10l10-5 10 5-10 5z" strokeLinejoin="round" />
-                        <path d="M6 12v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" strokeLinecap="round" />
-                      </svg>
-                    </span>
-                    <span>Learning center</span>
-                  </a>
-                  <a
-                    role="menuitem"
-                    className="studio-help-item"
-                    href="mailto:hello@luce.ai?subject=LUCE%20support"
-                    onClick={() => setHelpOpen(false)}
-                  >
-                    <span className="studio-help-ico" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-                    <span>Chat with us</span>
-                  </a>
-                  <a
-                    role="menuitem"
-                    className="studio-help-item"
-                    href="mailto:hello@luce.ai?subject=LUCE%20feedback"
-                    onClick={() => setHelpOpen(false)}
-                  >
-                    <span className="studio-help-ico" aria-hidden="true">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8">
-                        <path d="M12 20h9" strokeLinecap="round" />
-                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-                    <span>Give feedback</span>
-                  </a>
-                </div>
-              ) : null}
-            </div>
-            <Link
-              to="/app/settings"
-              className="studio-icon-rail-btn"
-              title="Settings"
-              aria-label="Settings"
-            >
-              <NavIcon name="settings" />
-            </Link>
-          </div>
+          <Link className="studio-rail-create" to="/app/studio/photos">
+            <NavIcon name="plus" />
+            <span>New</span>
+          </Link>
         </div>
 
-        <div className="studio-rail studio-rail-ayari studio-rail-panel">
-          <div className="studio-rail-top">
-            <div className="studio-rail-panel-head">
-              <Link to="/app" className="studio-rail-brand" aria-label="LUCE home">
-                <Logo href={null} />
-              </Link>
-            </div>
+        <nav className="studio-rail-nav studio-rail-nav-flat" aria-label="Primary">
+          {PRIMARY_NAV.filter((item) => !(onboardingSkipped && item.to === '/app/brand')).map(
+            (item) => renderNavItem(item, paid),
+          )}
+        </nav>
 
-            <Link className="studio-rail-create" to="/app/studio/photos">
-              <NavIcon name="plus" />
-              <span>Create New</span>
+        <div className="studio-rail-footer">
+          {!onboardingSkipped ? (
+            <Link
+              to="/app/brand"
+              className="studio-rail-workspace"
+              title="Open brand kit"
+            >
+              {workspaceMark ? (
+                <img
+                  src={workspaceMark}
+                  alt=""
+                  className="studio-rail-workspace-logo"
+                  onError={() => setLogoFailed(true)}
+                />
+              ) : (
+                <span className="studio-rail-workspace-mark" aria-hidden="true">
+                  {workspaceInitials}
+                </span>
+              )}
+              <span className="studio-rail-workspace-copy">
+                <strong>{workspaceName}</strong>
+                <em>{planLabel}</em>
+              </span>
             </Link>
-          </div>
-
-          <div className="studio-rail-scroll">
-            {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="studio-rail-group">
-                <p className="studio-rail-label">{group.label}</p>
-                <nav className="studio-rail-nav" aria-label={group.label}>
-                  {group.items.map((item) => renderNavItem(item, paid))}
-                </nav>
+          ) : (
+            <p className="studio-rail-planline">{planLabel}</p>
+          )}
+          <div className="studio-help-wrap studio-help-wrap-rail" ref={helpRef}>
+            <button
+              type="button"
+              className={`studio-rail-help${helpOpen ? ' is-active' : ''}`}
+              aria-expanded={helpOpen}
+              aria-controls={helpId}
+              onClick={() => {
+                setHelpOpen((v) => !v)
+                setMenuOpen(false)
+                setNotifOpen(false)
+              }}
+            >
+              <NavIcon name="guide" />
+              <span>Help</span>
+            </button>
+            {helpOpen ? (
+              <div className="studio-help-menu" id={helpId} role="menu">
+                <a
+                  role="menuitem"
+                  className="studio-help-item"
+                  href="/#how-it-works"
+                  onClick={() => setHelpOpen(false)}
+                >
+                  Learning center
+                </a>
+                <a
+                  role="menuitem"
+                  className="studio-help-item"
+                  href="mailto:hello@luce.ai?subject=LUCE%20support"
+                  onClick={() => setHelpOpen(false)}
+                >
+                  Chat with us
+                </a>
+                <a
+                  role="menuitem"
+                  className="studio-help-item"
+                  href="mailto:hello@luce.ai?subject=LUCE%20feedback"
+                  onClick={() => setHelpOpen(false)}
+                >
+                  Give feedback
+                </a>
               </div>
-            ))}
-          </div>
-
-          <div className="studio-rail-footer">
-            {!paid ? (
-              <Link className="studio-rail-upgrade-card" to="/app/settings#plan">
-                <span className="studio-rail-upgrade-icon" aria-hidden="true">
-                  <NavIcon name="crown" />
-                </span>
-                <span>
-                  <strong>Upgrade plan</strong>
-                  <em>Unlock video & campaigns</em>
-                </span>
-              </Link>
             ) : null}
           </div>
         </div>
@@ -414,7 +366,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <header className="studio-dash-topbar" aria-label="Dashboard controls">
             <div className="studio-dash-topbar-actions">
               {!paid ? (
-                <Link className="studio-topbar-upgrade" to="/app/settings#plan">
+                <Link className="studio-topbar-upgrade" to="/app/plans">
                   Upgrade
                 </Link>
               ) : null}
@@ -508,7 +460,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </Link>
                     <Link
                       role="menuitem"
-                      to="/app/settings#plan"
+                      to="/app/plans"
                       className="studio-account-menu-item"
                       onClick={() => setMenuOpen(false)}
                     >
@@ -542,7 +494,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
             <div className="studio-topbar-spacer" />
             <div className="studio-topbar-actions">
               {!paid ? (
-                <Link className="studio-topbar-upgrade" to="/app/settings#plan">
+                <Link className="studio-topbar-upgrade" to="/app/plans">
                   Upgrade
                 </Link>
               ) : null}
@@ -632,7 +584,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </Link>
                     <Link
                       role="menuitem"
-                      to="/app/settings#plan"
+                      to="/app/plans"
                       className="studio-account-menu-item"
                       onClick={() => setMenuOpen(false)}
                     >

@@ -174,7 +174,36 @@ function localApiRoutes(): Plugin {
             const { fetchProductPage } = await import(
               './api/_lib/fetchProductPage.ts'
             )
-            const result = await fetchProductPage(String(body.url ?? ''))
+            const mode = body.mode === 'brand' ? 'brand' : 'product'
+            const stream = body.stream === true && mode === 'brand'
+            if (stream) {
+              res.statusCode = 200
+              res.setHeader(
+                'Content-Type',
+                'application/x-ndjson; charset=utf-8',
+              )
+              res.setHeader('Cache-Control', 'no-cache, no-transform')
+              const write = (obj: unknown) => {
+                res.write(`${JSON.stringify(obj)}\n`)
+              }
+              const result = await fetchProductPage(String(body.url ?? ''), {
+                mode: 'brand',
+                onProgress: (event) => write(event),
+              })
+              if (!result.ok) {
+                write({
+                  type: 'error',
+                  error: result.error,
+                  status: result.status,
+                })
+                res.end()
+                return
+              }
+              write({ type: 'result', ok: true, ...result.data })
+              res.end()
+              return
+            }
+            const result = await fetchProductPage(String(body.url ?? ''), { mode })
             if (!result.ok) {
               res.statusCode = result.status
               res.setHeader('Content-Type', 'application/json')
@@ -314,6 +343,9 @@ function localApiRoutes(): Plugin {
               generateCampaignVideos,
               VIDEO_ASSET_KINDS,
             } = await import('./api/_lib/generateVideos.ts')
+            const { parseCreativeDirectionBody } = await import(
+              './api/_lib/parseCreativeDirection.ts'
+            )
             const decoded = await verifyBearerToken(req.headers.authorization)
             if (!decoded?.uid) {
               res.statusCode = 401
@@ -334,10 +366,6 @@ function localApiRoutes(): Plugin {
               .filter((a): a is (typeof VIDEO_ASSET_KINDS)[number] =>
                 (VIDEO_ASSET_KINDS as string[]).includes(a),
               )
-            const cd =
-              body.creativeDirection && typeof body.creativeDirection === 'object'
-                ? (body.creativeDirection as Record<string, unknown>)
-                : undefined
             const result = await generateCampaignVideos({
               productName: String(body.productName ?? ''),
               productImage:
@@ -350,22 +378,7 @@ function localApiRoutes(): Plugin {
                   : typeof body.referenceImage === 'string'
                     ? body.referenceImage
                     : undefined,
-              creativeDirection: cd
-                ? {
-                    prompt: typeof cd.prompt === 'string' ? cd.prompt : undefined,
-                    lighting:
-                      typeof cd.lighting === 'string' ? cd.lighting : undefined,
-                    background:
-                      typeof cd.background === 'string'
-                        ? cd.background
-                        : undefined,
-                    mood: typeof cd.mood === 'string' ? cd.mood : undefined,
-                    styleTheme:
-                      typeof cd.styleTheme === 'string'
-                        ? cd.styleTheme
-                        : undefined,
-                  }
-                : undefined,
+              creativeDirection: parseCreativeDirectionBody(body.creativeDirection),
               assets,
               recreateNote:
                 typeof body.recreateNote === 'string'
@@ -414,6 +427,9 @@ function localApiRoutes(): Plugin {
               generateCampaignImages,
               IMAGE_ASSET_KINDS,
             } = await import('./api/_lib/generateImages.ts')
+            const { parseCreativeDirectionBody } = await import(
+              './api/_lib/parseCreativeDirection.ts'
+            )
             const decoded = await verifyBearerToken(req.headers.authorization)
             if (!decoded?.uid) {
               res.statusCode = 401
@@ -434,10 +450,6 @@ function localApiRoutes(): Plugin {
               .filter((a): a is (typeof IMAGE_ASSET_KINDS)[number] =>
                 (IMAGE_ASSET_KINDS as string[]).includes(a),
               )
-            const cd =
-              body.creativeDirection && typeof body.creativeDirection === 'object'
-                ? (body.creativeDirection as Record<string, unknown>)
-                : undefined
             const result = await generateCampaignImages({
               productName: String(body.productName ?? ''),
               productImage:
@@ -448,22 +460,7 @@ function localApiRoutes(): Plugin {
                 typeof body.referenceImage === 'string'
                   ? body.referenceImage
                   : undefined,
-              creativeDirection: cd
-                ? {
-                    prompt: typeof cd.prompt === 'string' ? cd.prompt : undefined,
-                    lighting:
-                      typeof cd.lighting === 'string' ? cd.lighting : undefined,
-                    background:
-                      typeof cd.background === 'string'
-                        ? cd.background
-                        : undefined,
-                    mood: typeof cd.mood === 'string' ? cd.mood : undefined,
-                    styleTheme:
-                      typeof cd.styleTheme === 'string'
-                        ? cd.styleTheme
-                        : undefined,
-                  }
-                : undefined,
+              creativeDirection: parseCreativeDirectionBody(body.creativeDirection),
               assets,
               recreateNote:
                 typeof body.recreateNote === 'string'
@@ -503,6 +500,9 @@ function localApiRoutes(): Plugin {
               generateCampaignCopy,
               COPY_ASSET_KINDS,
             } = await import('./api/_lib/generateCopy.ts')
+            const { parseCreativeDirectionBody } = await import(
+              './api/_lib/parseCreativeDirection.ts'
+            )
             const decoded = await verifyBearerToken(req.headers.authorization)
             if (!decoded?.uid) {
               res.statusCode = 401
@@ -523,10 +523,6 @@ function localApiRoutes(): Plugin {
               .filter((a): a is (typeof COPY_ASSET_KINDS)[number] =>
                 (COPY_ASSET_KINDS as readonly string[]).includes(a),
               )
-            const cd =
-              body.creativeDirection && typeof body.creativeDirection === 'object'
-                ? (body.creativeDirection as Record<string, unknown>)
-                : undefined
             const result = await generateCampaignCopy({
               productName: String(body.productName ?? ''),
               brand: typeof body.brand === 'string' ? body.brand : undefined,
@@ -536,22 +532,7 @@ function localApiRoutes(): Plugin {
                   : undefined,
               category:
                 typeof body.category === 'string' ? body.category : undefined,
-              creativeDirection: cd
-                ? {
-                    prompt: typeof cd.prompt === 'string' ? cd.prompt : undefined,
-                    lighting:
-                      typeof cd.lighting === 'string' ? cd.lighting : undefined,
-                    background:
-                      typeof cd.background === 'string'
-                        ? cd.background
-                        : undefined,
-                    mood: typeof cd.mood === 'string' ? cd.mood : undefined,
-                    styleTheme:
-                      typeof cd.styleTheme === 'string'
-                        ? cd.styleTheme
-                        : undefined,
-                  }
-                : undefined,
+              creativeDirection: parseCreativeDirectionBody(body.creativeDirection),
               assets,
               recreateNote:
                 typeof body.recreateNote === 'string'
@@ -592,6 +573,10 @@ export default defineConfig(({ mode }) => {
       host: '127.0.0.1',
       port: 5176,
       strictPort: true,
+      watch: {
+        // Temp onboarding/PDF artifacts on Windows can be locked (EBUSY) and crash Vite.
+        ignored: ['**/.tmp-esha-luce/**', '**/.tmp-*'],
+      },
     },
   }
 })

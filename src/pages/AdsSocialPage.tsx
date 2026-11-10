@@ -12,6 +12,7 @@ import {
 import { canGenerate } from '../lib/planAccess'
 import { requestGenerateCopy } from '../lib/generateCopy'
 import { requestGenerateImages } from '../lib/generateImages'
+import { withBrandKit } from '../lib/creativeDirection'
 import { saveAssetToLibrary } from '../lib/savedAssets'
 import type { MockOutput } from '../lib/mockCampaign'
 
@@ -220,7 +221,7 @@ export function AdsSocialRoute() {
 }
 
 export default function AdsSocialPage() {
-  const { user, plan, freeImageUsed, loading } = useAuth()
+  const { user, plan, freeImageUsed, loading, workspace } = useAuth()
   const fileRef = useRef<HTMLInputElement>(null)
   const refFileRef = useRef<HTMLInputElement>(null)
 
@@ -326,7 +327,7 @@ export default function AdsSocialPage() {
         try {
           const res = await requestGenerateCopy({
             productName,
-            creativeDirection: { prompt: direction },
+            creativeDirection: withBrandKit({ prompt: direction }, workspace),
             assets: ['ad_copy', 'hook', 'caption', 'cta', 'hashtags'],
             recreateNote: `Ads & Social · ${createLabel(createKind)}`,
           })
@@ -356,11 +357,14 @@ export default function AdsSocialPage() {
             productName,
             productImage,
             referenceImage,
-            creativeDirection: {
-              prompt: direction,
-              mood: 'premium_clean',
-              styleTheme: 'luxury_beauty',
-            },
+            creativeDirection: withBrandKit(
+              {
+                prompt: direction,
+                mood: 'premium_clean',
+                styleTheme: 'luxury_beauty',
+              },
+              workspace,
+            ),
             assets: ['ad_creative'],
             recreateNote: `Ads & Social · ${createLabel(createKind)}`,
           })

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
 import { useTheme } from '../theme/ThemeProvider'
@@ -258,14 +258,15 @@ export default function SettingsPage() {
   return (
     <AppLayout>
       <main className="dash workspace-page settings-page settings-shell">
-        <section className="settings-banner" aria-label="Settings overview">
+        <header className="settings-banner" aria-label="Settings overview">
           <div className="settings-banner-copy">
-            <p className="settings-banner-kicker">Your account</p>
             <h1>Settings</h1>
-            <p>Manage your profile, preferences, and account in one place.</p>
+            <p>Profile, appearance, plan, and account controls.</p>
           </div>
-          <div className="settings-banner-art" aria-hidden="true" />
-        </section>
+          <Link className="settings-panel-action" to="/app/plans">
+            Plans & credits
+          </Link>
+        </header>
 
         {error && (
           <p className="auth-error" role="alert">
@@ -421,9 +422,9 @@ export default function SettingsPage() {
                   <h2 id="settings-plan-title">Plan &amp; billing</h2>
                   <p>Your current plan and upgrades</p>
                 </div>
-                <a className="settings-panel-link" href="#plan-options">
-                  View plans
-                </a>
+                <Link className="settings-panel-link" to="/app/plans">
+                  Open plans
+                </Link>
               </div>
 
               <div className="settings-plan-summary">

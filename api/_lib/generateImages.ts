@@ -2,6 +2,7 @@ import { generateMuseImage, getMuseApiKey } from './muse.js'
 import {
   buildLuceSpec,
   formatForImageAsset,
+  withAspectOverride,
   renderImagePrompt,
 } from './luceGeneration.js'
 import { generateImage, getOpenRouterApiKey, getOpenRouterImageModel } from './openRouter.js'
@@ -106,6 +107,16 @@ export type CreativeDirectionSummary = {
   background?: string
   mood?: string
   styleTheme?: string
+  aspectRatio?: string
+  brandKit?: {
+    brandName?: string
+    colors?: string[]
+    fonts?: string[]
+    voice?: string
+    styleNotes?: string
+    industry?: string
+    positioning?: string[]
+  }
 }
 
 export type GenerateImagesInput = {
@@ -515,12 +526,18 @@ function promptForAsset(
     ? `User chose reference + format. Follow both: keep image 1’s product exact; apply image 2’s look; execute a real ${c.label} (camera, composition, ratio) — blend, don’t pick only one.`
     : `Edit image 1 into a ${c.label} still: keep packaging exact AND keep image 1’s styled look — do not replace with plain gray.`
 
+  const formatOverride = withAspectOverride(
+    formatForImageAsset(kind),
+    dir?.aspectRatio,
+  )
+
   const spec = buildLuceSpec({
     modality: 'image',
     assetType: kind,
     assetLabel: c.label,
     productName,
     formatContractBody: formatContractBody(kind, intensify, hasReferenceImage),
+    formatOverride,
     creativeDirection: {
       prompt: [lead, userBits.length ? userBits.join('\n') : undefined]
         .filter(Boolean)
@@ -529,6 +546,8 @@ function promptForAsset(
       background: dir?.background,
       mood: dir?.mood,
       styleTheme: dir?.styleTheme,
+      aspectRatio: dir?.aspectRatio,
+      brandKit: dir?.brandKit,
     },
     recreateNote,
     hasProductImage: true,
@@ -662,7 +681,10 @@ export async function generateCampaignImages(
       hasRef,
     )
     try {
-      const aspectRatio = formatForImageAsset(type).aspectRatio
+      const aspectRatio = withAspectOverride(
+        formatForImageAsset(type),
+        input.creativeDirection?.aspectRatio,
+      ).aspectRatio
       let result = await generateImageWithProviders({
         prompt: promptUsed,
         inputReferences: inputReferences.length ? inputReferences : undefined,

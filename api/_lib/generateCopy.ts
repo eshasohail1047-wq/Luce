@@ -36,6 +36,15 @@ type CreativeDirectionBits = {
   background?: string
   mood?: string
   styleTheme?: string
+  brandKit?: {
+    brandName?: string
+    colors?: string[]
+    fonts?: string[]
+    voice?: string
+    styleNotes?: string
+    industry?: string
+    positioning?: string[]
+  }
 }
 
 export type GenerateCopyInput = {
@@ -112,6 +121,20 @@ function buildUserPrompt(
     bits.push(`Product description: ${input.description.trim()}`)
   }
   const cd = input.creativeDirection
+  const kit = cd?.brandKit
+  if (kit?.brandName?.trim() && !input.brand?.trim()) {
+    bits.push(`Brand: ${kit.brandName.trim()}`)
+  }
+  if (kit?.industry?.trim() && !input.category?.trim()) {
+    bits.push(`Category: ${kit.industry.trim()}`)
+  }
+  if (kit?.voice?.trim()) bits.push(`Brand voice: ${kit.voice.trim()}`)
+  if (kit?.colors?.length) bits.push(`Brand colors: ${kit.colors.join(', ')}`)
+  if (kit?.fonts?.length) bits.push(`Brand fonts: ${kit.fonts.join(', ')}`)
+  if (kit?.styleNotes?.trim()) bits.push(`Style notes: ${kit.styleNotes.trim()}`)
+  if (kit?.positioning?.length) {
+    bits.push(`Positioning: ${kit.positioning.join('; ')}`)
+  }
   if (cd?.prompt?.trim()) bits.push(`Creative direction: ${cd.prompt.trim()}`)
   if (cd?.mood?.trim()) bits.push(`Mood: ${cd.mood.trim()}`)
   if (cd?.styleTheme?.trim()) bits.push(`Style theme: ${cd.styleTheme.trim()}`)

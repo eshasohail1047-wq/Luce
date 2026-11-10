@@ -1,5 +1,29 @@
 /** Creative direction options shared across image, video, ads, and campaign flows. */
 
+import type { WorkspaceSettings } from './userSettings'
+
+/** Persisted brand kit slice injected into every generation prompt. */
+export type BrandKitDirection = {
+  brandName?: string
+  colors?: string[]
+  fonts?: string[]
+  voice?: string
+  styleNotes?: string
+  industry?: string
+  positioning?: string[]
+  photographyStyle?: string
+  lightingPreferences?: string
+  compositionPreferences?: string
+  packagingIdentity?: string
+  graphicDesignDirection?: string
+  socialMediaDirection?: string
+  advertisingStyle?: string
+  ctaPreferences?: string
+  thingsToAvoid?: string[]
+  brandRestrictions?: string[]
+  brandKeywords?: string[]
+}
+
 export type LightingId =
   | 'soft_natural'
   | 'studio_softbox'
@@ -28,12 +52,28 @@ export type StyleThemeId =
   | 'playful'
   | 'earthy'
 
+export type AspectRatioId = '1:1' | '4:5' | '9:16' | '16:9'
+
+export const ASPECT_RATIO_OPTIONS: {
+  id: AspectRatioId
+  label: string
+  hint: string
+}[] = [
+  { id: '1:1', label: '1:1', hint: 'Square feed' },
+  { id: '4:5', label: '4:5', hint: 'Portrait feed' },
+  { id: '9:16', label: '9:16', hint: 'Story / Reel' },
+  { id: '16:9', label: '16:9', hint: 'Widescreen' },
+]
+
 export type CreativeDirection = {
   prompt?: string
   lighting?: LightingId
   background?: BackgroundId
   mood?: MoodId
   styleTheme?: StyleThemeId
+  /** Hard frame size for generation — overrides format default when set. */
+  aspectRatio?: AspectRatioId
+  brandKit?: BrandKitDirection
 }
 
 export const LIGHTING_OPTIONS: { id: LightingId; label: string; description: string }[] = [
@@ -68,12 +108,114 @@ export const STYLE_THEME_OPTIONS: { id: StyleThemeId; label: string; description
   { id: 'earthy', label: 'Earthy organic', description: 'Natural textures and tones' },
 ]
 
+function sanitizeBrandKit(raw: unknown): BrandKitDirection | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const o = raw as Record<string, unknown>
+  const asArr = (v: unknown) =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+      : []
+  const brandName = typeof o.brandName === 'string' ? o.brandName.trim() : ''
+  const colors = asArr(o.colors)
+  const fonts = asArr(o.fonts)
+  const voice = typeof o.voice === 'string' ? o.voice.trim() : ''
+  const styleNotes = typeof o.styleNotes === 'string' ? o.styleNotes.trim() : ''
+  const industry = typeof o.industry === 'string' ? o.industry.trim() : ''
+  const positioning = asArr(o.positioning)
+  const str = (k: string) =>
+    typeof o[k] === 'string' ? (o[k] as string).trim() : ''
+  const photographyStyle = str('photographyStyle')
+  const lightingPreferences = str('lightingPreferences')
+  const compositionPreferences = str('compositionPreferences')
+  const packagingIdentity = str('packagingIdentity')
+  const graphicDesignDirection = str('graphicDesignDirection')
+  const socialMediaDirection = str('socialMediaDirection')
+  const advertisingStyle = str('advertisingStyle')
+  const ctaPreferences = str('ctaPreferences')
+  const thingsToAvoid = asArr(o.thingsToAvoid)
+  const brandRestrictions = asArr(o.brandRestrictions)
+  const brandKeywords = asArr(o.brandKeywords)
+  if (
+    !brandName &&
+    !colors.length &&
+    !fonts.length &&
+    !voice &&
+    !styleNotes &&
+    !industry &&
+    !positioning.length &&
+    !photographyStyle &&
+    !packagingIdentity &&
+    !thingsToAvoid.length
+  ) {
+    return undefined
+  }
+  const out: BrandKitDirection = {}
+  if (brandName) out.brandName = brandName
+  if (colors.length) out.colors = colors
+  if (fonts.length) out.fonts = fonts
+  if (voice) out.voice = voice
+  if (styleNotes) out.styleNotes = styleNotes
+  if (industry) out.industry = industry
+  if (positioning.length) out.positioning = positioning
+  if (photographyStyle) out.photographyStyle = photographyStyle
+  if (lightingPreferences) out.lightingPreferences = lightingPreferences
+  if (compositionPreferences) out.compositionPreferences = compositionPreferences
+  if (packagingIdentity) out.packagingIdentity = packagingIdentity
+  if (graphicDesignDirection) out.graphicDesignDirection = graphicDesignDirection
+  if (socialMediaDirection) out.socialMediaDirection = socialMediaDirection
+  if (advertisingStyle) out.advertisingStyle = advertisingStyle
+  if (ctaPreferences) out.ctaPreferences = ctaPreferences
+  if (thingsToAvoid.length) out.thingsToAvoid = thingsToAvoid
+  if (brandRestrictions.length) out.brandRestrictions = brandRestrictions
+  if (brandKeywords.length) out.brandKeywords = brandKeywords
+  return out
+}
+
+/** Build brand kit bits from saved workspace settings for generation requests. */
+export function brandKitFromWorkspace(
+  workspace: WorkspaceSettings,
+): BrandKitDirection | undefined {
+  return sanitizeBrandKit({
+    brandName: workspace.brandName,
+    colors: workspace.brandColors,
+    fonts: workspace.brandFonts,
+    voice: workspace.brandVoice || workspace.brandTone,
+    styleNotes: workspace.brandStyleNotes || workspace.brandPitch,
+    industry: workspace.brandIndustry,
+    positioning: workspace.brandPositioning,
+    photographyStyle: workspace.brandPhotographyStyle,
+    lightingPreferences: workspace.brandLighting,
+    compositionPreferences: workspace.brandComposition,
+    packagingIdentity: workspace.brandPackagingIdentity,
+    graphicDesignDirection: workspace.brandGraphicDirection,
+    socialMediaDirection: workspace.brandSocialDirection,
+    advertisingStyle: workspace.brandAdvertisingStyle,
+    ctaPreferences: workspace.brandCtaPreferences,
+    thingsToAvoid: workspace.brandThingsToAvoid,
+    brandRestrictions: workspace.brandRestrictions,
+    brandKeywords: workspace.brandKeywords,
+  })
+}
+
+export function withBrandKit(
+  direction: CreativeDirection | undefined,
+  workspace: WorkspaceSettings,
+): CreativeDirection | undefined {
+  const brandKit = brandKitFromWorkspace(workspace)
+  if (!direction && !brandKit) return undefined
+  const base = sanitizeCreativeDirection(direction ?? {}) || {}
+  if (brandKit) base.brandKit = brandKit
+  return Object.keys(base).length ? base : undefined
+}
+
 export function sanitizeCreativeDirection(input: {
   prompt?: string
   lighting?: string
   background?: string
   mood?: string
   styleTheme?: string
+  aspectRatio?: string
+  brandKit?: unknown
 }): CreativeDirection | undefined {
   const prompt = input.prompt?.trim() || undefined
   const lighting = LIGHTING_OPTIONS.some((o) => o.id === input.lighting)
@@ -88,8 +230,21 @@ export function sanitizeCreativeDirection(input: {
   const styleTheme = STYLE_THEME_OPTIONS.some((o) => o.id === input.styleTheme)
     ? (input.styleTheme as StyleThemeId)
     : undefined
+  const aspectRatio = ASPECT_RATIO_OPTIONS.some((o) => o.id === input.aspectRatio)
+    ? (input.aspectRatio as AspectRatioId)
+    : undefined
+  const brandKit = sanitizeBrandKit(input.brandKit)
 
-  if (!prompt && !lighting && !background && !mood && !styleTheme) return undefined
+  if (
+    !prompt &&
+    !lighting &&
+    !background &&
+    !mood &&
+    !styleTheme &&
+    !aspectRatio &&
+    !brandKit
+  )
+    return undefined
   // Omit undefined keys — Firestore rejects them (and nested arrays of maps with undefined).
   const out: CreativeDirection = {}
   if (prompt) out.prompt = prompt
@@ -97,5 +252,7 @@ export function sanitizeCreativeDirection(input: {
   if (background) out.background = background
   if (mood) out.mood = mood
   if (styleTheme) out.styleTheme = styleTheme
+  if (aspectRatio) out.aspectRatio = aspectRatio
+  if (brandKit) out.brandKit = brandKit
   return out
 }
