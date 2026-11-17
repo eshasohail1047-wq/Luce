@@ -491,7 +491,30 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </header>
         ) : (
           <header className="studio-topbar studio-topbar-compact">
-            <div className="studio-topbar-spacer" />
+            <div className="studio-topbar-welcome">
+              <p className="studio-topbar-greeting">
+                Welcome back, {displayName.split(' ')[0]}
+              </p>
+              <span className="studio-topbar-context">
+                {location.pathname.includes('/studio/videos')
+                  ? 'Video Studio'
+                  : location.pathname.includes('/studio/photos')
+                    ? 'Image Studio'
+                    : location.pathname.includes('/campaigns/new')
+                      ? 'New campaign'
+                      : location.pathname.includes('/brand')
+                        ? 'Brand kit'
+                        : location.pathname.includes('/plans')
+                          ? 'Plans & credits'
+                          : location.pathname.includes('/settings')
+                            ? 'Settings'
+                            : location.pathname.includes('/library')
+                              ? 'Library'
+                              : location.pathname.includes('/products')
+                                ? 'Products'
+                                : 'Your workspace'}
+              </span>
+            </div>
             <div className="studio-topbar-actions">
               {!paid ? (
                 <Link className="studio-topbar-upgrade" to="/app/plans">

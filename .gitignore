@@ -10,6 +10,13 @@ prd_extract.txt
 .tsbuildinfo
 *.tsbuildinfo
 
+# Local temp / probe artifacts
+tmp/
+.tmp-*/
+.tmp-*
+tmp-*.json
+Esha-Luce-screen-images/
+
 # Firebase Admin secrets — never commit
 *-firebase-adminsdk-*.json
 **/serviceAccount*.json

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
-import CreativeDirectionFields from '../components/CreativeDirectionFields'
 import FormatPickGrid from '../components/FormatPickGrid'
 import StudioStagePanel, {
   type StudioStagePhase,
@@ -94,6 +93,9 @@ export default function NewCampaignPage() {
   const [category, setCategory] = useState('')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewOrient, setPreviewOrient] = useState<'portrait' | 'landscape'>(
+    'portrait',
+  )
   const [referenceFile, setReferenceFile] = useState<File | null>(null)
   const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(
     null,
@@ -151,6 +153,28 @@ export default function NewCampaignPage() {
     setPreviewUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [imageFile])
+
+  useEffect(() => {
+    if (!previewUrl) {
+      setPreviewOrient('portrait')
+      return
+    }
+    let cancelled = false
+    const img = new Image()
+    img.onload = () => {
+      if (cancelled) return
+      setPreviewOrient(
+        img.naturalWidth >= img.naturalHeight ? 'landscape' : 'portrait',
+      )
+    }
+    img.onerror = () => {
+      if (!cancelled) setPreviewOrient('portrait')
+    }
+    img.src = previewUrl
+    return () => {
+      cancelled = true
+    }
+  }, [previewUrl])
 
   useEffect(() => {
     if (!referenceFile) return
@@ -893,150 +917,162 @@ export default function NewCampaignPage() {
     }
   }
 
-  const formatsPreview = effectiveFormats()
-  const photoCount =
-    formatsPreview.photoStyles.length || DEFAULT_PHOTO_STYLES.length
-  const videoCount =
-    formatsPreview.videoStyles.length ||
-    (limits.maxVideos > 0 ? DEFAULT_VIDEO_STYLES.length : 0)
+  const productColumn = (
+    <aside className="studio-bench-product">
+      <input
+        ref={fileInputRef}
+        id="product-image"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        hidden
+        onChange={(e) => pickFile(e.target.files?.[0])}
+        disabled={busy}
+      />
 
-  const formBody = (
-    <form
-      className="app-form campaign-form create-panel studio-panel"
-      onSubmit={(e) => void onSubmit(e)}
-    >
-      <header className="studio-workbench-head">
-        <div>
-          <p className="studio-workbench-kicker">Full Campaign</p>
-          <h1>Build a complete campaign pack</h1>
-          <p>
-            Same formats as Image &amp; Video Studio — or upload your own reference
-            on the first card.
-          </p>
-        </div>
-      </header>
-
-      <section className="form-section">
-        <div className="form-section-head">
-          <h2>1. Product</h2>
-          <p>Photo or product page URL</p>
-        </div>
-
-        <div className="source-toggle" role="tablist" aria-label="Product source">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={sourceType === 'upload'}
-            className={sourceType === 'upload' ? 'is-active' : ''}
-            onClick={() => {
-              setSourceType('upload')
-              setError(null)
-            }}
-            disabled={busy}
-          >
-            <span className="source-toggle-title">Photo</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={sourceType === 'url'}
-            className={sourceType === 'url' ? 'is-active' : ''}
-            onClick={() => {
-              setSourceType('url')
-              setError(null)
-              setShowDetails(true)
-            }}
-            disabled={busy}
-          >
-            <span className="source-toggle-title">Product URL</span>
-          </button>
-        </div>
-
-        {sourceType === 'upload' ? (
-          <div className="upload-block">
-            <input
-              ref={fileInputRef}
-              id="product-image"
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              hidden
-              onChange={(e) => pickFile(e.target.files?.[0])}
-              disabled={busy}
-            />
-
-            <div
-              className={`upload-drop${dragOver ? ' is-over' : ''}${previewUrl ? ' has-preview' : ''}`}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragOver(true)
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={onDrop}
-            >
-              {previewUrl ? (
-                <div className="upload-preview">
-                  <img src={previewUrl} alt="Product preview" />
-                  <div className="upload-preview-actions">
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={busy}
-                    >
-                      Replace
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() => {
-                        setImageFile(null)
-                        setPreviewUrl(null)
-                      }}
-                      disabled={busy}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="upload-empty"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={busy}
-                >
-                  <span className="upload-empty-title">Drop product photo here</span>
-                  <span className="upload-empty-copy">JPG, PNG, or WebP · up to 12MB</span>
-                </button>
-              )}
+      <div
+        className={`product-stage${dragOver ? ' is-over' : ''}${previewUrl ? ' has-preview' : ''}${sourceType === 'url' ? ' is-url' : ''} is-${previewUrl ? previewOrient : 'portrait'}`}
+        onDragOver={(e) => {
+          e.preventDefault()
+          if (sourceType === 'upload') setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          if (sourceType === 'upload') onDrop(e)
+        }}
+      >
+        {previewUrl ? (
+          <div className="product-stage-filled">
+            <img src={previewUrl} alt="Product preview" referrerPolicy="no-referrer" />
+            <div className="product-stage-actions">
+              <button
+                type="button"
+                className="product-stage-action"
+                onClick={() => {
+                  setSourceType('upload')
+                  fileInputRef.current?.click()
+                }}
+                disabled={busy}
+              >
+                Replace
+              </button>
+              <button
+                type="button"
+                className="product-stage-action"
+                onClick={() => {
+                  setSourceType('url')
+                  setImageFile(null)
+                  setPreviewUrl(null)
+                  setShowDetails(true)
+                  setError(null)
+                }}
+                disabled={busy}
+              >
+                Use URL
+              </button>
+              <button
+                type="button"
+                className="product-stage-action is-danger"
+                onClick={() => {
+                  setImageFile(null)
+                  setPreviewUrl(null)
+                  setSelectedUrlImage(null)
+                }}
+                disabled={busy}
+              >
+                Remove
+              </button>
             </div>
           </div>
         ) : (
-          <div className="url-block">
-            <label htmlFor="product-url">Product page URL</label>
-            <input
-              id="product-url"
-              type="url"
-              required
-              value={productUrl}
-              onChange={(e) => setProductUrl(e.target.value)}
-              placeholder="https://yourstore.com/products/…"
-              disabled={busy}
-            />
-            {urlFetchBusy ? (
-              <p className="field-hint">Fetching photos from that page…</p>
-            ) : null}
-            {urlFetchError ? (
-              <p className="auth-error" role="alert">
-                {urlFetchError}
-              </p>
-            ) : null}
-            {urlImages.length > 0 ? (
-              <div className="url-image-picker" role="listbox" aria-label="Product photos from URL">
-                <p className="field-hint">
+          <div className="product-stage-blank">
+            <span className="product-stage-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M4.5 17.5l4.2-5.2 3.1 3.4 3.4-4.6 4.3 6.4H4.5ZM9 9.2a1.7 1.7 0 100-3.4 1.7 1.7 0 000 3.4Z"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            <div className="product-stage-blank-copy">
+              <p className="product-stage-kicker">Product</p>
+              <h3>Add your product</h3>
+              <p>Drop a photo onto this stage, or paste a product URL</p>
+            </div>
+
+            <div className="product-stage-modes" role="tablist" aria-label="Product source">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sourceType === 'upload'}
+                className={sourceType === 'upload' ? 'is-active' : ''}
+                onClick={() => {
+                  setSourceType('upload')
+                  setError(null)
+                }}
+                disabled={busy}
+              >
+                Photo
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={sourceType === 'url'}
+                className={sourceType === 'url' ? 'is-active' : ''}
+                onClick={() => {
+                  setSourceType('url')
+                  setError(null)
+                  setShowDetails(true)
+                }}
+                disabled={busy}
+              >
+                Product URL
+              </button>
+            </div>
+
+            {sourceType === 'upload' ? (
+              <div className="product-stage-upload">
+                <button
+                  type="button"
+                  className="product-stage-cta"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={busy}
+                >
+                  Choose photo
+                </button>
+                <span className="product-stage-hint">JPG, PNG, or WebP · up to 12MB</span>
+              </div>
+            ) : (
+              <div className="product-stage-url">
+                <label htmlFor="product-url" className="sr-only">
+                  Product page URL
+                </label>
+                <input
+                  id="product-url"
+                  type="url"
+                  required
+                  value={productUrl}
+                  onChange={(e) => setProductUrl(e.target.value)}
+                  placeholder="https://yourstore.com/products/…"
+                  disabled={busy}
+                />
+                {urlFetchBusy ? <p className="product-stage-hint">Fetching photos…</p> : null}
+                {urlFetchError ? (
+                  <p className="auth-error" role="alert">
+                    {urlFetchError}
+                  </p>
+                ) : null}
+              </div>
+            )}
+
+            {sourceType === 'url' && urlImages.length > 0 ? (
+              <div className="product-stage-thumbs" role="listbox" aria-label="Product photos from URL">
+                <p className="product-stage-hint">
                   {urlImages.length === 1
-                    ? '1 photo found — pick it, or paste the product page URL for the full gallery'
-                    : `Pick the product photo to use (${urlImages.length} found)`}
+                    ? '1 photo found — select it'
+                    : `Select a photo (${urlImages.length})`}
                 </p>
                 <div className="url-image-grid">
                   {urlImages.map((src) => (
@@ -1053,130 +1089,97 @@ export default function NewCampaignPage() {
                     </button>
                   ))}
                 </div>
-                {previewUrl ? (
-                  <div className="upload-preview url-image-selected">
-                    <img src={previewUrl} alt="Selected product" referrerPolicy="no-referrer" />
-                  </div>
-                ) : null}
               </div>
             ) : null}
           </div>
         )}
+      </div>
 
-        <div className="details-head">
-          <div>
-            <h2>Details</h2>
-            <p>Optional</p>
-          </div>
-          <button
-            type="button"
-            className="details-toggle"
-            onClick={() => setShowDetails((v) => !v)}
-            disabled={busy}
-          >
-            {showDetails ? 'Hide' : 'Show'}
-          </button>
+      <div className="details-head">
+        <div>
+          <h2>Details</h2>
+          <p>Optional</p>
         </div>
+        <button
+          type="button"
+          className="details-toggle"
+          onClick={() => setShowDetails((v) => !v)}
+          disabled={busy}
+        >
+          {showDetails ? 'Hide' : 'Show'}
+        </button>
+      </div>
 
-        {showDetails && (
-          <div className="details-grid">
-            <div className="auth-field">
-              <label htmlFor="product-name">Product name</label>
-              <input
-                id="product-name"
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
-                placeholder="Rose Oud Perfume"
-                disabled={busy}
-              />
-            </div>
-            <div className="auth-field">
-              <label htmlFor="product-brand">Brand</label>
-              <input
-                id="product-brand"
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-                placeholder="Maison Luce"
-                disabled={busy}
-              />
-            </div>
-            <div className="auth-field">
-              <label htmlFor="product-price">Price</label>
-              <input
-                id="product-price"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="$48"
-                disabled={busy}
-              />
-            </div>
-            <div className="auth-field">
-              <label htmlFor="product-category">Category</label>
-              <input
-                id="product-category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Fragrance"
-                disabled={busy}
-              />
-            </div>
-            <div className="auth-field details-span">
-              <label htmlFor="product-desc">Description</label>
-              <textarea
-                id="product-desc"
-                rows={3}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Notes, benefits, who it’s for…"
-                disabled={busy}
-              />
-            </div>
+      {showDetails ? (
+        <div className="details-grid">
+          <div className="auth-field">
+            <label htmlFor="product-name">Product name</label>
+            <input
+              id="product-name"
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              placeholder="Rose Oud Perfume"
+              disabled={busy}
+            />
           </div>
-        )}
-      </section>
+          <div className="auth-field">
+            <label htmlFor="product-brand">Brand</label>
+            <input
+              id="product-brand"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              placeholder="Maison Luce"
+              disabled={busy}
+            />
+          </div>
+          <div className="auth-field">
+            <label htmlFor="product-price">Price</label>
+            <input
+              id="product-price"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="$48"
+              disabled={busy}
+            />
+          </div>
+          <div className="auth-field">
+            <label htmlFor="product-category">Category</label>
+            <input
+              id="product-category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="Fragrance"
+              disabled={busy}
+            />
+          </div>
+          <div className="auth-field details-span">
+            <label htmlFor="product-desc">Description</label>
+            <textarea
+              id="product-desc"
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Notes, benefits, who it’s for…"
+              disabled={busy}
+            />
+          </div>
+        </div>
+      ) : null}
+    </aside>
+  )
 
-      <section className="form-section">
-        <div className="form-section-head">
-          <h2>2. Creative direction</h2>
+  const stepsColumn = (
+    <div className="studio-bench-steps">
+      <section className="form-section studio-bench-step">
+        <header className="studio-bench-heading">
+          <h1>Formats</h1>
           <p>
             {hasImageReference || hasVideoReference
-              ? 'Your reference card(s) drive that look — formats stay off for those'
-              : 'Optional prompt — formats or your reference come next'}
+              ? 'Using your reference — pick a format to switch back'
+              : 'Choose the looks you want, or add your own reference'}
           </p>
-        </div>
-        <CreativeDirectionFields
-          prompt={prompt}
-          onPromptChange={setPrompt}
-          lighting={lighting}
-          onLightingChange={setLighting}
-          background={background}
-          onBackgroundChange={setBackground}
-          mood={mood}
-          onMoodChange={setMood}
-          styleTheme={styleTheme}
-          onStyleThemeChange={setStyleTheme}
-          disabled={busy}
-          compact
-          embedded
-          promptPlaceholder="e.g. Soft morning light, keep packaging exact, quiet premium mood…"
-        />
-      </section>
-
-      <section className="form-section">
-        <div className="form-section-head">
-          <h2>3. Image formats or your reference</h2>
-          <p>
-            {hasImageReference
-              ? 'Using your reference — pick a format card to switch back'
-              : photoStyles.length === 0
-                ? `First card = your reference · or pick formats · blank uses ${DEFAULT_PHOTO_STYLES.length} starters`
-                : `${photoStyles.length} selected`}
-          </p>
-        </div>
-        <p className="studio-formats-intro">
-          Upload your own reference on the blank card, or pick the same formats as Image Studio.
-          Choosing one clears the other.
-        </p>
+        </header>
+        <p className="studio-formats-intro">Images</p>
         <FormatPickGrid
           items={PHOTO_STYLES}
           selected={photoStyles}
@@ -1194,135 +1197,57 @@ export default function NewCampaignPage() {
             onPickUrl: applyReferenceUrl,
           }}
         />
+        {limits.maxVideos > 0 ? (
+          <>
+            <p className="studio-formats-intro" style={{ marginTop: 16 }}>
+              Videos
+            </p>
+            <FormatPickGrid
+              items={VIDEO_STYLES}
+              selected={videoStyles}
+              onChange={setVideoStyles}
+              defaultIds={hasVideoReference ? [] : DEFAULT_VIDEO_STYLES}
+              max={Math.max(limits.maxVideos, VIDEO_STYLES.length)}
+              disabled={busy}
+              videoAspect
+              ariaLabel="Video formats"
+              referenceSlot={{
+                kind: 'video',
+                previewUrl: videoReferencePreviewUrl,
+                error: videoReferenceError,
+                busy: videoReferenceUrlBusy,
+                onPickFile: pickVideoReferenceFile,
+                onPickUrl: applyVideoReferenceUrl,
+              }}
+            />
+          </>
+        ) : null}
       </section>
 
-      <section className="form-section">
-        <div className="form-section-head">
-          <h2>4. Video formats or your reference</h2>
-          <p>
-            {limits.maxVideos === 0
-              ? 'Upgrade to unlock video formats'
-              : hasVideoReference
-                ? 'Using your reference — pick a format card to switch back'
-                : videoStyles.length === 0
-                  ? `First card = your reference · or pick formats · blank uses ${DEFAULT_VIDEO_STYLES.length} starters`
-                  : `${videoStyles.length} selected`}
-          </p>
+      <section className="form-section studio-bench-step studio-bench-prompt">
+        <div className="auth-field">
+          <label htmlFor="campaign-prompt">Prompt · optional</label>
+          <textarea
+            id="campaign-prompt"
+            rows={3}
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="e.g. Soft morning light, keep packaging exact…"
+            disabled={busy}
+          />
         </div>
-        <p className="studio-formats-intro">
-          Upload your own reference clip on the blank card, or pick the same formats as Video Studio.
-          Choosing one clears the other.
-        </p>
-        <FormatPickGrid
-          items={VIDEO_STYLES}
-          selected={videoStyles}
-          onChange={setVideoStyles}
-          defaultIds={hasVideoReference ? [] : DEFAULT_VIDEO_STYLES}
-          max={Math.max(limits.maxVideos, VIDEO_STYLES.length)}
-          disabled={busy || limits.maxVideos === 0}
-          videoAspect
-          ariaLabel="Video formats"
-          referenceSlot={{
-            kind: 'video',
-            previewUrl: videoReferencePreviewUrl,
-            error: videoReferenceError,
-            busy: videoReferenceUrlBusy,
-            onPickFile: pickVideoReferenceFile,
-            onPickUrl: applyVideoReferenceUrl,
-          }}
-        />
       </section>
 
-      <section className="form-section">
-        <div className="form-section-head">
-          <h2>5. Ads &amp; copy extras</h2>
-          <p>Add hooks, captions, CTAs and ad creatives to the same campaign</p>
-        </div>
-        <div className="campaign-extra-toggles" role="group" aria-label="Campaign extras">
-          <label className={`extra-toggle${includeHooks ? ' is-on' : ''}`}>
-            <input
-              type="checkbox"
-              checked={includeHooks}
-              onChange={(e) => setIncludeHooks(e.target.checked)}
-              disabled={busy}
-            />
-            <span>Hooks</span>
-          </label>
-          <label className={`extra-toggle${includeCaptions ? ' is-on' : ''}`}>
-            <input
-              type="checkbox"
-              checked={includeCaptions}
-              onChange={(e) => setIncludeCaptions(e.target.checked)}
-              disabled={busy}
-            />
-            <span>Captions</span>
-          </label>
-          <label className={`extra-toggle${includeCtas ? ' is-on' : ''}`}>
-            <input
-              type="checkbox"
-              checked={includeCtas}
-              onChange={(e) => setIncludeCtas(e.target.checked)}
-              disabled={busy}
-            />
-            <span>CTAs</span>
-          </label>
-          <label className={`extra-toggle${includeHashtags ? ' is-on' : ''}`}>
-            <input
-              type="checkbox"
-              checked={includeHashtags}
-              onChange={(e) => setIncludeHashtags(e.target.checked)}
-              disabled={busy}
-            />
-            <span>Hashtags</span>
-          </label>
-          <label className={`extra-toggle${includeAdCreative ? ' is-on' : ''}`}>
-            <input
-              type="checkbox"
-              checked={includeAdCreative}
-              onChange={(e) => setIncludeAdCreative(e.target.checked)}
-              disabled={busy}
-            />
-            <span>Ad creative</span>
-          </label>
-          <label className={`extra-toggle${includeAdCopy ? ' is-on' : ''}`}>
-            <input
-              type="checkbox"
-              checked={includeAdCopy}
-              onChange={(e) => setIncludeAdCopy(e.target.checked)}
-              disabled={busy}
-            />
-            <span>Ad copy</span>
-          </label>
-          <label className={`extra-toggle${includeStrategy ? ' is-on' : ''}`}>
-            <input
-              type="checkbox"
-              checked={includeStrategy}
-              onChange={(e) => setIncludeStrategy(e.target.checked)}
-              disabled={busy}
-            />
-            <span>Strategy notes</span>
-          </label>
-        </div>
-        <p className="dash-muted" style={{ marginTop: 10 }}>
-          Pack preview: ~{photoCount} images
-          {limits.maxVideos > 0 ? ` · ~${videoCount} videos` : ''}
-          {includeHooks ? ' · hooks' : ''}
-          {includeCaptions ? ' · captions' : ''}
-          {includeCtas ? ' · CTAs' : ''}
-          {includeAdCreative || includeAdCopy ? ' · ads' : ''}
-        </p>
-      </section>
-
-      {error && (
+      {error ? (
         <p className="auth-error" role="alert">
           {error}
         </p>
-      )}
-      {warning && (
+      ) : null}
+      {warning ? (
         <p className="auth-notice" role="status">
           {warning}
         </p>
-      )}
+      ) : null}
 
       <button type="submit" className="btn btn-grad campaign-submit studio-submit" disabled={busy}>
         {busy
@@ -1334,8 +1259,25 @@ export default function NewCampaignPage() {
             : 'Create campaign'}
         <span aria-hidden="true">→</span>
       </button>
+    </div>
+  )
+
+  const formBody = (
+    <form
+      className="app-form campaign-form create-panel studio-panel studio-bench-form"
+      onSubmit={(e) => void onSubmit(e)}
+    >
+      <div className="studio-bench">
+        {stepsColumn}
+        {productColumn}
+      </div>
     </form>
   )
+
+  const isGenerating =
+    busy ||
+    (stagePhase !== 'idle' && stagePhase !== 'ready' && stagePhase !== 'error') ||
+    stageOutputs.length > 0
 
   return (
     <AppLayout>
@@ -1345,9 +1287,11 @@ export default function NewCampaignPage() {
         reason={paywallReason}
         onClose={() => setPaywallOpen(false)}
       />
-      <main className="app-main campaign-create studio-page studio-page-split studio-page-campaign">
-        <div className="studio-split">
-          <div className="studio-split-controls">{formBody}</div>
+      <main
+        className={`app-main campaign-create studio-page studio-page-bench studio-page-campaign${isGenerating ? ' is-generating' : ''}`}
+      >
+        {formBody}
+        {isGenerating ? (
           <StudioStagePanel
             kind="photos"
             phase={stagePhase}
@@ -1359,7 +1303,7 @@ export default function NewCampaignPage() {
             activeOutputId={activeOutputId}
             onSelectOutput={setActiveOutputId}
           />
-        </div>
+        ) : null}
       </main>
     </AppLayout>
   )

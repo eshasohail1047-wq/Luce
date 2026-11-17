@@ -113,7 +113,15 @@ function formatAuthError(err: unknown): string {
       return 'Incorrect email or password. If you usually use Google, click Continue with Google — or use Forgot Password to set an email password first.'
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a moment and try again.'
+    case 'auth/internal-error':
+      if (/IDBDatabase|IndexedDB|database connection is closing/i.test(message)) {
+        return 'Browser auth storage glitched. Hard-refresh (Ctrl+Shift+R), then sign in again. If it persists, clear site data for localhost.'
+      }
+      return 'Sign-in hit a temporary browser error. Refresh and try again.'
     default:
+      if (/IDBDatabase|IndexedDB|database connection is closing/i.test(message)) {
+        return 'Browser auth storage glitched. Hard-refresh (Ctrl+Shift+R), then sign in again.'
+      }
       return code ? `${message} (${code})` : message
   }
 }
@@ -426,14 +434,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signInWithEmail(email, password) {
         setError(null)
-        try {
+        const attempt = async () => {
           const result = await signInWithEmailAndPassword(
             requireAuth(),
             email.trim(),
             password,
           )
           await syncProfile(result.user)
+        }
+        try {
+          await attempt()
         } catch (err) {
+          const raw = err instanceof Error ? err.message : String(err)
+          // IndexedDB often recovers after a short pause + one retry
+          if (/IDBDatabase|IndexedDB|database connection is closing|auth\/internal-error/i.test(raw)) {
+            await new Promise((r) => setTimeout(r, 400))
+            try {
+              await attempt()
+              return
+            } catch (retryErr) {
+              const message = await explainEmailSignInFailure(email, retryErr)
+              setError(message)
+              throw new Error(message)
+            }
+          }
           const message = await explainEmailSignInFailure(email, err)
           setError(message)
           throw new Error(message)

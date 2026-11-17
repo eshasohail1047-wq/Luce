@@ -4,8 +4,6 @@ import ThemeToggle from './components/ThemeToggle'
 import UgcReel from './UgcReel'
 import { stashPendingProduct } from './lib/pendingProduct'
 import { setPostLoginPath, type PostLoginPath } from './lib/postLogin'
-import './App.css'
-
 function markTryFree() {
   try {
     sessionStorage.setItem('luce.tryFreeImages', '1')

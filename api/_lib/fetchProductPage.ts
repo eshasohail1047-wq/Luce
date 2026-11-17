@@ -29,7 +29,7 @@ export type { CompleteBrandKit, EvidenceField, EvidenceStatus } from './brandInt
 
 const MAX_HTML_BYTES = 1_800_000
 /** Cap gallery choices — product uploads only, not the whole page CDN. */
-const MAX_IMAGES = 8
+const MAX_IMAGES = 16
 /** Brand onboarding: pull a fuller catalog for the review kit. */
 const MAX_BRAND_IMAGES = 36
 /** Soft ceiling so huge catalogs stay workable in Firestore / onboarding UI. */
