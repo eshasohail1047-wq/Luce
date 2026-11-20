@@ -1,0 +1,714 @@
+/**
+ * LUCE mobile-responsive layer (loaded last).
+ * Goal: nothing critical missing — stack, scroll, full-width, touch-friendly.
+ */
+
+/* —— Global mobile safety —— */
+@media (max-width: 860px) {
+  html,
+  body,
+  #root {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .studio-shell {
+    width: 100%;
+    max-width: 100vw;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto minmax(0, 1fr) !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  /*
+   * Single scroll owner: .studio-stage
+   * Flex (not grid 1fr) so tall campaign content expands and the stage scrolls.
+   */
+  .studio-stage {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
+
+  .studio-stage > .studio-topbar,
+  .studio-stage > .studio-topbar-compact,
+  .studio-stage > .studio-dash-topbar {
+    flex: 0 0 auto !important;
+    position: sticky;
+    top: 0;
+    z-index: 25;
+  }
+
+  .studio-stage-body,
+  .studio-stage-body:has(.studio-page-bench),
+  .studio-stage-body:has(.studio-page-campaign),
+  .studio-stage-body:has(.studio-page-split) {
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+
+  /* Home keeps a filled viewport; stage still scrolls if needed */
+  .studio-stage-body:has(.dash-home) {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  .app-main,
+  .app-main.studio-page,
+  .app-main.studio-page.studio-page-bench,
+  .app-main.studio-page.studio-page-bench.studio-page-campaign,
+  .studio-page-campaign,
+  .studio-bench-form,
+  .app-main.studio-page.studio-page-bench > .studio-bench-form,
+  .app-main.studio-page.studio-page-bench .studio-panel.studio-bench-form,
+  .settings-page,
+  .create-panel,
+  .studio-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+    box-sizing: border-box;
+  }
+
+  .dash,
+  .dash-simple,
+  .dash-home {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* Campaign: kill nested scroll traps (desktop pins formats + generate) */
+  .studio-page-campaign .studio-bench,
+  .studio-page-campaign .studio-bench-steps,
+  .studio-page-campaign .studio-bench-steps-campaign,
+  .studio-page-campaign .studio-bench-formats,
+  .studio-page-campaign .studio-bench-product,
+  .studio-page-campaign .studio-bench-footer,
+  .studio-bench-steps,
+  .studio-bench-steps-campaign,
+  .studio-bench-steps > .studio-bench-formats {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    overscroll-behavior: auto !important;
+  }
+
+  .studio-page-campaign .studio-bench-formats {
+    flex: 0 0 auto !important;
+    overflow: visible !important;
+    overflow-y: visible !important;
+  }
+
+  /* —— Mobile top nav bar (polished app chrome) —— */
+  .studio-rail,
+  .studio-rail.studio-rail-single {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) auto !important;
+    grid-template-rows: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 60px;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 10px 12px !important;
+    padding-top: max(10px, env(safe-area-inset-top)) !important;
+    overflow: visible !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--chrome-border, rgba(20, 18, 28, 0.08)) !important;
+    background: var(--glass, rgba(255, 255, 255, 0.92)) !important;
+    backdrop-filter: blur(16px) saturate(1.15);
+    box-shadow: 0 8px 24px rgba(20, 18, 28, 0.06);
+    z-index: 40;
+  }
+
+  html[data-theme='dark'] .studio-rail,
+  html[data-theme='dark'] .studio-rail.studio-rail-single {
+    background: var(--glass, rgba(22, 23, 31, 0.92)) !important;
+    border-bottom-color: var(--chrome-border) !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  }
+
+  .studio-rail-accent {
+    display: none !important;
+  }
+
+  .studio-rail-top,
+  .studio-rail-scroll,
+  .studio-rail-footer {
+    display: flex !important;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .studio-rail-top {
+    gap: 8px;
+    padding: 0 !important;
+  }
+
+  .studio-rail-scroll {
+    position: relative;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  }
+
+  .studio-rail-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .studio-rail-nav,
+  .studio-rail-nav-flat {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    width: max-content;
+    padding: 2px 4px;
+  }
+
+  .studio-rail-link,
+  .studio-rail-create,
+  .studio-rail-help,
+  .studio-rail-workspace {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+    border-radius: 14px !important;
+    border: 1px solid transparent;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  }
+
+  .studio-rail-create {
+    background: var(--ink) !important;
+    color: #fff !important;
+    border-radius: 14px !important;
+    box-shadow: 0 6px 16px rgba(20, 18, 28, 0.18);
+  }
+
+  html[data-theme='dark'] .studio-rail-create {
+    background: #f3f0f8 !important;
+    color: #141218 !important;
+  }
+
+  .studio-rail-link:hover,
+  .studio-rail-help:hover,
+  .studio-rail-workspace:hover {
+    background: var(--hover-fill) !important;
+    border-color: var(--chrome-border);
+  }
+
+  .studio-rail-link.is-active {
+    background: var(--rail-active-surface, #fff) !important;
+    color: var(--rail-active-ink, #17171f) !important;
+    border-color: var(--chrome-border) !important;
+    box-shadow: 0 4px 14px rgba(20, 18, 28, 0.08);
+  }
+
+  html[data-theme='dark'] .studio-rail-link.is-active {
+    background: var(--rail-active-surface) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  }
+
+  .studio-rail-footer {
+    flex-direction: row !important;
+    gap: 6px !important;
+    padding: 0 !important;
+  }
+
+  /* —— Topbars: keep actions, wrap if needed —— */
+  .studio-topbar,
+  .studio-topbar-compact,
+  .studio-dash-topbar {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px !important;
+    min-height: 52px;
+    padding: 8px 12px !important;
+    padding-top: max(8px, env(safe-area-inset-top)) !important;
+  }
+
+  .studio-topbar-actions,
+  .studio-dash-topbar-actions {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .studio-topbar-upgrade {
+    display: inline-flex !important;
+    min-height: 36px;
+    padding: 0 10px !important;
+    font-size: 0.75rem !important;
+  }
+
+  .studio-topbar-icon,
+  .studio-dash-user,
+  .studio-topbar-user,
+  .theme-toggle-icon {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  /* —— Studio / Campaign bench —— */
+  .studio-bench,
+  .studio-page-campaign .studio-bench {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    gap: 12px !important;
+    align-items: start !important;
+  }
+
+  /* Mobile: right column (product) first, left column (formats) below */
+  .studio-bench-product {
+    order: -1 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  .studio-bench-steps,
+  .studio-bench-steps-campaign,
+  .studio-page-campaign .studio-bench-steps,
+  .studio-page-campaign .studio-bench-steps-campaign {
+    order: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  .studio-bench-steps > .studio-bench-formats,
+  .studio-page-campaign .studio-bench-formats,
+  .campaign-format-block,
+  .campaign-format-block-images,
+  .campaign-format-block-videos {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 0 0 auto !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+
+  .studio-bench-formats .format-pick-grid,
+  .studio-bench-formats .format-pick-grid-video,
+  .studio-bench-formats .format-pick-grid-fastlane,
+  .studio-bench-steps .format-pick-grid,
+  .studio-bench-steps .format-pick-grid-video,
+  .studio-bench-steps .format-pick-grid-fastlane,
+  .studio-page-campaign .format-pick-grid,
+  .studio-page-campaign .format-pick-grid-video,
+  .studio-page-campaign .format-pick-grid-fastlane,
+  .campaign-format-block-images .format-pick-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    flex: 0 0 auto !important;
+  }
+
+  .format-pick,
+  .format-pick-reference,
+  .studio-bench-steps .format-pick,
+  .studio-bench-steps .format-pick-reference {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  .studio-bench-footer,
+  .studio-page-campaign .studio-bench-footer,
+  .studio-bench-steps > .studio-bench-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .product-stage,
+  .product-stage.is-portrait,
+  .product-stage.has-preview.is-portrait,
+  .product-stage.is-landscape,
+  .product-stage.has-preview.is-landscape {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: min(46vh, 340px) !important;
+    margin: 0 !important;
+  }
+
+  .studio-bench-details,
+  .details-grid,
+  .source-toggle,
+  .upload-drop,
+  .auth-field,
+  .campaign-form,
+  .app-form {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .details-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .source-toggle {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .url-image-grid,
+  .product-url-gallery .url-image-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* —— Dashboard —— */
+  .dash-home-dest-grid,
+  .dash-home-recent-grid,
+  .dash-rec-grid,
+  .dash-create-grid,
+  .dash-studio-grid,
+  .dash-recent-grid,
+  .dash-paths,
+  .dash-product-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dash-home-composer,
+  .dash-home-entry-row,
+  .dash-home-product-toolbar {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .dash-home-entry-btn,
+  .btn,
+  .studio-submit,
+  .campaign-submit {
+    min-height: 44px;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .studio-submit,
+  .campaign-submit {
+    width: 100% !important;
+  }
+
+  /* —— Settings —— */
+  .settings-layout,
+  .settings-grid,
+  .settings-shell {
+    grid-template-columns: 1fr !important;
+    display: grid !important;
+  }
+
+  .settings-side-nav {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    width: 100% !important;
+    overflow-x: auto;
+  }
+
+  .settings-panel,
+  .settings-row-card,
+  .settings-theme-card {
+    width: 100% !important;
+  }
+
+  /* —— Auth —— */
+  .auth-page,
+  .auth-shell,
+  .auth-layout {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    min-height: 100dvh;
+    width: 100% !important;
+  }
+
+  .auth-panel,
+  .auth-form {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .auth-media,
+  .auth-story {
+    max-height: 38vh;
+    overflow: hidden;
+  }
+
+  /* —— Landing —— */
+  .page,
+  .site-main,
+  .hero {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: clip !important;
+    box-sizing: border-box;
+  }
+
+  .hero {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .nav {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  .nav-inner {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+    box-sizing: border-box;
+  }
+
+  .nav-actions {
+    gap: 8px !important;
+    margin-left: auto;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .nav-actions .btn,
+  .nav-actions .btn-dark {
+    padding: 8px 12px !important;
+    font-size: 0.8rem !important;
+    white-space: nowrap;
+  }
+
+  .hero-prompt,
+  .hero-prompt-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  .hero-prompt-bar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .hero-badge {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .hero-badge-inner {
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+  }
+
+  html[data-theme='dark'] .hero-badge-inner {
+    background: rgba(28, 29, 38, 0.96);
+    color: var(--ink-soft);
+  }
+
+  html[data-theme='dark'] .hero .lede,
+  html[data-theme='dark'] .hero-free-note {
+    color: var(--muted) !important;
+  }
+
+  .pricing-grid,
+  .price-grid,
+  .feature-grid,
+  .audience-grid,
+  .pack-grid,
+  .why-grid,
+  .output-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .nav-links {
+    display: none;
+  }
+
+  .menu-toggle {
+    display: grid !important;
+    place-items: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .mobile-menu.open {
+    display: grid !important;
+  }
+
+  /* —— Modals / paywall / menus —— */
+  .modal,
+  .modal-card,
+  .paywall,
+  .paywall-sheet,
+  .dialog,
+  .sheet,
+  .studio-account-menu,
+  .studio-help-menu,
+  .studio-notif-menu {
+    width: min(100vw - 24px, 420px) !important;
+    max-width: calc(100vw - 24px) !important;
+    max-height: min(80dvh, 640px) !important;
+    overflow-y: auto !important;
+  }
+
+  .paywall-backdrop,
+  .modal-backdrop {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  /* —— Results / library —— */
+  .results-grid,
+  .library-grid,
+  .workspace-list,
+  .products-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  /* —— Forms & inputs —— */
+  input,
+  textarea,
+  select,
+  button {
+    max-width: 100%;
+  }
+
+  textarea {
+    min-height: 88px;
+  }
+
+  /* —— Onboarding —— */
+  .ob-shell {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: clip;
+  }
+
+  .ob-top {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .ob-plan-launch,
+  .ob-plan-cards,
+  .ob-plan-shared {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .studio-bench-steps .format-pick-grid,
+  .studio-bench-steps .format-pick-grid-video,
+  .studio-bench-steps .format-pick-grid-fastlane,
+  .campaign-format-block-images .format-pick-grid,
+  .studio-page-campaign .format-pick-grid-video,
+  .studio-page-campaign .format-pick-grid-fastlane {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .results-grid,
+  .library-grid,
+  .products-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .source-toggle {
+    grid-template-columns: 1fr !important;
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 9vw, 2.6rem) !important;
+    white-space: normal;
+  }
+
+  .hero-line {
+    white-space: normal !important;
+  }
+
+  .studio-topbar-upgrade {
+    display: inline-flex !important;
+  }
+}
+
+/* Mid tablets: 3 format cards */
+@media (min-width: 561px) and (max-width: 860px) {
+  .studio-bench-steps .format-pick-grid:not(.format-pick-grid-video):not(.format-pick-grid-fastlane),
+  .campaign-format-block-images .format-pick-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .studio-bench-steps .format-pick-grid-video,
+  .studio-bench-steps .format-pick-grid-fastlane {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+}

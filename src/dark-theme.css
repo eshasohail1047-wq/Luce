@@ -1,0 +1,550 @@
+/**
+ * Application-wide dark theme adaptations.
+ * Light mode base rules stay unchanged; this file only styles html[data-theme='dark'].
+ * Product media, logos, and generated creatives keep their own colors.
+ */
+
+/* —— Global readable chrome —— */
+html[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+html[data-theme='dark'] body,
+html[data-theme='dark'] #root {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] ::selection {
+  background: rgba(167, 139, 250, 0.35);
+  color: #fff;
+}
+
+/* —— Shell / stage / rail —— */
+html[data-theme='dark'] .studio-shell,
+html[data-theme='dark'] .studio-shell-alone,
+html[data-theme='dark'] .studio-stage,
+html[data-theme='dark'] .studio-stage-body,
+html[data-theme='dark'] .dash,
+html[data-theme='dark'] .dash-simple,
+html[data-theme='dark'] .dash-home,
+html[data-theme='dark'] .dash-home-v2 {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-rail,
+html[data-theme='dark'] .studio-rail-single {
+  background: var(--rail-surface);
+  border-right-color: var(--rail-border);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-rail-link {
+  color: var(--rail-link);
+}
+
+html[data-theme='dark'] .studio-rail-link svg {
+  color: var(--rail-icon);
+}
+
+html[data-theme='dark'] .studio-rail-link:hover,
+html[data-theme='dark'] .studio-rail-link.is-active {
+  background: var(--rail-active-surface);
+  color: var(--rail-active-ink);
+}
+
+html[data-theme='dark'] .studio-rail-link:hover svg,
+html[data-theme='dark'] .studio-rail-link.is-active svg {
+  color: var(--rail-active-ink);
+}
+
+html[data-theme='dark'] .studio-rail-create {
+  background: #f3f0f8;
+  color: #141218;
+}
+
+html[data-theme='dark'] .studio-rail-create:hover {
+  background: #ffffff;
+}
+
+html[data-theme='dark'] .studio-rail-planline,
+html[data-theme='dark'] .studio-rail-label,
+html[data-theme='dark'] .studio-rail-workspace-copy em,
+html[data-theme='dark'] .studio-rail-user-meta span {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .studio-rail-workspace-copy strong {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-rail-help {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .studio-rail-help:hover,
+html[data-theme='dark'] .studio-rail-help.is-active {
+  background: var(--hover-fill);
+  color: var(--accent);
+}
+
+html[data-theme='dark'] .studio-help-menu,
+html[data-theme='dark'] .studio-account-menu,
+html[data-theme='dark'] .studio-notif-menu {
+  background: var(--panel-elevated);
+  border-color: var(--chrome-border);
+  box-shadow: var(--shadow-elevated);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-help-item,
+html[data-theme='dark'] .studio-account-menu a,
+html[data-theme='dark'] .studio-account-menu button {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-help-item:hover,
+html[data-theme='dark'] .studio-account-menu a:hover,
+html[data-theme='dark'] .studio-account-menu button:hover {
+  background: var(--hover-fill);
+}
+
+/* —— Topbars —— */
+html[data-theme='dark'] .studio-topbar,
+html[data-theme='dark'] .studio-topbar-compact,
+html[data-theme='dark'] .studio-dash-topbar {
+  background: var(--glass);
+  border-bottom-color: var(--chrome-border);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-topbar-greeting,
+html[data-theme='dark'] .studio-topbar-welcome,
+html[data-theme='dark'] .studio-dash-user-name {
+  color: var(--heading);
+}
+
+html[data-theme='dark'] .studio-topbar-context,
+html[data-theme='dark'] .studio-topbar-meta {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .studio-topbar-icon,
+html[data-theme='dark'] .studio-dash-topbar .studio-topbar-icon,
+html[data-theme='dark'] .studio-dash-user,
+html[data-theme='dark'] .studio-dash-search {
+  background: var(--panel-muted);
+  border-color: var(--chrome-border);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-topbar-icon:hover,
+html[data-theme='dark'] .studio-dash-user:hover,
+html[data-theme='dark'] .studio-dash-user.is-open {
+  background: var(--hover-fill);
+}
+
+/* —— Cards / panels / forms —— */
+html[data-theme='dark'] .app-form,
+html[data-theme='dark'] .create-panel,
+html[data-theme='dark'] .studio-panel,
+html[data-theme='dark'] .studio-bench-form,
+html[data-theme='dark'] .studio-page-bench,
+html[data-theme='dark'] .studio-page-campaign {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .auth-field input,
+html[data-theme='dark'] .auth-field textarea,
+html[data-theme='dark'] .auth-field select,
+html[data-theme='dark'] .app-form input,
+html[data-theme='dark'] .app-form textarea,
+html[data-theme='dark'] .app-form select,
+html[data-theme='dark'] .campaign-form input,
+html[data-theme='dark'] .campaign-form textarea,
+html[data-theme='dark'] .campaign-form select,
+html[data-theme='dark'] .details-grid input,
+html[data-theme='dark'] .details-grid textarea,
+html[data-theme='dark'] .studio-bench-details input,
+html[data-theme='dark'] .studio-bench-details textarea,
+html[data-theme='dark'] .settings-panel input,
+html[data-theme='dark'] .settings-panel textarea,
+html[data-theme='dark'] .settings-panel select {
+  background: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .auth-field label,
+html[data-theme='dark'] .details-head h2,
+html[data-theme='dark'] .details-head p,
+html[data-theme='dark'] .studio-bench-details .auth-field label,
+html[data-theme='dark'] .studio-bench-footer .auth-field label {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .source-toggle button,
+html[data-theme='dark'] .upload-drop,
+html[data-theme='dark'] .product-stage,
+html[data-theme='dark'] .studio-bench-details,
+html[data-theme='dark'] .studio-stage-status,
+html[data-theme='dark'] .studio-stage-panel {
+  border-color: var(--chrome-border);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .upload-drop {
+  background:
+    radial-gradient(ellipse 70% 80% at 20% 20%, rgba(124, 58, 237, 0.16), transparent 55%),
+    radial-gradient(ellipse 60% 70% at 90% 80%, rgba(232, 121, 192, 0.1), transparent 50%),
+    var(--panel-muted);
+}
+
+html[data-theme='dark'] .upload-drop.is-over {
+  background:
+    radial-gradient(ellipse 70% 80% at 20% 20%, rgba(124, 58, 237, 0.22), transparent 55%),
+    var(--panel-elevated);
+}
+
+html[data-theme='dark'] .product-stage {
+  background: var(--panel-muted);
+}
+
+html[data-theme='dark'] .studio-bench-details {
+  background: var(--panel-muted);
+}
+
+html[data-theme='dark'] .studio-bench-footer,
+html[data-theme='dark'] .studio-bench-steps > .studio-bench-footer,
+html[data-theme='dark'] .studio-page-campaign .studio-bench-footer {
+  background: var(--shell-base-bottom);
+  border-top-color: var(--chrome-border);
+}
+
+html[data-theme='dark'] .studio-bench-heading h1,
+html[data-theme='dark'] .campaign-formats-hero h1 {
+  color: var(--accent);
+}
+
+html[data-theme='dark'] .studio-bench-heading p,
+html[data-theme='dark'] .campaign-formats-hero > p:last-child,
+html[data-theme='dark'] .campaign-format-head p {
+  color: var(--ink-soft);
+}
+
+html[data-theme='dark'] .campaign-format-head h2 {
+  color: var(--heading);
+}
+
+/* Format cards: keep video media dark; lighten chrome for image cards */
+html[data-theme='dark'] .studio-bench-steps .format-pick:not(.format-pick-fastlane) {
+  background: var(--panel-elevated);
+  border-color: var(--chrome-border-strong);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-qty {
+  background: var(--glass-strong);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-qty-btn {
+  color: var(--ink);
+  border-color: var(--chrome-border);
+  background: var(--panel-muted);
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-duration-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #f3f0f8;
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-duration-btn.is-active {
+  background: rgba(167, 139, 250, 0.28);
+  border-color: rgba(167, 139, 250, 0.55);
+  color: #fff;
+}
+
+html[data-theme='dark'] .url-image-thumb {
+  border-color: var(--chrome-border);
+  background: var(--panel-muted);
+}
+
+/* —— Dashboard —— */
+html[data-theme='dark'] .dash-home-composer,
+html[data-theme='dark'] .dash-home-dest-card,
+html[data-theme='dark'] .dash-home-recent-media,
+html[data-theme='dark'] .dash-home-empty-card,
+html[data-theme='dark'] .dash-wh-composer,
+html[data-theme='dark'] .dash-wh-studio-card,
+html[data-theme='dark'] .dash-wh-tip,
+html[data-theme='dark'] .dash-wh-recent-media,
+html[data-theme='dark'] .dash-studio-card,
+html[data-theme='dark'] .dash-hero-start,
+html[data-theme='dark'] .dash-empty-v2,
+html[data-theme='dark'] .dash-rec-card,
+html[data-theme='dark'] .dash-create-card,
+html[data-theme='dark'] .settings-side-nav,
+html[data-theme='dark'] .settings-panel,
+html[data-theme='dark'] .settings-row-card,
+html[data-theme='dark'] .settings-theme-card,
+html[data-theme='dark'] .settings-plan-summary {
+  background: var(--card-bg);
+  border-color: var(--chrome-border);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .dash-home-title,
+html[data-theme='dark'] .dash-hero-v2-copy h1,
+html[data-theme='dark'] .dash-section-head h2,
+html[data-theme='dark'] .dash-studio-card h3,
+html[data-theme='dark'] .dash-hero-start-opt strong {
+  color: var(--heading);
+}
+
+html[data-theme='dark'] .dash-home-entry-btn {
+  background: var(--panel-muted);
+  border-color: var(--chrome-border);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .dash-home-entry-btn.is-active,
+html[data-theme='dark'] .dash-home-entry-btn:hover {
+  background: var(--accent-soft);
+  border-color: rgba(167, 139, 250, 0.35);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .dash-muted,
+html[data-theme='dark'] .settings-copy,
+html[data-theme='dark'] .app-muted {
+  color: var(--muted);
+}
+
+/* —— Auth (theme-aware, not forced light) —— */
+html[data-theme='dark'] .auth-page {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .auth-panel {
+  background: var(--panel-bg);
+  border-color: var(--chrome-border);
+  color: var(--ink);
+  box-shadow: var(--shadow-elevated);
+}
+
+html[data-theme='dark'] .auth-panel h1,
+html[data-theme='dark'] .auth-panel h2,
+html[data-theme='dark'] .auth-title,
+html[data-theme='dark'] .auth-page .auth-wordmark,
+html[data-theme='dark'] .auth-page .logo-letters {
+  color: var(--heading);
+}
+
+html[data-theme='dark'] .auth-field label,
+html[data-theme='dark'] .auth-label-row label,
+html[data-theme='dark'] .auth-forgot,
+html[data-theme='dark'] .auth-switch a,
+html[data-theme='dark'] .auth-page a:not(.auth-story-caption) {
+  color: var(--ink-soft);
+}
+
+html[data-theme='dark'] .auth-forgot:hover,
+html[data-theme='dark'] .auth-switch a:hover {
+  color: var(--accent);
+}
+
+html[data-theme='dark'] .auth-panel p,
+html[data-theme='dark'] .auth-sub,
+html[data-theme='dark'] .auth-switch,
+html[data-theme='dark'] .auth-remember {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .auth-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+html[data-theme='dark'] .auth-notice {
+  background: var(--accent-soft);
+  color: var(--ink-soft);
+}
+
+/* Keep story/media captions light on photo panels */
+html[data-theme='dark'] .auth-story-caption {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+html[data-theme='dark'] .auth-media-tagline {
+  color: #ffffff;
+}
+
+/* —— Landing —— */
+html[data-theme='dark'] .site,
+html[data-theme='dark'] .site-main,
+html[data-theme='dark'] .page,
+html[data-theme='dark'] .hero {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .site-nav,
+html[data-theme='dark'] .nav {
+  background: var(--glass);
+  border-bottom-color: var(--chrome-border);
+}
+
+html[data-theme='dark'] .hero h1,
+html[data-theme='dark'] .hero-ink,
+html[data-theme='dark'] .hero-title {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .hero .lede,
+html[data-theme='dark'] .hero-note,
+html[data-theme='dark'] .hero-sub {
+  color: var(--muted);
+}
+
+html[data-theme='dark'] .hero-prompt {
+  background: var(--panel-elevated);
+  border-color: var(--chrome-border-strong);
+  box-shadow: var(--shadow-elevated);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .hero-prompt-bar {
+  border-top-color: var(--chrome-border);
+}
+
+html[data-theme='dark'] .hero-attach,
+html[data-theme='dark'] .hero-mode {
+  background: var(--panel-muted);
+  border-color: var(--chrome-border);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .hero-mode.is-active {
+  background: var(--accent-soft);
+  border-color: rgba(167, 139, 250, 0.4);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .hero-badge,
+html[data-theme='dark'] .hero-pill,
+html[data-theme='dark'] .eyebrow {
+  background: var(--panel-muted);
+  border-color: var(--chrome-border);
+  color: var(--ink-soft);
+}
+
+html[data-theme='dark'] .hero-prompt-card,
+html[data-theme='dark'] .pricing-card,
+html[data-theme='dark'] .price-card,
+html[data-theme='dark'] .feature-card,
+html[data-theme='dark'] .audience-card,
+html[data-theme='dark'] .faq-item,
+html[data-theme='dark'] .pack-card,
+html[data-theme='dark'] .why-card,
+html[data-theme='dark'] .output-card {
+  background: var(--card-bg);
+  border-color: var(--chrome-border);
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .btn-light {
+  background: var(--panel-elevated);
+  color: var(--ink);
+  border-color: var(--chrome-border);
+}
+
+html[data-theme='dark'] .mobile-menu.open {
+  background: var(--panel-bg);
+  border-color: var(--chrome-border);
+}
+
+/* —— Modals / overlays —— */
+html[data-theme='dark'] .modal,
+html[data-theme='dark'] .modal-card,
+html[data-theme='dark'] .paywall,
+html[data-theme='dark'] .dialog,
+html[data-theme='dark'] .popover,
+html[data-theme='dark'] .sheet {
+  background: var(--panel-bg);
+  border-color: var(--chrome-border);
+  color: var(--ink);
+  box-shadow: var(--shadow-elevated);
+}
+
+html[data-theme='dark'] .modal-backdrop,
+html[data-theme='dark'] .overlay {
+  background: var(--overlay);
+}
+
+/* —— Tables / lists —— */
+html[data-theme='dark'] table,
+html[data-theme='dark'] .data-table,
+html[data-theme='dark'] .library-list,
+html[data-theme='dark'] .workspace-list {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] th,
+html[data-theme='dark'] td {
+  border-color: var(--chrome-border);
+}
+
+html[data-theme='dark'] tr:hover td {
+  background: var(--hover-fill);
+}
+
+/* —— Buttons / chips —— */
+html[data-theme='dark'] .btn-ghost {
+  color: var(--ink);
+  border-color: var(--chrome-border);
+  background: transparent;
+}
+
+html[data-theme='dark'] .btn-ghost:hover {
+  background: var(--hover-fill);
+}
+
+html[data-theme='dark'] .chip,
+html[data-theme='dark'] .tag,
+html[data-theme='dark'] .settings-current-chip,
+html[data-theme='dark'] .settings-owner-chip {
+  background: var(--panel-muted);
+  border-color: var(--chrome-border);
+  color: var(--ink-soft);
+}
+
+/* —— Scrollbars —— */
+html[data-theme='dark'] * {
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+/* —— Catch leftover light cards (class backgrounds only; skip media) —— */
+html[data-theme='dark'] .studio-shell [style*='background: #fff'],
+html[data-theme='dark'] .studio-shell [style*='background:#fff'],
+html[data-theme='dark'] .studio-shell [style*='background: #ffffff'],
+html[data-theme='dark'] .studio-shell [style*='background:#ffffff'] {
+  background: var(--panel-bg) !important;
+  color: var(--ink) !important;
+}
+
+/* Never recolor product / creative media */
+html[data-theme='dark'] img,
+html[data-theme='dark'] video,
+html[data-theme='dark'] canvas,
+html[data-theme='dark'] .format-pick-media,
+html[data-theme='dark'] .format-pick-media-video,
+html[data-theme='dark'] .results-card-media,
+html[data-theme='dark'] .product-stage img,
+html[data-theme='dark'] .product-stage video,
+html[data-theme='dark'] .creative-showcase img,
+html[data-theme='dark'] .creative-showcase video {
+  color: inherit;
+}

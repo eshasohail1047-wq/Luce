@@ -171,7 +171,8 @@ function renderNavItem(item: NavItem, paid: boolean) {
       <span
         key={item.to + item.label}
         className="studio-rail-link is-soon"
-        title="Coming soon — not in MVP"
+        title={`${item.label} — coming soon`}
+        aria-label={`${item.label} (coming soon)`}
       >
         <NavIcon name={item.icon} />
         <span>{item.label}</span>
@@ -184,6 +185,8 @@ function renderNavItem(item: NavItem, paid: boolean) {
       key={item.to + item.label}
       to={item.to}
       end={item.end}
+      title={item.label}
+      aria-label={item.label}
       className={({ isActive }) => `studio-rail-link${isActive ? ' is-active' : ''}`}
     >
       <NavIcon name={item.icon} />
@@ -275,17 +278,24 @@ export default function AppLayout({ children }: AppLayoutProps) {
           <Link to="/app" className="studio-rail-brand" aria-label="LUCE home">
             <Logo href={null} />
           </Link>
-          <Link className="studio-rail-create" to="/app/studio/photos">
+          <Link
+            className="studio-rail-create"
+            to="/app/studio/photos"
+            title="New"
+            aria-label="Create new"
+          >
             <NavIcon name="plus" />
             <span>New</span>
           </Link>
         </div>
 
-        <nav className="studio-rail-nav studio-rail-nav-flat" aria-label="Primary">
-          {PRIMARY_NAV.filter((item) => !(onboardingSkipped && item.to === '/app/brand')).map(
-            (item) => renderNavItem(item, paid),
-          )}
-        </nav>
+        <div className="studio-rail-scroll">
+          <nav className="studio-rail-nav studio-rail-nav-flat" aria-label="Primary">
+            {PRIMARY_NAV.filter((item) => !(onboardingSkipped && item.to === '/app/brand')).map(
+              (item) => renderNavItem(item, paid),
+            )}
+          </nav>
+        </div>
 
         <div className="studio-rail-footer">
           {!onboardingSkipped ? (
@@ -320,6 +330,8 @@ export default function AppLayout({ children }: AppLayoutProps) {
               className={`studio-rail-help${helpOpen ? ' is-active' : ''}`}
               aria-expanded={helpOpen}
               aria-controls={helpId}
+              aria-label="Help"
+              title="Help"
               onClick={() => {
                 setHelpOpen((v) => !v)
                 setMenuOpen(false)
