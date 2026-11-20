@@ -204,7 +204,7 @@ export const LUCE_PRIORITY = `CONFLICT PRIORITY (highest first):
 2) Selected format — FOLLOW ACCORDINGLY: asset type rules + aspect ratio + orientation + camera/framing for that format (packshot / window / flatlay / hand / editorial / promo, etc.)
 3) Brand kit (when provided) — KEEP FETCHED BRAND DETAILS FRONT OF MIND: verified colors, voice, photography/lighting/composition, graphic & advertising direction, packaging identity, keywords, things to avoid. The output must look like THIS brand, not a generic DTC template.
 4) Reference look (IMAGE 2, when provided) — FOLLOW ACCORDINGLY: lighting quality, color palette, mood, backdrop character, props, pour/drip, material feel from the reference — still inside brand-kit constraints
-5) User creative prompt — refine inside product + format + brand kit (+ reference when present)
+5) User creative prompt — MUST follow for spoken language, dialogue/script language (e.g. Urdu, English), lines, tone, and any explicit creative request; refine inside product + format + brand kit (+ reference when present). Never ignore language or speaking instructions from the user.
 6) LUCE default — only if no brand kit, no reference, and no user prompt
 
 MIX RULE (brand + reference + format together):
@@ -358,12 +358,17 @@ function userPromptBlock(spec: LuceGenerationSpec): string {
       : `${LUCE_DEFAULT_CREATIVE}\nNo optional user prompt — invent a professional direction that still obeys product + format rules.`
   }
   const parts: string[] = []
-  if (user) parts.push(`USER PROMPT: ${user}`)
+  if (user) {
+    parts.push(`USER PROMPT: ${user}`)
+    parts.push(
+      'USER PROMPT REQUIREMENTS: Obey any spoken language, dialogue language (e.g. Urdu, English), script lines, tone, and other explicit creative requests in the user prompt. Do not drop or ignore these.',
+    )
+  }
   if (recreate) parts.push(`RECREATE NOTE: ${recreate}`)
   parts.push(
     spec.hasReferenceImage
-      ? 'Combine user text with IMAGE 2 look AND the selected format. Product accuracy first; then satisfy both reference and format.'
-      : 'Combine user prompt with asset type + format. If they conflict: product accuracy wins, then format.',
+      ? 'Combine user text with IMAGE 2 look AND the selected format. Product accuracy first; then satisfy both reference and format. User language/speaking requests still apply.'
+      : 'Combine user prompt with asset type + format. If they conflict: product accuracy wins, then format — but still honor user language, dialogue, and explicit creative requests.',
   )
   return parts.join('\n')
 }

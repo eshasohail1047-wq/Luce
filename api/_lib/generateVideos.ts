@@ -205,7 +205,7 @@ const LABELS: Record<VideoAssetKind, string> = {
   video_ugc_selfie: 'UGC selfie',
   video_testimonial: 'Testimonial',
   video_grwm: 'GRWM',
-  video_asmr_spray: 'Spray ASMR',
+  video_asmr_spray: 'ASMR',
   video_product_spin: 'Product spin',
   video_hook_caption: 'Hook caption',
   video_mirror_selfie: 'Mirror selfie',
@@ -227,7 +227,7 @@ const KEYFRAME_SCENES: Record<VideoAssetKind, string> = {
   video_howto_demo:
     'Vertical 9:16 instructional how-to-use frame: a real person clearly demonstrates using the exact product — e.g. lifting the bottle to spray on wrist/neck or applying it the correct way — tutorial pose, product packaging fully readable, clean bright background, looks like a step-by-step demo still.',
   video_grwm:
-    'Vertical 9:16 vanity get-ready-with-me: person in frame with the exact product as the scent/finishing step, talking to camera in mirror light.',
+    'Vertical 9:16 get-ready-with-me vanity scene: a real person faces camera / mirror while THIS exact product is the clear hero of the routine — product held or placed front-and-center, packaging fully readable, soft vanity light, authentic GRWM energy.',
   video_hook_caption:
     'Vertical 9:16 energetic talking-head social ad: person holding the exact product, strong eye contact, mouth mid-hook line.',
   video_mirror_selfie:
@@ -241,7 +241,7 @@ const KEYFRAME_SCENES: Record<VideoAssetKind, string> = {
   video_product_spin:
     'Vertical 9:16 clean hero packshot of the exact product centered on a seamless surface, studio lighting, ready for a slow turntable orbit — product only.',
   video_asmr_spray:
-    'Vertical 9:16 extreme close-up of the exact product nozzle / top ready to press, shallow depth of field, ASMR beauty detail — packaging identity still readable.',
+    'Vertical 9:16 ASMR beauty close-up of THIS exact product as the hero — extreme detail of packaging, texture, cap, or surface; shallow depth of field; quiet intimate lighting; product identity fully readable; no distracting props.',
   video_flatlay_reveal:
     'Vertical 9:16 overhead flatlay of the exact product on a styled surface with minimal complementary props, balanced composition, packaging fully legible.',
 }
@@ -261,9 +261,9 @@ const FORMAT_BEATS: Record<VideoAssetKind, string> = {
   video_testimonial:
     'FORMAT = TESTIMONIAL: Person faces camera, holds THIS product, speaks a short sincere review with natural lip sync.',
   video_grwm:
-    'FORMAT = GRWM: Person talks through a vanity routine and uses / shows THIS product as the scent or finishing step.',
+    'FORMAT = GRWM (get ready with me): Build a proper GRWM video where THIS product is the main star — the person talks through their routine and clearly applies / uses / showcases THIS product as the key step (not a tiny background prop). Keep packaging exact and readable. Spoken dialogue should feel natural to the routine.',
   video_asmr_spray:
-    'FORMAT = SPRAY ASMR: Close-up of the nozzle press with visible mist / detail motion, satisfying ASMR pacing. Keep THIS product identity exact.',
+    'FORMAT = ASMR: Create a product ASMR video of THIS exact item — slow satisfying close-ups (texture, cap twist, tap, pour, mist, or surface detail as fits the product), soft crisp sound-design pacing, intimate framing. Packaging identity stays exact. No loud talking-head; the product is the focus.',
   video_product_spin:
     'FORMAT = PRODUCT SPIN: Slow orbit / turntable rotation of THIS exact product on a clean surface.',
   video_hook_caption:
@@ -347,6 +347,21 @@ function buildMotionPrompt(
   }
   if (type === 'video_product_spin') {
     motionExtras.push('Slow continuous turntable / orbit rotation of the product.')
+  }
+  if (type === 'video_grwm') {
+    motionExtras.push(
+      'GRWM motion: person talks through getting ready and clearly uses THIS product as the main step — apply, spray, dab, or showcase it on camera so the product is the hero of the routine.',
+    )
+  }
+  if (type === 'video_asmr_spray') {
+    motionExtras.push(
+      'ASMR motion: slow close-up product detail — texture, cap, pour, mist, or tactile motion that fits THIS product. Soft satisfying pacing. Product stays the visual hero.',
+    )
+  }
+  if (cd?.prompt?.trim()) {
+    motionExtras.push(
+      'USER PROMPT IS REQUIRED: Follow the user prompt for spoken language, dialogue, script, tone, and any explicit creative request (e.g. speak in Urdu, specific lines, vibe). Do not ignore language or speaking instructions. Still keep product packaging exact and keep this format’s structure.',
+    )
   }
 
   const spec = buildLuceSpec({

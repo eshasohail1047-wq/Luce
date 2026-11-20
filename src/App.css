@@ -12239,7 +12239,7 @@ html[data-theme='dark'] .settings-toggle {
   display: grid;
   /* 65% formats / 35% product stage */
   grid-template-columns: minmax(0, 65fr) minmax(0, 35fr);
-  gap: 14px;
+  gap: 8px;
   align-items: stretch;
   flex: 1 1 auto;
   min-height: 0;
@@ -12248,9 +12248,12 @@ html[data-theme='dark'] .settings-toggle {
 }
 
 .studio-bench > .studio-bench-product {
-  align-self: start;
-  height: auto;
+  align-self: stretch;
+  height: 100%;
   max-height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* Video Studio: formats on top, product stage + details below */
@@ -12319,142 +12322,6 @@ html[data-theme='dark'] .settings-toggle {
   max-width: 100%;
 }
 
-/* Strategy-style portrait format cards for Video Studio */
-.studio-bench-video .format-pick-grid-video,
-.studio-bench-video .format-pick-grid-fastlane {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
-  max-width: none;
-  align-items: stretch;
-}
-
-.studio-bench-video .format-pick,
-.studio-bench-video .format-pick-fastlane,
-.studio-bench-video .format-pick-reference {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  background: #fff;
-  border: 1.5px solid rgba(20, 18, 28, 0.1);
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: none;
-  transform: none;
-  align-self: stretch;
-}
-
-.studio-bench-video .format-pick:hover,
-.studio-bench-video .format-pick-fastlane:hover {
-  transform: none;
-  border-color: rgba(20, 18, 28, 0.2);
-  box-shadow: 0 8px 20px rgba(20, 18, 28, 0.06);
-}
-
-.studio-bench-video .format-pick.is-checked,
-.studio-bench-video .format-pick-fastlane.is-checked,
-.studio-bench-video .format-pick-reference.is-checked {
-  border-color: #17151f;
-  box-shadow: inset 0 0 0 1px #17151f;
-}
-
-.studio-bench-video .format-pick-hit {
-  display: flex;
-  flex-direction: column;
-  flex: 1 1 auto;
-  min-height: 0;
-  width: 100%;
-}
-
-.studio-bench-video .format-pick-media,
-.studio-bench-video .format-pick-fastlane .format-pick-media,
-.studio-bench-video .format-pick-reference.format-pick-fastlane .format-pick-media-blank,
-.studio-bench-video .format-pick-reference.format-pick-fastlane .format-pick-media-ref,
-.studio-bench-video .format-pick-reference.format-pick-fastlane .format-pick-ref-panel {
-  width: 100%;
-  max-height: none;
-  aspect-ratio: 3 / 4;
-  margin: 0;
-  border-radius: 0;
-}
-
-.studio-bench-video .format-pick-name {
-  display: none;
-}
-
-.studio-bench-video .format-pick-body {
-  display: grid;
-  gap: 4px;
-  padding: 10px 10px 12px;
-  border-top: 0;
-  background: #fff;
-  margin-top: auto;
-}
-
-.studio-bench-video .format-pick-body span {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  color: #6b7280;
-  font-size: 0.7rem;
-  line-height: 1.35;
-}
-
-.studio-bench-video .format-pick-body strong {
-  font-size: 0.82rem;
-  letter-spacing: -0.02em;
-  color: #17151f;
-}
-
-.studio-bench-video .format-pick-pill {
-  display: inline-flex;
-  width: fit-content;
-  margin: 0 0 2px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(20, 18, 28, 0.06);
-  color: #4b5563;
-  font-size: 0.62rem;
-  font-style: normal;
-  font-weight: 650;
-  letter-spacing: 0.02em;
-}
-
-.studio-bench-video .format-pick-check {
-  top: 8px;
-  right: 8px;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: #17151f;
-  color: #fff;
-  border: 0;
-  opacity: 0;
-}
-
-.studio-bench-video .format-pick.is-checked .format-pick-check {
-  opacity: 1;
-}
-
-.studio-bench-video .format-pick-qty {
-  position: static;
-  margin: 0 8px 8px;
-  bottom: auto;
-  left: auto;
-  right: auto;
-  border-radius: 10px;
-  background: rgba(20, 18, 28, 0.04);
-  box-shadow: none;
-}
-
-.studio-bench-video .format-pick-reference.format-pick-fastlane .format-pick-ref-controls {
-  position: static;
-  background: #fff;
-  border-top: 1px solid rgba(20, 18, 28, 0.06);
-  padding: 8px;
-}
-
 .studio-bench-steps {
   width: 100%;
   min-width: 0;
@@ -12473,11 +12340,13 @@ html[data-theme='dark'] .settings-toggle {
 .studio-bench-steps > .studio-bench-formats {
   flex: 1 1 0;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: flex !important;
   flex-direction: column;
   gap: 8px;
   padding-top: 0;
+  scrollbar-width: thin;
 }
 
 .studio-bench-formats .studio-bench-heading {
@@ -12494,6 +12363,17 @@ html[data-theme='dark'] .settings-toggle {
   overflow: hidden;
   scrollbar-width: none;
   overscroll-behavior: none;
+}
+
+.studio-bench-formats .format-pick-grid-video,
+.studio-bench-formats .format-pick-grid-fastlane {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .studio-bench-formats .format-pick-grid::-webkit-scrollbar {
@@ -12560,24 +12440,23 @@ html[data-theme='dark'] .settings-toggle {
 .studio-bench-product.is-picking-url {
   height: 100%;
   max-height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .studio-bench-product.is-picking-url .product-stage,
 .studio-bench-product.is-picking-url .product-stage.has-preview,
 .studio-bench-product.is-picking-url .product-stage.has-preview.is-portrait,
 .studio-bench-product.is-picking-url .product-stage.is-portrait {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   width: 100%;
   max-width: 100%;
-  height: auto;
-  max-height: min(68vh, calc(100% - 110px));
-  aspect-ratio: 4 / 5;
-  margin: 0;
   align-self: stretch;
+  margin: 0;
 }
 
-.studio-bench-product.is-picking-url .product-url-gallery {
+.studio-bench-product.is-picking-url .product-url-gallery,
+.studio-bench-product.is-picking-url .studio-bench-details {
   flex: 0 0 auto;
 }
 
@@ -12642,12 +12521,12 @@ html[data-theme='dark'] .settings-toggle {
   width: 100%;
   max-width: 100%;
   margin: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   align-self: stretch;
   min-height: 0;
   height: auto;
   aspect-ratio: 4 / 5;
-  max-height: calc(100% - 160px);
+  max-height: none;
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
@@ -12659,7 +12538,7 @@ html[data-theme='dark'] .settings-toggle {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 10px 24px rgba(20, 18, 28, 0.14);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, aspect-ratio 0.2s ease, max-height 0.2s ease;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, aspect-ratio 0.2s ease;
 }
 
 .product-stage.is-portrait {
@@ -12667,7 +12546,7 @@ html[data-theme='dark'] .settings-toggle {
   width: 100%;
   max-width: 100%;
   height: auto;
-  max-height: calc(100% - 160px);
+  max-height: none;
   align-self: stretch;
   margin: 0;
 }
@@ -12677,7 +12556,7 @@ html[data-theme='dark'] .settings-toggle {
   width: 100%;
   max-width: 100%;
   height: auto;
-  max-height: min(36vh, calc(100% - 160px));
+  max-height: none;
   align-self: stretch;
   flex: 0 0 auto;
   margin: 0;
@@ -12717,16 +12596,20 @@ html[data-theme='dark'] .settings-toggle {
   width: 100%;
   max-width: 100%;
   height: auto;
-  max-height: calc(100% - 160px);
+  max-height: none;
   margin: 0;
   align-self: stretch;
 }
 
 .product-stage.has-preview {
   position: relative;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   width: 100%;
   max-width: 100%;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  align-self: stretch;
 }
 
 .product-stage.has-preview.is-portrait {
@@ -12734,7 +12617,7 @@ html[data-theme='dark'] .settings-toggle {
   width: 100%;
   max-width: 100%;
   height: auto;
-  max-height: calc(100% - 160px);
+  max-height: none;
   margin: 0;
   align-self: stretch;
 }
@@ -12744,7 +12627,7 @@ html[data-theme='dark'] .settings-toggle {
   width: 100%;
   height: auto;
   margin: 0;
-  max-height: min(36vh, calc(100% - 160px));
+  max-height: none;
   align-self: stretch;
 }
 
@@ -12949,6 +12832,7 @@ html[data-theme='dark'] .settings-toggle {
   height: 100%;
   min-height: 0;
   max-height: 100%;
+  /* Fill black card edge-to-edge ? no side gaps */
   object-fit: cover;
   object-position: center center;
   background: transparent;
@@ -13037,8 +12921,15 @@ html[data-theme='dark'] .settings-toggle {
 }
 
 .studio-bench-product .details-grid .auth-field textarea {
-  min-height: 56px;
-  resize: none;
+  min-height: 96px;
+  max-height: none;
+  height: auto;
+  resize: vertical;
+  overflow: auto;
+  field-sizing: content;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
 }
 
 .studio-bench-steps .form-section-head h2 {
@@ -13079,9 +12970,15 @@ html[data-theme='dark'] .settings-toggle {
 }
 
 .studio-bench-footer .studio-bench-prompt textarea {
-  min-height: 56px;
-  max-height: 72px;
+  min-height: 96px;
+  max-height: none;
+  height: auto;
   resize: vertical;
+  overflow: auto;
+  field-sizing: content;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
 }
 
 .studio-bench-footer .studio-submit {
@@ -13102,8 +12999,8 @@ html[data-theme='dark'] .studio-bench-steps > .studio-bench-footer {
 }
 
 .studio-bench-product .details-grid .auth-field textarea {
-  min-height: 40px;
-  max-height: 40px;
+  min-height: 96px;
+  max-height: none;
 }
 
 .studio-bench-step {
@@ -13173,7 +13070,7 @@ html[data-theme='dark'] .studio-bench-steps > .studio-bench-footer {
     width: 100%;
     max-width: 100%;
     height: auto;
-    max-height: 46vh;
+    max-height: none;
     margin: 0;
   }
 
@@ -13201,7 +13098,7 @@ html[data-theme='dark'] .studio-workbench-head p {
 }
 
 html[data-theme='dark'] .studio-bench-heading h1 {
-  color: #9ca3af;
+  color: #c4b5fd;
 }
 
 html[data-theme='dark'] .studio-bench-heading p {
@@ -13211,14 +13108,146 @@ html[data-theme='dark'] .studio-bench-heading p {
 html[data-theme='dark'] .studio-bench-steps .format-pick,
 html[data-theme='dark'] .studio-bench-steps .format-pick-reference {
   background: #1a1822;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
 html[data-theme='dark'] .studio-bench-steps .format-pick-body,
 html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-controls {
   background: #1a1822;
-  border-top-color: rgba(255, 255, 255, 0.08);
+  border-top-color: rgba(255, 255, 255, 0.1);
   color: #f3f0f8;
+}
+
+/* Studio / campaign dark theme ? keep text & controls visible */
+html[data-theme='dark'] .studio-page-bench,
+html[data-theme='dark'] .studio-page-campaign,
+html[data-theme='dark'] .studio-bench-form {
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-topbar-greeting {
+  color: #f3f0f8;
+}
+
+html[data-theme='dark'] .studio-topbar-context {
+  color: #a5a3b5;
+}
+
+html[data-theme='dark'] .studio-formats-intro,
+html[data-theme='dark'] .studio-page-campaign .studio-bench-formats > .studio-bench-heading h1 {
+  color: #c4b5fd;
+}
+
+html[data-theme='dark'] .studio-page-campaign .studio-bench-formats > .studio-bench-heading p,
+html[data-theme='dark'] .studio-page-campaign .campaign-format-head p {
+  color: #b0aebe;
+}
+
+html[data-theme='dark'] .studio-page-campaign .campaign-format-head h2 {
+  color: #f5f3fa;
+}
+
+html[data-theme='dark'] .studio-bench-footer .studio-bench-prompt .auth-field label,
+html[data-theme='dark'] .studio-bench-details .auth-field label,
+html[data-theme='dark'] .studio-bench-product .auth-field label,
+html[data-theme='dark'] .details-head h2,
+html[data-theme='dark'] .details-head p {
+  color: #d8d7e0;
+}
+
+html[data-theme='dark'] .details-head {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme='dark'] .details-toggle {
+  color: #c4b5fd;
+}
+
+html[data-theme='dark'] .studio-bench-footer .studio-bench-prompt textarea,
+html[data-theme='dark'] .studio-bench-details input,
+html[data-theme='dark'] .studio-bench-details textarea,
+html[data-theme='dark'] .studio-bench-product input,
+html[data-theme='dark'] .studio-bench-product textarea,
+html[data-theme='dark'] .auth-field input,
+html[data-theme='dark'] .auth-field textarea {
+  background: var(--input-bg);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #f3f0f8;
+}
+
+html[data-theme='dark'] .studio-bench-footer .studio-bench-prompt textarea::placeholder,
+html[data-theme='dark'] .auth-field input::placeholder,
+html[data-theme='dark'] .auth-field textarea::placeholder {
+  color: #8b899a;
+}
+
+html[data-theme='dark'] .studio-page-campaign .studio-bench-footer {
+  background: linear-gradient(180deg, rgba(18, 16, 24, 0.72), #121018 28%);
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick.is-checked {
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-qty {
+  background: rgba(28, 29, 38, 0.96);
+  color: #f3f0f8;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-qty-label {
+  color: #c4c2d0;
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-qty-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #f3f0f8;
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-duration-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #f3f0f8;
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-duration-btn.is-active {
+  background: rgba(167, 139, 250, 0.28);
+  border-color: rgba(196, 181, 253, 0.65);
+  color: #ede9fe;
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-name {
+  color: #fff;
+}
+
+html[data-theme='dark'] .studio-bench-product .product-stage,
+html[data-theme='dark'] .studio-bench-details {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme='dark'] .studio-bench-video .studio-bench-details {
+  background: rgba(28, 29, 38, 0.92);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html[data-theme='dark'] .auth-error,
+html[data-theme='dark'] .format-pick-ref-error {
+  color: #f97066;
+}
+
+html[data-theme='dark'] .auth-notice {
+  color: #c4b5fd;
+}
+
+html[data-theme='dark'] .btn-ghost {
+  color: #e8e6f0;
+}
+
+html[data-theme='dark'] .studio-submit.btn-grad,
+html[data-theme='dark'] .campaign-submit.btn-grad {
+  color: #fff;
 }
 
 .studio-stage-panel {
@@ -13903,30 +13932,37 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   align-items: start;
 }
 
-/* Image Studio: 3×2 cards scale into available height ? no scroll */
+/* Image Studio: taller portrait format cards */
 .studio-bench-steps .format-pick-grid,
 .studio-bench-steps .format-pick-grid-fastlane,
 .studio-bench-steps .format-pick-grid-video {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(120px, 1fr));
-  gap: 10px;
+  grid-template-rows: none;
+  grid-auto-rows: auto;
+  gap: 12px;
   width: 100%;
-  height: 100%;
+  height: auto;
+  max-height: none;
   max-width: none;
-  align-items: stretch;
-  align-content: stretch;
+  align-items: start;
+  align-content: start;
   justify-content: stretch;
   flex: 1 1 auto;
-  min-height: 220px;
-  overflow: hidden;
-  scrollbar-width: none;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
 }
 
+/* Video: 5 equal-width cards filling the left column */
 .studio-bench-steps .format-pick-grid-video,
 .studio-bench-steps .format-pick-grid-fastlane {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(120px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  justify-content: stretch;
+  align-items: start;
   gap: 8px;
+  width: 100%;
 }
 
 .studio-split-controls .format-pick-body span,
@@ -13946,20 +13982,46 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   font-weight: 650;
 }
 
-/* Bench format cards: fill grid cell, no overflow scroll */
+/* Bench format cards: portrait tiles (images 3:4; videos taller 9:16 below) */
 .studio-bench-steps .format-pick {
   display: flex;
   flex-direction: column;
   align-self: stretch;
-  height: 100%;
+  width: 100%;
+  height: auto;
   min-height: 0;
-  max-height: 100%;
-  border-radius: 12px;
+  max-height: none;
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
   border: 1px solid rgba(20, 18, 28, 0.1);
   background: #fff;
   box-shadow: none;
   transform: none;
   overflow: hidden;
+}
+
+/* Video formats: fill column width; height from original clip (JS) */
+.studio-bench-steps .format-pick-grid-video .format-pick,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick,
+.studio-bench-steps .format-pick-grid-video .format-pick-reference,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-reference {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: none !important;
+  height: auto;
+  max-height: none !important;
+  aspect-ratio: 9 / 16;
+  background: #0c0b12;
+  border-color: rgba(20, 18, 28, 0.12);
+  overflow: hidden;
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick.is-video-ratio-ready,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick.is-video-ratio-ready {
+  /* height set inline from real video ? no empty top/bottom */
+  aspect-ratio: auto !important;
+  max-height: none !important;
 }
 
 .studio-bench-steps .format-pick:hover {
@@ -14009,11 +14071,48 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   display: block;
 }
 
+.studio-bench-steps .format-pick-media video,
+.studio-bench-steps .format-pick-video-el {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Full original frame ? never crop top/bottom/sides */
+  object-fit: contain;
+  object-position: center center;
+  display: block;
+  background: #0c0b12;
+}
+
+/* Video labels ? light bottom fade so clip stays fully visible */
+.studio-bench-steps .format-pick-name {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 16px 8px 8px;
+  border-radius: 0;
+  transform: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(12, 10, 18, 0.55) 100%);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .studio-bench-steps .format-pick,
 .studio-bench-steps .format-pick-reference {
   width: 100%;
   max-width: none;
   min-height: 0;
+  aspect-ratio: 3 / 4;
+  height: auto;
 }
 
 .studio-bench-steps .format-pick-body {
@@ -14077,28 +14176,32 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   opacity: 1;
 }
 
-/* Reference card: same media footprint, controls overlaid */
+/* Reference card ? same gradient black as product stage */
 .studio-bench-steps .format-pick-reference {
-  background: #fff;
-  border-color: rgba(20, 18, 28, 0.1);
-  box-shadow: none;
+  background:
+    radial-gradient(ellipse 80% 55% at 20% 15%, rgba(96, 165, 250, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 88% 78%, rgba(232, 121, 192, 0.18), transparent 52%),
+    radial-gradient(ellipse 50% 40% at 50% 100%, rgba(167, 210, 190, 0.1), transparent 45%),
+    linear-gradient(160deg, #17151f 0%, #101018 45%, #0c0b12 100%);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 24px rgba(20, 18, 28, 0.14);
 }
 
 .studio-bench-steps .format-pick-reference.is-checked {
   border-color: #17151f;
   box-shadow: inset 0 0 0 1px #17151f;
+  background: #0f0e14;
 }
 
 .studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) {
   position: relative;
   align-self: stretch;
-  height: 100%;
+  height: auto;
   min-height: 0;
+  aspect-ratio: 3 / 4;
   display: block;
-  overflow: hidden;
-}
-
-.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane).is-checked {
   overflow: hidden;
 }
 
@@ -14108,10 +14211,287 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   display: block;
   width: 100%;
   height: 100%;
-  padding-top: 0;
-  min-height: 0;
-  aspect-ratio: auto;
   overflow: hidden;
+}
+
+.studio-bench-steps .format-pick-ref-empty {
+  position: absolute;
+  inset: 0;
+}
+
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-drop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+  background: transparent;
+}
+
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-drop .format-pick-media-blank {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.studio-bench-steps .format-pick-ref-plus {
+  position: absolute;
+  left: 50%;
+  top: 36%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  color: #fff;
+  background: linear-gradient(145deg, rgba(96, 165, 250, 0.32), rgba(232, 121, 192, 0.26));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* Video grid reference: denser empty state so it doesn?t feel blank */
+.studio-bench-steps .format-pick-grid-video .format-pick-reference:not(.is-checked),
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-reference:not(.is-checked) {
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 28%, rgba(96, 165, 250, 0.28), transparent 58%),
+    radial-gradient(ellipse 60% 45% at 80% 78%, rgba(232, 121, 192, 0.22), transparent 55%),
+    radial-gradient(ellipse 50% 40% at 18% 85%, rgba(167, 210, 190, 0.14), transparent 50%),
+    linear-gradient(165deg, #1a1824 0%, #12111a 48%, #0c0b12 100%);
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-ref-plus,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-ref-plus {
+  top: 34%;
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-drop .format-pick-body,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-drop .format-pick-body {
+  bottom: 46px;
+  padding: 0 8px;
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-drop .format-pick-body strong,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-drop .format-pick-body strong {
+  font-size: 0.72rem;
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-ref-cta-row,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-ref-cta-row {
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  gap: 5px;
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-ref-cta,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-ref-cta {
+  height: 28px;
+  font-size: 0.66rem;
+}
+
+.studio-bench-steps .format-pick-reference:hover .format-pick-ref-plus {
+  transform: translate(-50%, -50%) scale(1.04);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.34);
+}
+
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-drop .format-pick-body {
+  display: block !important;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 42px;
+  z-index: 2;
+  margin: 0;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  pointer-events: none;
+  text-align: center;
+}
+
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-drop .format-pick-body:not(:has(strong)) {
+  bottom: 44px;
+}
+
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane).is-checked > .format-pick-body {
+  display: block !important;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  margin: 0;
+  padding: 28px 10px 10px;
+  border: 0;
+  background: linear-gradient(180deg, transparent, rgba(12, 10, 18, 0.72) 55%);
+  color: #fff;
+  pointer-events: none;
+  text-align: left;
+}
+
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-drop .format-pick-body strong {
+  display: block;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-shadow: none;
+}
+
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane).is-checked > .format-pick-body strong {
+  color: #fff;
+}
+
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-body span {
+  display: block !important;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.64rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.studio-bench-steps .format-pick-ref-cta-row {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 6px;
+}
+
+.studio-bench-steps .format-pick-ref-cta-row:has(> :only-child) {
+  grid-template-columns: 1fr;
+}
+
+.studio-bench-steps .format-pick-ref-cta {
+  appearance: none;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #141218;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.studio-bench-steps .format-pick-ref-cta.is-soft {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+  box-shadow: none;
+}
+
+.studio-bench-steps .format-pick-ref-cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.studio-bench-steps .format-pick-ref-cta.is-soft:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.studio-bench-steps .format-pick-ref-cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.studio-bench-steps .format-pick-ref-url-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 10px;
+  background:
+    radial-gradient(ellipse 80% 55% at 20% 15%, rgba(96, 165, 250, 0.22), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 88% 78%, rgba(232, 121, 192, 0.18), transparent 52%),
+    linear-gradient(160deg, #17151f 0%, #101018 45%, #0c0b12 100%);
+}
+
+.studio-bench-steps .format-pick-ref-url-title {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 650;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.studio-bench-steps .format-pick-ref-url-sheet input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.76rem;
+}
+
+.studio-bench-steps .format-pick-ref-url-sheet input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.studio-bench-steps .format-pick-ref-url-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.studio-bench-steps .format-pick-ref-chip {
+  appearance: none;
+  flex: 1 1 0;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 9px;
+  border: 0;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 650;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.94);
+  color: #17151f;
+}
+
+.studio-bench-steps .format-pick-ref-chip.is-ghost {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.studio-bench-steps .format-pick-ref-chip.is-solid {
+  background: #fff;
+  color: #141218;
 }
 
 .studio-bench-steps .format-pick-reference:not(.format-pick-fastlane).is-checked > .format-pick-media-ref {
@@ -14120,52 +14500,18 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   display: block;
   width: 100%;
   height: 100%;
-  padding-top: 0;
   margin: 0;
   overflow: hidden;
   z-index: 1;
 }
 
-.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-media-blank,
 .studio-bench-steps .format-pick-reference:not(.format-pick-fastlane).is-checked > .format-pick-media-ref img,
 .studio-bench-steps .format-pick-reference:not(.format-pick-fastlane).is-checked > .format-pick-media-ref video {
   position: absolute;
   inset: 0;
-  display: block;
-  aspect-ratio: auto;
   width: 100%;
   height: 100%;
-  max-height: none;
-  margin: 0;
-  flex: none;
-  overflow: hidden;
   object-fit: cover;
-  object-position: center;
-}
-
-.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-hero {
-  position: absolute;
-  left: 50%;
-  top: 36%;
-  transform: translate(-50%, -50%);
-  z-index: 2;
-  width: calc(100% - 16px);
-  padding: 0;
-  gap: 3px;
-}
-
-.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-controls {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 3;
-  margin: 0;
-  padding: 8px;
-  gap: 6px;
-  border-top: 0;
-  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.96) 28%);
-  backdrop-filter: none;
 }
 
 .studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-actions {
@@ -14175,260 +14521,16 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   bottom: 6px;
   z-index: 5;
   display: flex !important;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
   gap: 6px;
-  width: auto;
   margin: 0;
   padding: 0;
-  border: 0;
-  background: transparent;
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 
-.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-actions .btn {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
-  padding: 0 8px;
-  margin: 0;
-  border-radius: 8px;
-  border: 0;
-  font-size: 0.68rem;
-  font-weight: 650;
-  line-height: 1;
-  background: rgba(255, 255, 255, 0.94);
-  color: #17151f;
-  box-shadow: 0 4px 12px rgba(20, 18, 28, 0.14);
-}
-
-.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane) .format-pick-body {
-  display: none !important;
-}
-
-.studio-bench-steps .format-pick-ref-upload-btn {
-  width: 100%;
-  min-height: 28px;
-  padding: 6px 10px;
-  font-size: 0.72rem;
-}
-
-.studio-bench-steps .format-pick-ref-toggle {
-  gap: 4px;
-}
-
-.studio-bench-steps .format-pick-ref-toggle button {
-  padding: 5px 8px;
-  font-size: 0.7rem;
-}
-
-/* Video bench: reference + presets fill the same portrait cells */
-.studio-bench-formats .format-pick-fastlane,
-.studio-bench-formats .format-pick-reference.format-pick-fastlane,
-.studio-bench-steps .format-pick-fastlane,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  background: #0c0a12;
-  border-color: rgba(255, 255, 255, 0.12);
-  align-items: stretch;
-  overflow: hidden;
-}
-
-.studio-bench-formats .format-pick-fastlane.is-checked,
-.studio-bench-formats .format-pick-reference.format-pick-fastlane.is-checked,
-.studio-bench-steps .format-pick-fastlane.is-checked,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane.is-checked {
-  border-color: rgba(255, 255, 255, 0.7);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
-}
-
-.studio-bench-formats .format-pick-fastlane .format-pick-hit,
-.studio-bench-steps .format-pick-fastlane .format-pick-hit {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  padding: 0;
-}
-
-.studio-bench-formats .format-pick-fastlane .format-pick-media,
-.studio-bench-formats .format-pick-fastlane .format-pick-media-video,
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-media-blank,
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-media-ref,
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-panel,
-.studio-bench-steps .format-pick-fastlane .format-pick-media,
-.studio-bench-steps .format-pick-fastlane .format-pick-media-video,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-media-blank,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-media-ref,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-panel {
-  position: absolute;
-  inset: 0;
-  aspect-ratio: auto;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  max-width: none;
-  margin: 0;
-  border-radius: 0;
-}
-
-.studio-bench-formats .format-pick-fastlane .format-pick-media video,
-.studio-bench-formats .format-pick-fastlane .format-pick-video-el,
-.studio-bench-steps .format-pick-fastlane .format-pick-media video,
-.studio-bench-steps .format-pick-fastlane .format-pick-video-el {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-panel,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-panel {
-  display: block;
-  overflow: hidden;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-controls,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-controls {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 6px;
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0;
-  border-top: 0;
-  background: transparent;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-toggle,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-toggle {
-  display: inline-flex;
-  align-self: center;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 999px;
-  background: rgba(8, 8, 10, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-toggle button,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-toggle button {
-  height: 24px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.66rem;
-  font-weight: 650;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-toggle button.is-active,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-toggle button.is-active {
-  background: #fff;
-  color: #111;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-upload-btn,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-upload-btn {
-  width: 100%;
-  height: 30px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.95);
-  color: #111;
-  font-size: 0.7rem;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-hero,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-hero {
-  position: absolute;
-  left: 50%;
-  top: 42%;
-  transform: translate(-50%, -50%);
-  z-index: 2;
-  width: calc(100% - 16px);
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.88);
-  pointer-events: none;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-hero strong,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-hero strong {
-  font-size: 0.78rem;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-hero span,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-hero span {
-  font-size: 0.66rem;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-actions,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-actions {
-  position: absolute !important;
-  left: 6px;
-  right: 6px;
-  bottom: 6px;
-  z-index: 5;
-  display: flex !important;
-  flex-direction: row;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane .format-pick-ref-actions .btn,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane .format-pick-ref-actions .btn {
-  flex: 1;
-  height: 28px;
-  min-height: 28px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.94);
-  color: #111;
-  font-size: 0.68rem;
-  font-weight: 650;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane.is-checked > .format-pick-media-ref,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane.is-checked > .format-pick-media-ref {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-}
-
-.studio-bench-formats .format-pick-reference.format-pick-fastlane.is-checked > .format-pick-media-ref video,
-.studio-bench-formats .format-pick-reference.format-pick-fastlane.is-checked > .format-pick-media-ref img,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane.is-checked > .format-pick-media-ref video,
-.studio-bench-steps .format-pick-reference.format-pick-fastlane.is-checked > .format-pick-media-ref img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane).is-checked:hover .format-pick-ref-actions,
+.studio-bench-steps .format-pick-reference:not(.format-pick-fastlane).is-checked:focus-within .format-pick-ref-actions {
+  opacity: 1;
 }
 
 /* Kill the old white control strip under the video reference card */
@@ -14442,11 +14544,6 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   padding: 0;
 }
 
-.studio-bench-steps .format-pick-fastlane .format-pick-qty {
-  bottom: 10px;
-  background: rgba(12, 10, 18, 0.88);
-  color: #fff;
-}
 
 .studio-split-controls .format-pick-reference:not(.format-pick-fastlane) .format-pick-ref-panel {
   position: relative;
@@ -14545,6 +14642,7 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
 
 .format-pick-duration-options {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -14558,6 +14656,36 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   font-size: 0.72rem;
   font-weight: 650;
   cursor: pointer;
+}
+
+/* Video cards: show all lengths (5 / 8 / 10 / 15) without clipping */
+.studio-bench-steps .format-pick-grid-video .format-pick-duration,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-duration {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-duration-options,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-duration-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  width: 100%;
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-duration-btn,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-duration-btn {
+  min-width: 0;
+  width: 100%;
+  height: 22px;
+  padding: 0 2px;
+  font-size: 0.6rem;
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-duration-custom,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-duration-custom {
+  display: none;
 }
 
 .format-pick-duration-btn.is-active {
@@ -15003,6 +15131,25 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   line-height: 1.35;
 }
 
+.studio-bench-steps .format-pick-ref-error.is-on-sheet {
+  padding: 0;
+  color: #fecaca;
+  font-size: 0.66rem;
+  line-height: 1.3;
+}
+
+.studio-bench-steps .format-pick-ref-url-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.62rem;
+  line-height: 1.3;
+}
+
+.studio-bench-steps .format-pick-ref-url-sheet {
+  z-index: 8;
+  pointer-events: auto;
+}
+
 .format-pick.is-ref-dimmed:not(.is-checked) {
   opacity: 0.55;
 }
@@ -15039,6 +15186,21 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   border-radius: 12px;
 }
 
+/* Bench: video media fills the same portrait card as images (ignore compact phone caps) */
+.studio-bench-steps .format-pick-grid-video .format-pick-media,
+.studio-bench-steps .format-pick-grid-video .format-pick-media-video,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-media,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-media-video {
+  position: absolute !important;
+  inset: 0 !important;
+  max-height: none !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin-inline: 0 !important;
+  border-radius: 0 !important;
+  aspect-ratio: auto !important;
+}
+
 .format-pick-media::after {
   content: '';
   position: absolute;
@@ -15048,7 +15210,12 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
 }
 
 .format-pick-fastlane .format-pick-media::after {
-  background: linear-gradient(180deg, transparent 52%, rgba(0, 0, 0, 0.72));
+  background: linear-gradient(180deg, transparent 70%, rgba(0, 0, 0, 0.4));
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-media::after,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-media::after {
+  background: linear-gradient(180deg, transparent 78%, rgba(0, 0, 0, 0.35));
 }
 
 .format-pick-name {
@@ -15079,6 +15246,28 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   height: 100%;
   object-fit: cover;
   transition: transform 0.35s ease;
+}
+
+.studio-bench-steps .format-pick-grid-video .format-pick-media video,
+.studio-bench-steps .format-pick-grid-fastlane .format-pick-media video,
+.studio-bench-steps .format-pick-video-el {
+  object-fit: contain !important;
+  object-position: center center !important;
+  background: #0c0b12;
+}
+
+/* Card sized to clip ? crop ~5% from top only */
+.studio-bench-steps .format-pick.is-video-ratio-ready .format-pick-media video,
+.studio-bench-steps .format-pick.is-video-ratio-ready .format-pick-video-el {
+  object-fit: cover !important;
+  object-position: center center;
+  top: -5%;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  width: 100%;
+  height: 105%;
+  background: transparent;
 }
 
 /* Let card clicks select the format ï¿½ video itself must not eat the hit. */
@@ -15131,33 +15320,215 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   font-weight: 600;
 }
 
-.campaign-extra-toggles {
+/* Campaign create: scrollable formats with full portrait cards */
+.studio-stage-body:has(.studio-page-campaign) {
+  overflow-y: auto;
+}
+
+.app-main.studio-page.studio-page-bench.studio-page-campaign {
+  height: auto;
+  min-height: 100%;
+  max-height: none;
+  overflow: visible;
+}
+
+.studio-page-campaign .studio-bench {
+  height: auto;
+  min-height: min(100%, 720px);
+  overflow: visible;
+  align-items: start;
+}
+
+.studio-page-campaign .studio-bench-steps,
+.studio-page-campaign .studio-bench-steps-campaign {
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  max-height: calc(100dvh - 88px);
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+.studio-page-campaign .studio-bench-formats {
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+  display: flex !important;
+  flex-direction: column;
+  gap: 22px;
+  height: auto !important;
+  max-height: none !important;
+}
+
+.studio-page-campaign .campaign-format-block {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.studio-page-campaign .campaign-format-block-videos {
+  margin-top: 6px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(20, 18, 28, 0.1);
+}
+
+.studio-page-campaign .campaign-format-head {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+}
+
+.studio-page-campaign .campaign-format-head h2 {
+  margin: 0;
+  color: #141218;
+  font-family: var(--font-display, inherit);
+  font-size: 1.15rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.studio-page-campaign .campaign-format-head p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+/* Keep page ?Formats? quieter so Images / Videos read as the section titles */
+.studio-page-campaign .studio-bench-formats > .studio-bench-heading h1 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8b8b96;
+}
+
+.studio-page-campaign .studio-bench-formats > .studio-bench-heading p {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+html[data-theme='dark'] .studio-page-campaign .campaign-format-head h2 {
+  color: #f3f0f8;
+}
+
+html[data-theme='dark'] .studio-page-campaign .campaign-format-head p {
+  color: #9ca3af;
+}
+
+html[data-theme='dark'] .studio-page-campaign .campaign-format-block-videos {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.studio-page-campaign .studio-formats-intro {
+  display: none;
+}
+
+.studio-page-campaign .studio-bench-steps .format-pick-grid,
+.studio-page-campaign .studio-bench-steps .format-pick-grid-fastlane,
+.studio-page-campaign .studio-bench-steps .format-pick-grid-video {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  flex: 0 0 auto !important;
+  grid-template-rows: none !important;
+  grid-auto-rows: auto;
+  overflow: visible !important;
+  align-content: start;
+}
+
+/* Images: match Image Studio portrait tiles */
+.studio-page-campaign .studio-bench-steps .format-pick-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+  width: 100%;
 }
 
-.extra-toggle {
-  display: inline-flex;
-  align-items: center;
+.studio-page-campaign .campaign-format-block-images .format-pick,
+.studio-page-campaign .campaign-format-block-images .format-pick-reference {
+  aspect-ratio: 3 / 4;
+}
+
+.studio-page-campaign .studio-bench {
   gap: 8px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  border: 1px solid rgba(20, 18, 28, 0.1);
-  background: var(--panel, #fff);
-  cursor: pointer;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--text, #17171f);
 }
 
-.extra-toggle input {
-  accent-color: #5b35d6;
+.studio-page-campaign .studio-bench-steps .format-pick-grid-video,
+.studio-page-campaign .studio-bench-steps .format-pick-grid-fastlane {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  justify-content: stretch;
+  gap: 8px;
+  width: 100%;
+  padding-bottom: 8px;
 }
 
-.extra-toggle.is-on {
-  border-color: rgba(91, 53, 214, 0.45);
-  box-shadow: 0 0 0 3px rgba(91, 53, 214, 0.1);
+.studio-page-campaign .studio-bench-steps .format-pick,
+.studio-page-campaign .studio-bench-steps .format-pick-reference {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0;
+  aspect-ratio: 4 / 5;
+  align-self: start;
+}
+
+.studio-page-campaign .studio-bench-steps .format-pick-grid-video .format-pick,
+.studio-page-campaign .studio-bench-steps .format-pick-grid-fastlane .format-pick,
+.studio-page-campaign .studio-bench-steps .format-pick-grid-video .format-pick-reference,
+.studio-page-campaign .studio-bench-steps .format-pick-grid-fastlane .format-pick-reference {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: none !important;
+  height: auto;
+  max-height: none !important;
+  aspect-ratio: 9 / 16;
+  background: #0c0b12;
+}
+
+.studio-page-campaign .studio-bench-steps .format-pick-grid-video .format-pick.is-video-ratio-ready,
+.studio-page-campaign .studio-bench-steps .format-pick-grid-fastlane .format-pick.is-video-ratio-ready {
+  aspect-ratio: auto !important;
+  /* Beat the generic height:auto !important so clip height sticks */
+  height: var(--video-card-h) !important;
+}
+
+.studio-page-campaign .studio-bench-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  margin-top: 8px;
+  padding-top: 8px;
+  padding-bottom: 4px;
+  background: linear-gradient(180deg, rgba(247, 246, 250, 0.72), #f7f6fa 28%);
+}
+
+/* Extra room so last video row isn?t hidden under sticky prompt */
+.studio-page-campaign .studio-bench-formats {
+  padding-bottom: 12px;
+}
+
+.studio-page-campaign .campaign-format-block:last-child {
+  padding-bottom: 24px;
+}
+
+@media (max-width: 980px) {
+  .studio-page-campaign .studio-bench-steps,
+  .studio-page-campaign .studio-bench-steps-campaign {
+    max-height: none;
+    overflow: visible !important;
+  }
+
+  .studio-page-campaign .studio-bench-steps .format-pick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .studio-page-campaign .studio-bench-steps .format-pick-grid-video,
+  .studio-page-campaign .studio-bench-steps .format-pick-grid-fastlane {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .results-card-media video,
@@ -15189,6 +15560,16 @@ html[data-theme='dark'] .studio-bench-steps .format-pick-reference:not(.format-p
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.studio-bench-steps .format-pick-reference .format-pick-tag-ref {
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+  max-width: calc(100% - 16px);
+  background: rgba(12, 10, 18, 0.72);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
 }
 
 .format-pick-fastlane .format-pick-mute {
@@ -18238,8 +18619,30 @@ html[data-theme='dark'] .studio-step-num {
 }
 
 html[data-theme='dark'] .studio-bench-steps .format-pick {
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: #1a1822;
+}
+
+html[data-theme='dark'] .studio-bench-steps .format-pick-grid-video .format-pick,
+html[data-theme='dark'] .studio-bench-steps .format-pick-grid-fastlane .format-pick {
+  background: #0c0b12;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme='dark'] .studio-topbar-welcome {
+  color: #f3f0f8;
+}
+
+html[data-theme='dark'] .studio-page .app-form,
+html[data-theme='dark'] .studio-page .create-panel,
+html[data-theme='dark'] .studio-page-bench {
   background: transparent;
+  color: var(--ink);
+}
+
+html[data-theme='dark'] .studio-bench-product .url-image-thumb {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: #1a1822;
 }
 
 html[data-theme='dark'] .studio-stage-panel {

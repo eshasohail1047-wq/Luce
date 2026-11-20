@@ -211,7 +211,7 @@ export default function PlansCreditsPage() {
               <strong>{CREDIT_COSTS.carousel} credits</strong>
             </li>
             <li>
-              <span>Spray ASMR or cinematic video (up to 15s)</span>
+              <span>ASMR or cinematic video (up to 15s)</span>
               <strong>{CREDIT_COSTS.sprayAsmr} credits</strong>
             </li>
             <li>

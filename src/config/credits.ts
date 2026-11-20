@@ -43,7 +43,7 @@ export const CONTENT_MIX_TYPES: {
   },
   {
     id: 'sprayAsmr',
-    name: 'Spray ASMR',
+    name: 'ASMR',
     description: 'Sensory product motion',
     credits: CREDIT_COSTS.sprayAsmr,
     defaultCount: 1,

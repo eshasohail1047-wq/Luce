@@ -118,13 +118,6 @@ export default function NewCampaignPage() {
   const [showDetails, setShowDetails] = useState(true)
   const [photoStyles, setPhotoStyles] = useState<PhotoStyleId[]>([])
   const [videoStyles, setVideoStyles] = useState<VideoStyleId[]>([])
-  const [includeHooks, setIncludeHooks] = useState(true)
-  const [includeCaptions, setIncludeCaptions] = useState(true)
-  const [includeCtas, setIncludeCtas] = useState(true)
-  const [includeHashtags, setIncludeHashtags] = useState(true)
-  const [includeAdCreative, setIncludeAdCreative] = useState(true)
-  const [includeAdCopy, setIncludeAdCopy] = useState(true)
-  const [includeStrategy, setIncludeStrategy] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [lighting, setLighting] = useState<LightingId | ''>('')
   const [background, setBackground] = useState<BackgroundId | ''>('')
@@ -284,15 +277,41 @@ export default function NewCampaignPage() {
     try {
       let url = rawUrl.trim()
       if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`
-      const media = await requestFetchRemoteMedia(url, 'image')
-      const file = await remoteMediaToFile(media, 'reference.jpg')
-      setReferenceFile(file)
-      setReferencePreviewUrl(media.dataUrl)
-      setPhotoStyles([])
+      if (!url) {
+        const msg = 'Paste a link first.'
+        setReferenceError(msg)
+        throw new Error(msg)
+      }
+
+      try {
+        const media = await requestFetchRemoteMedia(url, 'image')
+        const file = await remoteMediaToFile(media, 'reference.jpg')
+        setReferenceFile(file)
+        setReferencePreviewUrl(media.dataUrl)
+        setPhotoStyles([])
+        return
+      } catch (directErr) {
+        const page = await requestFetchProductPage(url)
+        const imageUrl =
+          page.images?.find((u) => typeof u === 'string' && u.trim()) || ''
+        if (!imageUrl) {
+          throw new Error(
+            directErr instanceof Error
+              ? directErr.message
+              : 'No image found at that link.',
+          )
+        }
+        const media = await requestFetchRemoteMedia(imageUrl, 'image')
+        const file = await remoteMediaToFile(media, 'reference.jpg')
+        setReferenceFile(file)
+        setReferencePreviewUrl(media.dataUrl)
+        setPhotoStyles([])
+      }
     } catch (err) {
       setReferenceError(
         err instanceof Error ? err.message : 'Could not load that reference link.',
       )
+      throw err
     } finally {
       setReferenceUrlBusy(false)
     }
@@ -323,6 +342,11 @@ export default function NewCampaignPage() {
     try {
       let url = rawUrl.trim()
       if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`
+      if (!url) {
+        const msg = 'Paste a link first.'
+        setVideoReferenceError(msg)
+        throw new Error(msg)
+      }
       const media = await requestFetchRemoteMedia(url, 'video')
       const file = await remoteMediaToFile(media, 'reference.mp4')
       setVideoReferenceFile(file)
@@ -332,6 +356,7 @@ export default function NewCampaignPage() {
       setVideoReferenceError(
         err instanceof Error ? err.message : 'Could not load that reference link.',
       )
+      throw err
     } finally {
       setVideoReferenceUrlBusy(false)
     }
@@ -695,13 +720,9 @@ export default function NewCampaignPage() {
     const resolved = resolveCampaignFromFormats({
       photoStyles: formats.photoStyles,
       videoStyles: formats.videoStyles,
-      includeHooks,
-      includeCaptions,
-      includeCtas,
-      includeHashtags,
-      includeAdCreative,
-      includeAdCopy,
-      includeStrategy,
+      includeSocial: false,
+      includeAds: false,
+      includeStrategy: false,
     })
     const id = newLocalId('campaign')
     let imageUrl = imageDataUrl || undefined
@@ -830,13 +851,9 @@ export default function NewCampaignPage() {
           imageFile: fileForCreate,
           photoStyles: formats.photoStyles,
           videoStyles: formats.videoStyles,
-          includeHooks,
-          includeCaptions,
-          includeCtas,
-          includeHashtags,
-          includeAdCreative,
-          includeAdCopy,
-          includeStrategy,
+          includeSocial: false,
+          includeAds: false,
+          includeStrategy: false,
           creativeDirection: campaignDirection({
             prompt,
             lighting: lighting || undefined,
@@ -882,13 +899,9 @@ export default function NewCampaignPage() {
       const resolved = resolveCampaignFromFormats({
         photoStyles: formats.photoStyles,
         videoStyles: formats.videoStyles,
-        includeHooks,
-        includeCaptions,
-        includeCtas,
-        includeHashtags,
-        includeAdCreative,
-        includeAdCopy,
-        includeStrategy,
+        includeSocial: false,
+        includeAds: false,
+        includeStrategy: false,
       })
       await runCampaignGenerate({
         campaignId: result.campaignId,
@@ -1169,39 +1182,53 @@ export default function NewCampaignPage() {
   )
 
   const stepsColumn = (
-    <div className="studio-bench-steps">
-      <section className="form-section studio-bench-step">
+    <div className="studio-bench-steps studio-bench-steps-campaign">
+      <section className="form-section studio-bench-step studio-bench-formats">
         <header className="studio-bench-heading">
           <h1>Formats</h1>
           <p>
             {hasImageReference || hasVideoReference
               ? 'Using your reference — pick a format to switch back'
-              : 'Choose the looks you want, or add your own reference'}
+              : 'Pick looks for images and videos, or add your own reference'}
           </p>
         </header>
-        <p className="studio-formats-intro">Images</p>
-        <FormatPickGrid
-          items={PHOTO_STYLES}
-          selected={photoStyles}
-          onChange={setPhotoStyles}
-          defaultIds={hasImageReference ? [] : DEFAULT_PHOTO_STYLES}
-          max={Math.max(limits.maxImages, PHOTO_STYLES.length)}
-          disabled={busy}
-          ariaLabel="Image formats"
-          referenceSlot={{
-            kind: 'image',
-            previewUrl: referencePreviewUrl,
-            error: referenceError,
-            busy: referenceUrlBusy,
-            onPickFile: pickReferenceFile,
-            onPickUrl: applyReferenceUrl,
-          }}
-        />
-        {limits.maxVideos > 0 ? (
-          <>
-            <p className="studio-formats-intro" style={{ marginTop: 16 }}>
-              Videos
+        <div className="campaign-format-block campaign-format-block-images">
+          <header className="campaign-format-head">
+            <h2>Images</h2>
+            <p>
+              {hasImageReference
+                ? 'Your image reference is set — or pick studio looks below'
+                : 'Same portrait cards as Image Studio'}
             </p>
+          </header>
+          <FormatPickGrid
+            items={PHOTO_STYLES}
+            selected={photoStyles}
+            onChange={setPhotoStyles}
+            defaultIds={hasImageReference ? [] : DEFAULT_PHOTO_STYLES}
+            max={Math.max(limits.maxImages, PHOTO_STYLES.length)}
+            disabled={busy}
+            ariaLabel="Image formats"
+            referenceSlot={{
+              kind: 'image',
+              previewUrl: referencePreviewUrl,
+              error: referenceError,
+              busy: referenceUrlBusy,
+              onPickFile: pickReferenceFile,
+              onPickUrl: applyReferenceUrl,
+            }}
+          />
+        </div>
+        {limits.maxVideos > 0 ? (
+          <div className="campaign-format-block campaign-format-block-videos">
+            <header className="campaign-format-head">
+              <h2>Videos</h2>
+              <p>
+                {hasVideoReference
+                  ? 'Your video reference is set — or pick clips below'
+                  : 'Same portrait clips as Video Studio'}
+              </p>
+            </header>
             <FormatPickGrid
               items={VIDEO_STYLES}
               selected={videoStyles}
@@ -1220,45 +1247,47 @@ export default function NewCampaignPage() {
                 onPickUrl: applyVideoReferenceUrl,
               }}
             />
-          </>
+          </div>
         ) : null}
       </section>
 
-      <section className="form-section studio-bench-step studio-bench-prompt">
-        <div className="auth-field">
-          <label htmlFor="campaign-prompt">Prompt · optional</label>
-          <textarea
-            id="campaign-prompt"
-            rows={3}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="e.g. Soft morning light, keep packaging exact…"
-            disabled={busy}
-          />
-        </div>
-      </section>
+      <div className="studio-bench-footer">
+        <section className="form-section studio-bench-step studio-bench-prompt">
+          <div className="auth-field">
+            <label htmlFor="campaign-prompt">Prompt · optional</label>
+            <textarea
+              id="campaign-prompt"
+              rows={3}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="e.g. Soft morning light, keep packaging exact…"
+              disabled={busy}
+            />
+          </div>
+        </section>
 
-      {error ? (
-        <p className="auth-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-      {warning ? (
-        <p className="auth-notice" role="status">
-          {warning}
-        </p>
-      ) : null}
+        {error ? (
+          <p className="auth-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        {warning ? (
+          <p className="auth-notice" role="status">
+            {warning}
+          </p>
+        ) : null}
 
-      <button type="submit" className="btn btn-grad campaign-submit studio-submit" disabled={busy}>
-        {busy
-          ? stagePhase !== 'idle' && stagePhase !== 'ready' && stagePhase !== 'error'
-            ? 'Generating…'
-            : 'Creating…'
-          : hasImageReference || hasVideoReference
-            ? 'Generate from reference'
-            : 'Create campaign'}
-        <span aria-hidden="true">→</span>
-      </button>
+        <button type="submit" className="btn btn-grad campaign-submit studio-submit" disabled={busy}>
+          {busy
+            ? stagePhase !== 'idle' && stagePhase !== 'ready' && stagePhase !== 'error'
+              ? 'Generating…'
+              : 'Creating…'
+            : hasImageReference || hasVideoReference
+              ? 'Generate from reference'
+              : 'Create campaign'}
+          <span aria-hidden="true">→</span>
+        </button>
+      </div>
     </div>
   )
 

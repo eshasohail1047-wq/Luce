@@ -104,15 +104,15 @@ import {
 import PaywallModal from '../components/PaywallModal'
 
 const VALID_KINDS: StudioKind[] = ['photos', 'videos', 'ads']
-/** Matches studio bench single-column breakpoint — Details open by default only here. */
-const DETAILS_MOBILE_MQ = '(max-width: 980px)'
-
-function detailsOpenByViewport() {
-  return typeof window !== 'undefined' && window.matchMedia(DETAILS_MOBILE_MQ).matches
-}
 
 function isStudioKind(value: string | undefined): value is StudioKind {
   return Boolean(value && VALID_KINDS.includes(value as StudioKind))
+}
+
+function autoGrowTextarea(el: HTMLTextAreaElement | null) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.max(el.scrollHeight, 96)}px`
 }
 
 export default function StudioPage({
@@ -134,6 +134,8 @@ export default function StudioPage({
   }
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const notesRef = useRef<HTMLTextAreaElement>(null)
+  const promptRef = useRef<HTMLTextAreaElement>(null)
 
   const [sourceType, setSourceType] = useState<ProductSourceType>('upload')
   const [productName, setProductName] = useState('')
@@ -158,8 +160,7 @@ export default function StudioPage({
   /** True while URL gallery is open and user hasn't confirmed a photo yet. */
   const [urlPickPending, setUrlPickPending] = useState(false)
   const [dragOver, setDragOver] = useState(false)
-  // Desktop: Details start hidden. Mobile (≤980px): start open.
-  const [showDetails, setShowDetails] = useState(detailsOpenByViewport)
+  const [showDetails, setShowDetails] = useState(true)
   const [photoQuantities, setPhotoQuantities] = useState<FormatQuantities>({})
   const [videoQuantities, setVideoQuantities] = useState<FormatQuantities>({})
   const [videoDurations, setVideoDurations] = useState<FormatDurations>({})
@@ -243,10 +244,9 @@ export default function StudioPage({
     const img = new Image()
     img.onload = () => {
       if (cancelled) return
-      // Prefer portrait card unless the file is clearly wide (avoids side bars on product shots)
-      setPreviewOrient(
-        img.naturalWidth > img.naturalHeight * 1.15 ? 'landscape' : 'portrait',
-      )
+      const w = img.naturalWidth || 1
+      const h = img.naturalHeight || 1
+      setPreviewOrient(w > h * 1.05 ? 'landscape' : 'portrait')
     }
     img.onerror = () => {
       if (!cancelled) setPreviewOrient('portrait')
@@ -269,17 +269,12 @@ export default function StudioPage({
   }, [kind])
 
   useEffect(() => {
-    const mq = window.matchMedia(DETAILS_MOBILE_MQ)
-    const sync = () => {
-      if (urlPickPending) {
-        setShowDetails(false)
-        return
-      }
-      setShowDetails(mq.matches)
-    }
-    mq.addEventListener('change', sync)
-    return () => mq.removeEventListener('change', sync)
-  }, [urlPickPending])
+    autoGrowTextarea(notesRef.current)
+  }, [description, showDetails])
+
+  useEffect(() => {
+    autoGrowTextarea(promptRef.current)
+  }, [prompt])
 
   useEffect(() => {
     if (sourceType !== 'url') return
@@ -297,7 +292,7 @@ export default function StudioPage({
         setUrlFetchBusy(true)
         setUrlFetchError(null)
         setUrlPickPending(true)
-        setShowDetails(false)
+        setShowDetails(true)
         try {
           const page = await requestFetchProductPage(trimmed)
           if (cancelled) return
@@ -316,7 +311,7 @@ export default function StudioPage({
             setSelectedUrlImage(first)
             setPreviewUrl(first)
             setUrlPickPending(true)
-            setShowDetails(false)
+            setShowDetails(true)
             try {
               const media = await requestFetchRemoteMedia(first, 'image')
               const file = await remoteMediaToFile(media, 'product.jpg')
@@ -352,7 +347,7 @@ export default function StudioPage({
     setSelectedUrlImage(imageUrl)
     setPreviewUrl(imageUrl)
     setUrlPickPending(false)
-    setShowDetails(detailsOpenByViewport())
+    setShowDetails(true)
     setError(null)
     // Changing product clears previous results so we never show another SKU.
     setStageOutputs([])
@@ -410,18 +405,45 @@ export default function StudioPage({
     try {
       let url = rawUrl.trim()
       if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`
+      if (!url) {
+        const msg = 'Paste a link first.'
+        setReferenceError(msg)
+        throw new Error(msg)
+      }
       const prefer = kind === 'videos' ? 'video' : 'image'
-      const media = await requestFetchRemoteMedia(url, prefer)
-      const file = await remoteMediaToFile(
-        media,
-        kind === 'videos' ? 'reference.mp4' : 'reference.jpg',
-      )
-      setReferenceFile(file)
-      setReferencePreviewUrl(media.dataUrl)
+
+      try {
+        const media = await requestFetchRemoteMedia(url, prefer)
+        const file = await remoteMediaToFile(
+          media,
+          kind === 'videos' ? 'reference.mp4' : 'reference.jpg',
+        )
+        setReferenceFile(file)
+        setReferencePreviewUrl(media.dataUrl)
+        return
+      } catch (directErr) {
+        // Image Studio: allow product/page URLs — pull the first image from the page
+        if (prefer !== 'image') throw directErr
+        const page = await requestFetchProductPage(url)
+        const imageUrl =
+          page.images?.find((u) => typeof u === 'string' && u.trim()) || ''
+        if (!imageUrl) {
+          throw new Error(
+            directErr instanceof Error
+              ? directErr.message
+              : 'No image found at that link.',
+          )
+        }
+        const media = await requestFetchRemoteMedia(imageUrl, 'image')
+        const file = await remoteMediaToFile(media, 'reference.jpg')
+        setReferenceFile(file)
+        setReferencePreviewUrl(media.dataUrl)
+      }
     } catch (err) {
       setReferenceError(
         err instanceof Error ? err.message : 'Could not load that reference link.',
       )
+      throw err
     } finally {
       setReferenceUrlBusy(false)
     }
@@ -440,7 +462,7 @@ export default function StudioPage({
         if (cancelled) return
         setRecreate(session)
         setProductName(session.productName)
-        setShowDetails(detailsOpenByViewport())
+        setShowDetails(true)
         if (session.productUrl) {
           setSourceType('url')
           setProductUrl(session.productUrl)
@@ -477,7 +499,7 @@ export default function StudioPage({
         if (cancelled) return
         if (product) {
           setProductName(product.name)
-          setShowDetails(detailsOpenByViewport())
+          setShowDetails(true)
           if (product.brand) setBrand(product.brand)
           if (product.description) setDescription(product.description)
           if (product.sourceType === 'url' && product.sourceUrl) {
@@ -505,7 +527,7 @@ export default function StudioPage({
       const fromImage = searchParams.get('image')?.trim()
       if (fromUrl || fromImage || fromName) {
         if (fromName) setProductName(fromName)
-        setShowDetails(fromUrl ? false : detailsOpenByViewport())
+        setShowDetails(true)
         if (fromUrl) {
           setSourceType('url')
           setProductUrl(fromUrl)
@@ -526,15 +548,15 @@ export default function StudioPage({
       if (pending.url) {
         setSourceType('url')
         setProductUrl(pending.url)
-        setShowDetails(false)
+        setShowDetails(true)
       }
       if (pending.file) {
         setSourceType('upload')
         setImageFile(pending.file)
-        if (!pending.url) setShowDetails(detailsOpenByViewport())
+        if (!pending.url) setShowDetails(true)
       }
       if (pending.hint && !pending.file && !pending.url) {
-        setShowDetails(detailsOpenByViewport())
+        setShowDetails(true)
       }
     })()
     return () => {
@@ -600,7 +622,7 @@ export default function StudioPage({
       return
     }
     setImageFile(file)
-    setShowDetails(detailsOpenByViewport())
+    setShowDetails(true)
     // Stay on the bench black-card preview — don't open the generation stage from upload alone
     if (stagePhase === 'ready' && stageOutputs.length === 0) {
       setStagePhase('idle')
@@ -1617,7 +1639,7 @@ export default function StudioPage({
                   setImageFile(null)
                   setPreviewUrl(null)
                   setSelectedUrlImage(null)
-                  setShowDetails(false)
+                  setShowDetails(true)
                   setUrlPickPending(true)
                   setError(null)
                 }}
@@ -1687,7 +1709,7 @@ export default function StudioPage({
                   setSourceType('upload')
                   setUrlPickPending(false)
                   setError(null)
-                  if (previewUrl) setShowDetails(detailsOpenByViewport())
+                  if (previewUrl) setShowDetails(true)
                 }}
                 disabled={busy}
               >
@@ -1701,7 +1723,7 @@ export default function StudioPage({
                 onClick={() => {
                   setSourceType('url')
                   setError(null)
-                  setShowDetails(false)
+                  setShowDetails(true)
                   setUrlPickPending(true)
                 }}
                 disabled={busy}
@@ -1781,12 +1803,12 @@ export default function StudioPage({
       </div>
     ) : null
 
-  const productDetails = urlPickPending ? null : (
+  const productDetails = (
     <div className="studio-bench-details">
       <div className="details-head">
         <div>
           <h2>Details</h2>
-          <p>Optional</p>
+          <p>Optional · scroll to edit</p>
         </div>
         <button
           type="button"
@@ -1823,10 +1845,14 @@ export default function StudioPage({
           <div className="auth-field details-span">
             <label htmlFor="studio-desc">Notes</label>
             <textarea
+              ref={notesRef}
               id="studio-desc"
-              rows={2}
+              rows={4}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => {
+                setDescription(e.target.value)
+                autoGrowTextarea(e.currentTarget)
+              }}
               placeholder="Mood, setting, or offer…"
               disabled={busy}
             />
@@ -1867,10 +1893,14 @@ export default function StudioPage({
             {isRecreate ? 'Prompt' : 'Prompt · optional'}
           </label>
           <textarea
+            ref={promptRef}
             id="studio-prompt"
-            rows={3}
+            rows={4}
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            onChange={(e) => {
+              setPrompt(e.target.value)
+              autoGrowTextarea(e.currentTarget)
+            }}
             placeholder={
               isRecreate
                 ? 'e.g. Brighter lighting, white background, less glitter…'

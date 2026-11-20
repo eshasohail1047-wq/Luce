@@ -1245,9 +1245,12 @@ export default function CampaignDetailPage() {
       return campaign.selectedAssets.map(assetLabel)
     }
     if (campaign.deliverables.length > 0) {
-      return CAMPAIGN_DELIVERABLES.filter((d) => campaign.deliverables.includes(d.id)).map(
-        (d) => d.label,
-      )
+      return CAMPAIGN_DELIVERABLES.filter(
+        (d) =>
+          campaign.deliverables.includes(d.id) &&
+          d.id !== 'social' &&
+          d.id !== 'ads',
+      ).map((d) => d.label)
     }
     if (campaign.selectedAssets.length > 0) {
       return campaign.selectedAssets.map(assetLabel)

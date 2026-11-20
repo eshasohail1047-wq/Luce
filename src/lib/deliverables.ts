@@ -249,8 +249,8 @@ export const VIDEO_STYLES: FormatOption<VideoStyleId>[] = [
   },
   {
     id: 'video_asmr_spray',
-    label: 'Spray ASMR',
-    description: 'Close-up spray sounds and product texture',
+    label: 'ASMR',
+    description: 'Close-up product texture and satisfying ASMR detail',
     thumb: '/images/video-poster-asmr.jpg',
     tag: 'ASMR',
     videoUrl: HERO_VIDEO.asmr,
