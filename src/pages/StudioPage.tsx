@@ -641,12 +641,6 @@ export default function StudioPage({
     pickFile(e.dataTransfer.files?.[0])
   }
 
-  function selectionCount() {
-    if (kind === 'photos') return photoOutputCount
-    if (kind === 'videos') return videoOutputCount
-    return adStyles.length
-  }
-
   async function applyRecreateAndReturn(session: RecreateSession) {
     const outputs: MockOutput[] =
       session.outputs?.length > 0
@@ -1512,7 +1506,6 @@ export default function StudioPage({
   }
 
   const isUgcFocus = kind === 'videos' && searchParams.get('style') === 'ugc'
-  const usingDefaults = selectionCount() === 0
 
   const baseMeta =
     kind === 'photos'
