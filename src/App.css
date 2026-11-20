@@ -13182,7 +13182,7 @@ html[data-theme='dark'] .auth-field textarea::placeholder {
 }
 
 html[data-theme='dark'] .studio-page-campaign .studio-bench-footer {
-  background: linear-gradient(180deg, rgba(18, 16, 24, 0.72), #121018 28%);
+  background: #121018;
 }
 
 html[data-theme='dark'] .studio-bench-steps .format-pick.is-checked {
@@ -13932,14 +13932,12 @@ html[data-theme='dark'] .campaign-submit.btn-grad {
   align-items: start;
 }
 
-/* Image Studio: taller portrait format cards */
-.studio-bench-steps .format-pick-grid,
-.studio-bench-steps .format-pick-grid-fastlane,
-.studio-bench-steps .format-pick-grid-video {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+/* Image Studio: 4-per-row portrait tiles (same as Campaign images) */
+.studio-bench-steps .format-pick-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   grid-template-rows: none;
   grid-auto-rows: auto;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   height: auto;
   max-height: none;
@@ -13959,10 +13957,22 @@ html[data-theme='dark'] .campaign-submit.btn-grad {
 .studio-bench-steps .format-pick-grid-video,
 .studio-bench-steps .format-pick-grid-fastlane {
   grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: none;
+  grid-auto-rows: auto;
   justify-content: stretch;
   align-items: start;
+  align-content: start;
   gap: 8px;
   width: 100%;
+  height: auto;
+  max-height: none;
+  max-width: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding-bottom: 4px;
 }
 
 .studio-split-controls .format-pick-body span,
@@ -15321,42 +15331,52 @@ html[data-theme='dark'] .campaign-submit.btn-grad {
 }
 
 /* Campaign create: scrollable formats with full portrait cards */
+/* Campaign: same scroll model as Image Studio ? formats scroll, generate bar pinned */
 .studio-stage-body:has(.studio-page-campaign) {
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .app-main.studio-page.studio-page-bench.studio-page-campaign {
-  height: auto;
-  min-height: 100%;
-  max-height: none;
-  overflow: visible;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .studio-page-campaign .studio-bench {
-  height: auto;
-  min-height: min(100%, 720px);
-  overflow: visible;
-  align-items: start;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  align-items: stretch;
 }
 
 .studio-page-campaign .studio-bench-steps,
 .studio-page-campaign .studio-bench-steps-campaign {
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
-  overscroll-behavior: contain;
-  max-height: calc(100dvh - 88px);
-  padding-right: 4px;
-  scrollbar-width: thin;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  max-height: none;
+  height: 100%;
+  min-height: 0;
+  padding-right: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .studio-page-campaign .studio-bench-formats {
-  flex: 0 0 auto !important;
-  overflow: visible !important;
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
   display: flex !important;
   flex-direction: column;
   gap: 22px;
   height: auto !important;
   max-height: none !important;
+  width: 100%;
+  max-width: 100%;
+  scrollbar-width: thin;
 }
 
 .studio-page-campaign .campaign-format-block {
@@ -15397,18 +15417,46 @@ html[data-theme='dark'] .campaign-submit.btn-grad {
   line-height: 1.35;
 }
 
-/* Keep page ?Formats? quieter so Images / Videos read as the section titles */
-.studio-page-campaign .studio-bench-formats > .studio-bench-heading h1 {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #8b8b96;
+/* Campaign formats heading ? same quiet style as Image Studio */
+.studio-page-campaign .campaign-formats-hero {
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
-.studio-page-campaign .studio-bench-formats > .studio-bench-heading p {
-  font-size: 0.8rem;
-  color: #6b7280;
+.studio-page-campaign .campaign-formats-kicker {
+  display: none;
+}
+
+.studio-page-campaign .campaign-formats-hero h1 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: #7c3aed;
+}
+
+.studio-page-campaign .campaign-formats-hero > p:last-child {
+  margin: 6px 0 0;
+  max-width: 42ch;
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.3;
+  color: #17151f;
+}
+
+html[data-theme='dark'] .studio-page-campaign .campaign-formats-hero h1 {
+  color: #c4b5fd;
+}
+
+html[data-theme='dark'] .studio-page-campaign .campaign-formats-hero > p:last-child {
+  color: #f3f0f8;
 }
 
 html[data-theme='dark'] .studio-page-campaign .campaign-format-head h2 {
@@ -15436,26 +15484,42 @@ html[data-theme='dark'] .studio-page-campaign .campaign-format-block-videos {
   flex: 0 0 auto !important;
   grid-template-rows: none !important;
   grid-auto-rows: auto;
-  overflow: visible !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
   align-content: start;
-}
-
-/* Images: match Image Studio portrait tiles */
-.studio-page-campaign .studio-bench-steps .format-pick-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
   width: 100%;
-}
-
-.studio-page-campaign .campaign-format-block-images .format-pick,
-.studio-page-campaign .campaign-format-block-images .format-pick-reference {
-  aspect-ratio: 3 / 4;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .studio-page-campaign .studio-bench {
   gap: 8px;
 }
 
+/* Images: 4 per row, 3:4 portrait tiles */
+.studio-page-campaign .campaign-format-block-images .format-pick-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: none;
+  align-items: start;
+  align-content: start;
+  justify-content: stretch;
+}
+
+.studio-page-campaign .campaign-format-block-images .format-pick,
+.studio-page-campaign .campaign-format-block-images .format-pick-reference {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  width: 100%;
+  max-width: none;
+  aspect-ratio: 3 / 4 !important;
+  align-self: start;
+  border-radius: 14px;
+}
+
+/* Videos: same 5-col portrait clips as Video Studio */
 .studio-page-campaign .studio-bench-steps .format-pick-grid-video,
 .studio-page-campaign .studio-bench-steps .format-pick-grid-fastlane {
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -15463,15 +15527,6 @@ html[data-theme='dark'] .studio-page-campaign .campaign-format-block-videos {
   gap: 8px;
   width: 100%;
   padding-bottom: 8px;
-}
-
-.studio-page-campaign .studio-bench-steps .format-pick,
-.studio-page-campaign .studio-bench-steps .format-pick-reference {
-  height: auto !important;
-  max-height: none !important;
-  min-height: 0;
-  aspect-ratio: 4 / 5;
-  align-self: start;
 }
 
 .studio-page-campaign .studio-bench-steps .format-pick-grid-video .format-pick,
@@ -15496,38 +15551,50 @@ html[data-theme='dark'] .studio-page-campaign .campaign-format-block-videos {
 }
 
 .studio-page-campaign .studio-bench-footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
-  margin-top: 8px;
+  position: relative;
+  bottom: auto;
+  z-index: 5;
+  flex: 0 0 auto;
+  margin-top: 0;
   padding-top: 8px;
   padding-bottom: 4px;
-  background: linear-gradient(180deg, rgba(247, 246, 250, 0.72), #f7f6fa 28%);
-}
-
-/* Extra room so last video row isn?t hidden under sticky prompt */
-.studio-page-campaign .studio-bench-formats {
-  padding-bottom: 12px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  background: #f7f6fa;
 }
 
 .studio-page-campaign .campaign-format-block:last-child {
-  padding-bottom: 24px;
+  padding-bottom: 8px;
 }
 
 @media (max-width: 980px) {
   .studio-page-campaign .studio-bench-steps,
   .studio-page-campaign .studio-bench-steps-campaign {
     max-height: none;
-    overflow: visible !important;
+    height: auto;
+    overflow: hidden !important;
   }
 
-  .studio-page-campaign .studio-bench-steps .format-pick-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .studio-page-campaign .studio-bench-formats {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    max-height: min(70dvh, 640px);
+  }
+
+  .studio-page-campaign .campaign-format-block-images .format-pick-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .studio-page-campaign .studio-bench-steps .format-pick-grid-video,
   .studio-page-campaign .studio-bench-steps .format-pick-grid-fastlane {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .studio-page-campaign .campaign-format-block-images .format-pick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -15697,10 +15764,21 @@ html[data-theme='dark'] .studio-page-campaign .campaign-format-block-videos {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* Image Studio: match Campaign ? 3 across on mid widths */
+  .studio-bench-steps .format-pick-grid:not(.format-pick-grid-video):not(.format-pick-grid-fastlane) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .format-pick-grid-fastlane,
   .format-pick-grid-video {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     max-width: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .studio-bench-steps .format-pick-grid:not(.format-pick-grid-video):not(.format-pick-grid-fastlane) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

@@ -56,7 +56,18 @@ import { buildMockOutputs, type MockOutput } from '../lib/mockCampaign'
 import {
   DEFAULT_VIDEO_DURATION,
   clampVideoDuration,
+  expandFormatQuantities,
+  syncDurationsToQuantities,
+  totalQuantity,
+  type FormatDurations,
+  type FormatQuantities,
 } from '../lib/formatQuantities'
+
+function quantitiesFromIds(ids: string[]): FormatQuantities {
+  const next: FormatQuantities = {}
+  for (const id of ids) next[id] = (next[id] || 0) + 1
+  return next
+}
 import {
   compressImageDataUrl,
   fileToDataUrl,
@@ -116,13 +127,20 @@ export default function NewCampaignPage() {
   const [selectedUrlImage, setSelectedUrlImage] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showDetails, setShowDetails] = useState(true)
-  const [photoStyles, setPhotoStyles] = useState<PhotoStyleId[]>([])
-  const [videoStyles, setVideoStyles] = useState<VideoStyleId[]>([])
+  const [photoQuantities, setPhotoQuantities] = useState<FormatQuantities>(() =>
+    quantitiesFromIds(DEFAULT_PHOTO_STYLES),
+  )
+  const [videoQuantities, setVideoQuantities] = useState<FormatQuantities>(() =>
+    quantitiesFromIds(DEFAULT_VIDEO_STYLES),
+  )
+  const [videoDurations, setVideoDurations] = useState<FormatDurations>(() =>
+    syncDurationsToQuantities(quantitiesFromIds(DEFAULT_VIDEO_STYLES), {}),
+  )
   const [prompt, setPrompt] = useState('')
-  const [lighting, setLighting] = useState<LightingId | ''>('')
-  const [background, setBackground] = useState<BackgroundId | ''>('')
-  const [mood, setMood] = useState<MoodId | ''>('')
-  const [styleTheme, setStyleTheme] = useState<StyleThemeId | ''>('')
+  const lighting = '' as LightingId | ''
+  const background = '' as BackgroundId | ''
+  const mood = '' as MoodId | ''
+  const styleTheme = '' as StyleThemeId | ''
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
@@ -257,6 +275,9 @@ export default function NewCampaignPage() {
     if (!file) {
       setReferenceFile(null)
       setReferencePreviewUrl(null)
+      if (totalQuantity(photoQuantities) === 0) {
+        setPhotoQuantities(quantitiesFromIds(DEFAULT_PHOTO_STYLES))
+      }
       return
     }
     if (!file.type.startsWith('image/')) {
@@ -268,7 +289,7 @@ export default function NewCampaignPage() {
       return
     }
     setReferenceFile(file)
-    setPhotoStyles([])
+    setPhotoQuantities({})
   }
 
   async function applyReferenceUrl(rawUrl: string) {
@@ -288,7 +309,7 @@ export default function NewCampaignPage() {
         const file = await remoteMediaToFile(media, 'reference.jpg')
         setReferenceFile(file)
         setReferencePreviewUrl(media.dataUrl)
-        setPhotoStyles([])
+        setPhotoQuantities({})
         return
       } catch (directErr) {
         const page = await requestFetchProductPage(url)
@@ -305,7 +326,7 @@ export default function NewCampaignPage() {
         const file = await remoteMediaToFile(media, 'reference.jpg')
         setReferenceFile(file)
         setReferencePreviewUrl(media.dataUrl)
-        setPhotoStyles([])
+        setPhotoQuantities({})
       }
     } catch (err) {
       setReferenceError(
@@ -322,6 +343,11 @@ export default function NewCampaignPage() {
     if (!file) {
       setVideoReferenceFile(null)
       setVideoReferencePreviewUrl(null)
+      if (totalQuantity(videoQuantities) === 0 && limits.maxVideos > 0) {
+        const qty = quantitiesFromIds(DEFAULT_VIDEO_STYLES)
+        setVideoQuantities(qty)
+        setVideoDurations(syncDurationsToQuantities(qty, {}))
+      }
       return
     }
     if (!file.type.startsWith('video/')) {
@@ -333,7 +359,8 @@ export default function NewCampaignPage() {
       return
     }
     setVideoReferenceFile(file)
-    setVideoStyles([])
+    setVideoQuantities({})
+    setVideoDurations({})
   }
 
   async function applyVideoReferenceUrl(rawUrl: string) {
@@ -351,7 +378,8 @@ export default function NewCampaignPage() {
       const file = await remoteMediaToFile(media, 'reference.mp4')
       setVideoReferenceFile(file)
       setVideoReferencePreviewUrl(media.dataUrl)
-      setVideoStyles([])
+      setVideoQuantities({})
+      setVideoDurations({})
     } catch (err) {
       setVideoReferenceError(
         err instanceof Error ? err.message : 'Could not load that reference link.',
@@ -476,16 +504,32 @@ export default function NewCampaignPage() {
   }
 
   function effectiveFormats() {
-    return {
-      photoStyles: hasImageReference
+    let photos = (
+      hasImageReference
         ? (['photo_studio_packshot'] as PhotoStyleId[])
-        : photoStyles,
-      videoStyles: hasVideoReference
+        : (expandFormatQuantities(
+            photoQuantities,
+            limits.maxImages,
+          ) as PhotoStyleId[])
+    )
+    let videos = (
+      hasVideoReference
         ? limits.maxVideos > 0
           ? (['video_ugc_selfie'] as VideoStyleId[])
           : ([] as VideoStyleId[])
-        : videoStyles,
+        : (expandFormatQuantities(
+            videoQuantities,
+            limits.maxVideos,
+          ) as VideoStyleId[])
+    )
+    // Campaigns always ship images + videos together when the plan allows
+    if (!photos.length) {
+      photos = DEFAULT_PHOTO_STYLES.slice(0, Math.max(1, limits.maxImages))
     }
+    if (limits.maxVideos > 0 && !videos.length) {
+      videos = DEFAULT_VIDEO_STYLES.slice(0, Math.max(1, limits.maxVideos))
+    }
+    return { photoStyles: photos, videoStyles: videos }
   }
 
   async function runCampaignGenerate(opts: {
@@ -522,6 +566,7 @@ export default function NewCampaignPage() {
       productImageUrl: opts.productImage,
       selectedAssets: opts.selectedAssets,
       mode: 'campaign',
+      videoDurations,
     })
 
     const imageOutputs = nextOutputs.filter((o) => isImageAssetKind(o.assetType))
@@ -805,6 +850,17 @@ export default function NewCampaignPage() {
       return
     }
     if (!assertCanCreate()) return
+
+    const precheck = effectiveFormats()
+    if (precheck.photoStyles.length === 0) {
+      setError('Pick at least one image format.')
+      return
+    }
+    if (limits.maxVideos > 0 && precheck.videoStyles.length === 0) {
+      setError('Pick at least one video format — campaigns generate images and videos together.')
+      return
+    }
+
     setBusy(true)
     setError(null)
     setWarning(null)
@@ -1184,12 +1240,13 @@ export default function NewCampaignPage() {
   const stepsColumn = (
     <div className="studio-bench-steps studio-bench-steps-campaign">
       <section className="form-section studio-bench-step studio-bench-formats">
-        <header className="studio-bench-heading">
+        <header className="studio-bench-heading campaign-formats-hero">
+          <p className="campaign-formats-kicker">Campaign</p>
           <h1>Formats</h1>
           <p>
             {hasImageReference || hasVideoReference
               ? 'Using your reference — pick a format to switch back'
-              : 'Pick looks for images and videos, or add your own reference'}
+              : 'Choose image and video formats. One create generates both.'}
           </p>
         </header>
         <div className="campaign-format-block campaign-format-block-images">
@@ -1197,16 +1254,16 @@ export default function NewCampaignPage() {
             <h2>Images</h2>
             <p>
               {hasImageReference
-                ? 'Your image reference is set — or pick studio looks below'
-                : 'Same portrait cards as Image Studio'}
+                ? 'Using your reference — pick a format to switch back'
+                : 'Choose the looks you want, or add your own reference'}
             </p>
           </header>
           <FormatPickGrid
             items={PHOTO_STYLES}
-            selected={photoStyles}
-            onChange={setPhotoStyles}
+            quantities={photoQuantities}
+            onQuantitiesChange={setPhotoQuantities}
             defaultIds={hasImageReference ? [] : DEFAULT_PHOTO_STYLES}
-            max={Math.max(limits.maxImages, PHOTO_STYLES.length)}
+            max={limits.maxImages}
             disabled={busy}
             ariaLabel="Image formats"
             referenceSlot={{
@@ -1217,6 +1274,11 @@ export default function NewCampaignPage() {
               onPickFile: pickReferenceFile,
               onPickUrl: applyReferenceUrl,
             }}
+            onLimitHit={() =>
+              setWarning(
+                `Your plan allows up to ${limits.maxImages} images in a campaign.`,
+              )
+            }
           />
         </div>
         {limits.maxVideos > 0 ? (
@@ -1225,16 +1287,19 @@ export default function NewCampaignPage() {
               <h2>Videos</h2>
               <p>
                 {hasVideoReference
-                  ? 'Your video reference is set — or pick clips below'
-                  : 'Same portrait clips as Video Studio'}
+                  ? 'Using your reference — pick a format to switch back'
+                  : 'Choose clip styles and length, or add your own reference'}
               </p>
             </header>
             <FormatPickGrid
               items={VIDEO_STYLES}
-              selected={videoStyles}
-              onChange={setVideoStyles}
+              quantities={videoQuantities}
+              onQuantitiesChange={setVideoQuantities}
+              durations={videoDurations}
+              onDurationsChange={setVideoDurations}
+              showDuration
               defaultIds={hasVideoReference ? [] : DEFAULT_VIDEO_STYLES}
-              max={Math.max(limits.maxVideos, VIDEO_STYLES.length)}
+              max={limits.maxVideos}
               disabled={busy}
               videoAspect
               ariaLabel="Video formats"
@@ -1246,6 +1311,11 @@ export default function NewCampaignPage() {
                 onPickFile: pickVideoReferenceFile,
                 onPickUrl: applyVideoReferenceUrl,
               }}
+              onLimitHit={() =>
+                setWarning(
+                  `Your plan allows up to ${limits.maxVideos} videos in a campaign.`,
+                )
+              }
             />
           </div>
         ) : null}
@@ -1283,8 +1353,8 @@ export default function NewCampaignPage() {
               ? 'Generating…'
               : 'Creating…'
             : hasImageReference || hasVideoReference
-              ? 'Generate from reference'
-              : 'Create campaign'}
+              ? 'Generate images + videos'
+              : 'Create campaign · images + videos'}
           <span aria-hidden="true">→</span>
         </button>
       </div>
