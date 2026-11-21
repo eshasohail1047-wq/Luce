@@ -242,38 +242,45 @@ const FORMAT_CONTRACTS: Record<ImageAssetKind, FormatContract> = {
   photo_hand_model: {
     id: 'photo_hand_model',
     label: 'In hand',
-    camera: 'Medium close-up; product held toward camera; fingers clearly visible',
-    lighting: 'Soft natural or soft studio on hand + product',
-    background: 'Soft lifestyle or simple studio — out of focus behind the hand',
+    camera:
+      'Vertical 4:5 or 9:16 social crop; medium close-up; product held toward camera like a TikTok / IG Reels still',
+    lighting: 'Soft natural or beauty softbox on hand + product; skin looks real',
+    background: 'Soft lifestyle blur — vanity, mirror edge, or clean studio bokeh',
     mustInclude: [
-      'At least one real human hand holding the product',
-      'Visible fingers / skin',
-      'Product label / face readable while held',
+      'At least one real human hand holding or wearing/using the product',
+      'Visible fingers / natural skin texture',
+      'Product packaging exact and readable while held',
+      'Clearly a NEW scene vs the upload (not a paste of IMAGE 1)',
     ],
     mustNot: [
       'Product sitting alone with no hand',
-      'Cropped shelf still with no person',
+      'Return the packaging tray / box photo unchanged',
       'Floating product with no grip',
+      'Catalog packshot with a fake cutout hand',
     ],
-    successLooksLike: 'Hand model holding the exact product — unmistakable handheld shot.',
+    successLooksLike:
+      'Instagram/TikTok “in hand” UGC still — real hand + exact product, scroll-stopping.',
   },
   photo_flatlay: {
     id: 'photo_flatlay',
     label: 'Flatlay',
-    camera: 'Straight-down 90° overhead; no perspective foreshortening',
+    camera:
+      'Straight-down 90° overhead; Instagram flatlay composition; product centered with breathing room',
     lighting: 'Even soft overhead light, minimal harsh shadow',
     background: 'Styled flat surface (linen, marble, wood, paper) filling the frame',
     mustInclude: [
-      'True top-down camera',
+      'True top-down camera — not eye-level',
       '2–4 complementary props around the product',
-      'Balanced flatlay composition',
+      'Balanced flatlay composition ready for IG feed',
+      'NEW overhead arrangement — not a copy of the upload angle',
     ],
     mustNot: [
       'Eye-level shelf / room shot',
-      'Hand holding (unless tiny prop hand)',
-      'Same angle as IMAGE 1 if IMAGE 1 was not overhead',
+      'Same camera angle as IMAGE 1 if IMAGE 1 was not overhead',
+      'Passthrough of the source photo',
     ],
-    successLooksLike: 'Instagram flatlay from above — clearly overhead, not a standing product shot.',
+    successLooksLike:
+      'Instagram flatlay from above — clearly overhead, props styled, not a standing packshot.',
   },
   photo_promo_offer: {
     id: 'photo_promo_offer',
@@ -487,11 +494,11 @@ SUCCESS LOOKS LIKE: “A proper ${c.label} of IMAGE 1’s product that still fee
 ${boost}`
   }
 
-  // No separate style ref → product photo IS the look reference
+  // No separate style ref → product packaging is locked; scene must still be a NEW shoot
   return `FORMAT ID: ${c.id}
-LOOK AUTHORITY: IMAGE 1 is packaging ground truth AND the style to match.
-Preserve IMAGE 1’s signature look: backdrop color, surface, liquid pour / cream drip / props / palette.
-Camera may adjust for ${c.label}; do NOT invent a plain gray/white void if IMAGE 1 is already styled.
+LOOK AUTHORITY: IMAGE 1 is packaging ground truth (shape, label, color, materials).
+You MUST shoot a NEW photograph for ${c.label} — Instagram / TikTok commercial quality.
+Keep packaging exact; CHANGE camera, lighting, and set so this is obviously not a passthrough of IMAGE 1.
 
 CAMERA: ${c.camera}
 LIGHTING: ${c.lighting}
@@ -691,15 +698,25 @@ export async function generateCampaignImages(
         aspectRatio,
       })
 
-      if (looksLikeSourcePhoto(result.imageDataUrl, productImage)) {
+      const matchedSource =
+        looksLikeSourcePhoto(result.imageDataUrl, productImage) ||
+        (referenceImage
+          ? looksLikeSourcePhoto(result.imageDataUrl, referenceImage)
+          : false)
+      if (matchedSource) {
         console.warn(
-          `[generate-images] ${type}: output matched source — retrying with stronger restyle`,
+          `[generate-images] ${type}: output matched source/reference — retrying with stronger restyle`,
         )
         promptUsed = promptForAsset(
           type,
           productName,
           input.creativeDirection,
-          input.recreateNote,
+          [
+            input.recreateNote,
+            'CRITICAL: Do not return IMAGE 1 or IMAGE 2 unchanged. Build a new formatted shoot.',
+          ]
+            .filter(Boolean)
+            .join(' '),
           true,
           hasRef,
         )
@@ -708,9 +725,14 @@ export async function generateCampaignImages(
           inputReferences: inputReferences.length ? inputReferences : undefined,
           aspectRatio,
         })
-        if (looksLikeSourcePhoto(result.imageDataUrl, productImage)) {
+        const stillMatched =
+          looksLikeSourcePhoto(result.imageDataUrl, productImage) ||
+          (referenceImage
+            ? looksLikeSourcePhoto(result.imageDataUrl, referenceImage)
+            : false)
+        if (stillMatched) {
           throw new Error(
-            'Image model returned the source photo unchanged — try again or pick another format.',
+            'Image model returned the upload unchanged — try again or pick another format.',
           )
         }
       }

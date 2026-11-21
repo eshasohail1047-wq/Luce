@@ -609,15 +609,18 @@ export default function NewCampaignPage() {
             o.id === item.id
               ? {
                   ...o,
-                  imageUrl: opts.productImage,
-                  note: 'AI failed — product photo kept',
+                  imageUrl: undefined,
+                  note: `AI failed — ${err instanceof Error ? err.message : 'generation failed'}`,
                 }
               : o,
           )
         }
       }
       if (failCount) {
-        warn = `Some AI images failed (${failCount}); your product photo was kept for those.`
+        warn =
+          failCount === imageOutputs.length
+            ? `AI did not return new images (${failCount}).`
+            : `Some AI images failed (${failCount}). Failed formats were not replaced with your upload.`
       }
     }
 

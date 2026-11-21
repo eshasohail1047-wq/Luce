@@ -208,11 +208,9 @@ export default function StudioPage({
   /** Image/Video Studio: show generation stage only while running or when results exist — not on mere upload. */
   const supportsSplitStudio = kind === 'photos' || kind === 'videos'
   const showStagePanel =
-    stageOutputs.length > 0 ||
-    (stagePhase !== 'idle' &&
-      stagePhase !== 'error' &&
-      stagePhase !== 'ready')
-  const isSplitStudio = supportsSplitStudio && showStagePanel
+    supportsSplitStudio &&
+    (busy || stageOutputs.length > 0 || stagePhase !== 'idle')
+  const isSplitStudio = showStagePanel
   const limits = getPlanLimits(plan)
   const photoTotalMax = Math.max(1, limits.maxImages)
   const videoTotalMax =
@@ -1016,9 +1014,17 @@ export default function StudioPage({
               aspectRatio,
             }),
             assets: [item.assetType as ImageAssetKind],
-            recreateNote: opts.referenceDataUrl
-              ? 'Match the reference look; keep product packaging exact.'
-              : undefined,
+            recreateNote: [
+              opts.referenceDataUrl
+                ? 'Use IMAGE 2 as style/composition reference only — never paste IMAGE 1 or IMAGE 2 unchanged.'
+                : '',
+              prompt.trim()
+                ? `USER PROMPT (required): ${prompt.trim()}`
+                : '',
+              'Output must be a NEW photograph for this format (Instagram/TikTok ready), not a copy of the upload.',
+            ]
+              .filter(Boolean)
+              .join(' '),
           })
           const generated = ai.assets[0]
           if (generated?.imageDataUrl) {
@@ -1039,20 +1045,28 @@ export default function StudioPage({
           }
         } catch (err) {
           failCount += 1
+          const failReason =
+            err instanceof Error ? err.message : 'Image generation failed'
           console.warn('[Studio] image failed', item.id, err)
+          // Never show the upload as a fake “result” — that looked like the model
+          // returned the same photo.
           nextOutputs = nextOutputs.map((o) =>
             o.id === item.id
               ? {
                   ...o,
-                  imageUrl: opts.productImage,
-                  note: 'AI failed — product photo kept',
+                  imageUrl: undefined,
+                  note: `AI failed for this format — ${failReason}`,
                 }
               : o,
           )
+          setStageOutputs([...nextOutputs])
         }
       }
       if (failCount) {
-        warn = `Some AI images failed (${failCount}); your product photo was kept for those.`
+        warn =
+          failCount === imageOutputs.length
+            ? `AI did not return new images (${failCount}). Check credits / keys, then retry.`
+            : `Some AI images failed (${failCount}). Failed formats were not replaced with your upload.`
       }
     }
 
@@ -1247,6 +1261,13 @@ export default function StudioPage({
     setBusy(true)
     setError(null)
     setWarning(null)
+    if (supportsSplitStudio) {
+      setStagePhase('preparing')
+      setStageProgress(4)
+      setStageMessage('Preparing your product & formats…')
+      setStageOutputs([])
+      setActiveOutputId(null)
+    }
 
     let imageDataUrl: string | undefined
     try {
@@ -1265,18 +1286,23 @@ export default function StudioPage({
       /* optional */
     }
 
-    // With a reference, follow the ref look only — one default output, no format mix.
-    const clampedPhotos = hasReference
-      ? (['photo_studio_packshot'] as PhotoStyleId[])
-      : resolvePhotoStyles(
-          expandFormatQuantities(photoQuantities, photoTotalMax) as PhotoStyleId[],
-        )
-    const clampedVideos = hasReference
-      ? (['video_ugc_selfie'] as VideoStyleId[])
-      : resolveVideoStudioStyles(
-          expandFormatQuantities(videoQuantities, videoTotalMax) as VideoStyleId[],
-          videoTotalMax,
-        )
+    // Keep the formats the user picked. Reference only steers look — it must not
+    // collapse everything into a single packshot (that caused “same image” results).
+    const pickedPhotos = resolvePhotoStyles(
+      expandFormatQuantities(photoQuantities, photoTotalMax) as PhotoStyleId[],
+    )
+    const clampedPhotos =
+      pickedPhotos.length > 0
+        ? pickedPhotos
+        : (['photo_studio_packshot'] as PhotoStyleId[])
+    const pickedVideos = resolveVideoStudioStyles(
+      expandFormatQuantities(videoQuantities, videoTotalMax) as VideoStyleId[],
+      videoTotalMax,
+    )
+    const clampedVideos =
+      pickedVideos.length > 0
+        ? pickedVideos
+        : (['video_ugc_selfie'] as VideoStyleId[])
     const selectedAssets =
       kind === 'photos'
         ? clampedPhotos
@@ -1363,7 +1389,9 @@ export default function StudioPage({
         }
       }
       const productImage = imageDataUrl || cloudImage
-      if (isSplitStudio && productImage) {
+      // Always run in-studio generate for photos/videos (immersive create screen).
+      // Do not use isSplitStudio here — that flag lags one render behind setBusy.
+      if (supportsSplitStudio && productImage) {
         try {
           await runStudioGenerate({
             campaignId: result.campaignId,
@@ -1383,7 +1411,9 @@ export default function StudioPage({
         } catch (genErr) {
           console.error(genErr)
           setStagePhase('error')
-          setStageMessage('Generation stopped')
+          setStageMessage(
+            genErr instanceof Error ? genErr.message : 'Generation stopped',
+          )
           setError(
             genErr instanceof Error
               ? genErr.message
@@ -1476,7 +1506,7 @@ export default function StudioPage({
             /* optional */
           }
         }
-        if (isSplitStudio && imageUrl) {
+        if (supportsSplitStudio && imageUrl) {
           try {
             await runStudioGenerate({
               campaignId: id,
@@ -1490,7 +1520,9 @@ export default function StudioPage({
           } catch (genErr) {
             console.error(genErr)
             setStagePhase('error')
-            setStageMessage('Generation stopped')
+            setStageMessage(
+              genErr instanceof Error ? genErr.message : 'Generation stopped',
+            )
             setError(
               genErr instanceof Error
                 ? genErr.message
@@ -2083,20 +2115,31 @@ export default function StudioPage({
       <main
         className={`app-main campaign-create studio-page studio-page-${studioMeta.accent} studio-page-bench${isSplitStudio ? ' is-generating' : ''}`}
       >
-        {formBody}
         {isSplitStudio ? (
           <StudioStagePanel
-            kind={kind}
+            kind={kind === 'videos' ? 'videos' : 'photos'}
             phase={stagePhase}
             progress={stageProgress}
             message={stageMessage}
-            previewUrl={previewUrl}
+            previewUrl={previewUrl || referencePreviewUrl}
             outputs={stageOutputs}
             campaignId={stageCampaignId}
             activeOutputId={activeOutputId}
             onSelectOutput={setActiveOutputId}
+            onDismiss={
+              stagePhase === 'ready' || stagePhase === 'error'
+                ? () => {
+                    setStagePhase('idle')
+                    setStageOutputs([])
+                    setStageMessage(null)
+                    setBusy(false)
+                  }
+                : undefined
+            }
           />
-        ) : null}
+        ) : (
+          formBody
+        )}
       </main>
     </AppLayout>
   )
