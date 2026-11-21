@@ -15,7 +15,6 @@ import StudioPage from './pages/StudioPage'
 import { AdsSocialRoute } from './pages/AdsSocialPage'
 import SettingsPage from './pages/SettingsPage'
 import LegalPage from './pages/LegalPage'
-import HiwShotsPage from './pages/HiwShotsPage'
 import OnboardingPage from './pages/onboarding/OnboardingPage'
 import BrandKitPage from './pages/BrandKitPage'
 import CalendarPage from './pages/CalendarPage'
@@ -147,7 +146,6 @@ export default function AppRouter() {
                 </AppGate>
               }
             />
-            <Route path="/demo/hiw" element={<HiwShotsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

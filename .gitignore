@@ -1,24 +1,38 @@
+# Dependencies & build
 node_modules
 dist
 .DS_Store
 *.local
-.env
-.env.*
-!.env.example
-prd_extract.txt
-.vercel
 .tsbuildinfo
 *.tsbuildinfo
 
-# Local temp / probe artifacts
+# Env / secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.key
+
+# Firebase Admin / service accounts — never commit
+*-firebase-adminsdk-*.json
+**/serviceAccount*.json
+firebase-service-account.json
+**/firebase-service-account.json
+
+# Local ops dumps / temp (keep off GitHub)
+prd_extract.txt
+.vercel
 tmp/
 .tmp-*/
 .tmp-*
 tmp-*.json
 Esha-Luce-screen-images/
+scripts/
+docs/
 
-# Firebase Admin secrets — never commit
-*-firebase-adminsdk-*.json
-**/serviceAccount*.json
-firebase-service-account.json
-.env*
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db
