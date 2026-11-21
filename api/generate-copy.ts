@@ -6,6 +6,7 @@ import {
   type CopyAssetKind,
 } from './_lib/generateCopy.js'
 import { parseCreativeDirectionBody } from './_lib/parseCreativeDirection.js'
+import { assertCanGenerate } from './_lib/userAccess.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -19,6 +20,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res
         .status(401)
         .json({ error: authFailureMessage(req.headers.authorization, 'copy') })
+    }
+
+    const access = await assertCanGenerate(decoded.uid, 'copy')
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error })
     }
 
     const body =

@@ -6,6 +6,7 @@ import {
   type VideoAssetKind,
 } from './_lib/generateVideos.js'
 import { parseCreativeDirectionBody } from './_lib/parseCreativeDirection.js'
+import { assertCanGenerate } from './_lib/userAccess.js'
 
 export const config = {
   maxDuration: 300,
@@ -18,46 +19,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-  const decoded = await verifyBearerToken(req.headers.authorization)
-  if (!decoded?.uid) {
-    return res
-      .status(401)
-      .json({ error: authFailureMessage(req.headers.authorization, 'videos') })
-  }
+    const decoded = await verifyBearerToken(req.headers.authorization)
+    if (!decoded?.uid) {
+      return res
+        .status(401)
+        .json({ error: authFailureMessage(req.headers.authorization, 'videos') })
+    }
 
-  const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}
-  const assetsRaw = Array.isArray(body.assets) ? body.assets : []
-  const assets = assetsRaw
-    .map((a: unknown) => String(a))
-    .filter((a: string): a is VideoAssetKind =>
-      (VIDEO_ASSET_KINDS as string[]).includes(a),
-    )
+    const access = await assertCanGenerate(decoded.uid, 'videos')
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error })
+    }
 
-  const creativeDirection = parseCreativeDirectionBody(body.creativeDirection)
+    const body =
+      typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}
+    const assetsRaw = Array.isArray(body.assets) ? body.assets : []
+    const assets = assetsRaw
+      .map((a: unknown) => String(a))
+      .filter((a: string): a is VideoAssetKind =>
+        (VIDEO_ASSET_KINDS as string[]).includes(a),
+      )
 
-  const result = await generateCampaignVideos({
-    productName: String(body.productName ?? ''),
-    productImage:
-      typeof body.productImage === 'string' ? body.productImage : undefined,
-    referenceFrameImage:
-      typeof body.referenceFrameImage === 'string'
-        ? body.referenceFrameImage
-        : typeof body.referenceImage === 'string'
-          ? body.referenceImage
-          : undefined,
-    creativeDirection,
-    assets,
-    recreateNote:
-      typeof body.recreateNote === 'string' ? body.recreateNote : undefined,
-    durationSeconds:
-      typeof body.durationSeconds === 'number'
-        ? body.durationSeconds
-        : typeof body.durationSeconds === 'string'
-          ? Number(body.durationSeconds)
-          : undefined,
-  })
+    const creativeDirection = parseCreativeDirectionBody(body.creativeDirection)
 
-  return res.status(result.status).json(result.body)
+    const result = await generateCampaignVideos({
+      productName: String(body.productName ?? ''),
+      productImage:
+        typeof body.productImage === 'string' ? body.productImage : undefined,
+      referenceFrameImage:
+        typeof body.referenceFrameImage === 'string'
+          ? body.referenceFrameImage
+          : typeof body.referenceImage === 'string'
+            ? body.referenceImage
+            : undefined,
+      creativeDirection,
+      assets,
+      recreateNote:
+        typeof body.recreateNote === 'string' ? body.recreateNote : undefined,
+      durationSeconds:
+        typeof body.durationSeconds === 'number'
+          ? body.durationSeconds
+          : typeof body.durationSeconds === 'string'
+            ? Number(body.durationSeconds)
+            : undefined,
+    })
+
+    return res.status(result.status).json(result.body)
   } catch (err) {
     console.error('[generate-videos] handler failed', err)
     return res.status(500).json({

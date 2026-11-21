@@ -9,9 +9,38 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function currentPlan() {
+      return resource.data.keys().hasAny(['plan'])
+        ? resource.data.plan
+        : 'free';
+    }
+
+    function nextPlan() {
+      return request.resource.data.keys().hasAny(['plan'])
+        ? request.resource.data.plan
+        : 'free';
+    }
+
+    function currentFreeUsed() {
+      return resource.data.keys().hasAny(['freeImageUsed'])
+        ? resource.data.freeImageUsed == true
+        : false;
+    }
+
+    function nextFreeUsed() {
+      return request.resource.data.keys().hasAny(['freeImageUsed'])
+        ? request.resource.data.freeImageUsed == true
+        : false;
+    }
+
     match /users/{userId} {
-      allow read, update: if isOwner(userId);
-      allow create: if isOwner(userId);
+      allow read: if isOwner(userId);
+      // New accounts must start on free — clients cannot create a paid plan doc.
+      allow create: if isOwner(userId) && nextPlan() == 'free';
+      // Clients cannot change plan. freeImageUsed may only stay false or become true.
+      allow update: if isOwner(userId)
+        && nextPlan() == currentPlan()
+        && (nextFreeUsed() == currentFreeUsed() || nextFreeUsed() == true);
     }
 
     match /products/{productId} {

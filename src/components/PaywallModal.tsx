@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider'
 import {
   PLAN_OPTIONS,
   type PaidPlanId,
@@ -16,35 +15,21 @@ type PaywallModalProps = {
   onUpgraded?: (plan: UserPlan) => void
 }
 
+const BILLING_MAIL =
+  'mailto:hello@luce.app?subject=LUCE%20plan%20upgrade&body=Hi%20LUCE%20team%2C%0A%0AI%20want%20to%20upgrade%20my%20plan.%0A%0AThanks'
+
 export default function PaywallModal({
   open,
   title = 'Upgrade to continue',
   reason,
   onClose,
-  onUpgraded,
 }: PaywallModalProps) {
-  const { updatePlan } = useAuth()
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('monthly')
-  const [busy, setBusy] = useState<PaidPlanId | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [picked, setPicked] = useState<PaidPlanId | null>(null)
 
   if (!open) return null
 
   const paidPlans = PLAN_OPTIONS.filter((p) => p.id !== 'free')
-
-  async function choosePlan(planId: PaidPlanId) {
-    setBusy(planId)
-    setError(null)
-    try {
-      await updatePlan(planId)
-      onUpgraded?.(planId)
-      onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update plan.')
-    } finally {
-      setBusy(null)
-    }
-  }
 
   return (
     <div className="paywall-overlay" role="dialog" aria-modal="true" aria-labelledby="paywall-title">
@@ -55,8 +40,8 @@ export default function PaywallModal({
           <h2 id="paywall-title">{title}</h2>
           <p className="paywall-copy">{reason || PRO_UPGRADE_COPY}</p>
           <p className="paywall-note">
-            You can explore the full workflow on Free. Generating video, ads, campaigns, or extra
-            images requires a plan.
+            Free includes 12 credits (1 = 1 image). Paid plans refill credits monthly — Starter
+            from $9. Checkout activates your plan after payment (no self-upgrade).
           </p>
         </div>
 
@@ -81,10 +66,11 @@ export default function PaywallModal({
           {paidPlans.map((plan) => {
             const price = billing === 'monthly' ? plan.monthly : plan.yearly
             const id = plan.id as PaidPlanId
+            const selected = picked === id
             return (
               <article
                 key={plan.id}
-                className={`paywall-plan${plan.featured ? ' is-featured' : ''}`}
+                className={`paywall-plan${plan.featured ? ' is-featured' : ''}${selected ? ' is-selected' : ''}`}
               >
                 {plan.featured ? <span className="paywall-plan-badge">Popular</span> : null}
                 <h3>{plan.name}</h3>
@@ -93,6 +79,7 @@ export default function PaywallModal({
                   <strong>${price}</strong>
                   <span>/ month</span>
                 </p>
+                <p className="paywall-plan-credits">{plan.credits} credits / month</p>
                 {billing === 'yearly' ? (
                   <p className="paywall-plan-billed">Billed yearly</p>
                 ) : null}
@@ -104,28 +91,30 @@ export default function PaywallModal({
                 <button
                   type="button"
                   className={`btn ${plan.featured ? 'btn-grad' : 'btn-ghost'}`}
-                  disabled={Boolean(busy)}
-                  onClick={() => void choosePlan(id)}
+                  onClick={() => setPicked(id)}
                 >
-                  {busy === id ? 'Activating…' : `Choose ${plan.name}`}
+                  {selected ? `Selected ${plan.name}` : `Choose ${plan.name}`}
                 </button>
               </article>
             )
           })}
         </div>
 
-        {error ? (
-          <p className="auth-error" role="alert">
-            {error}
-          </p>
-        ) : null}
+        <p className="paywall-checkout-note" role="status">
+          {picked
+            ? `You selected ${PLAN_OPTIONS.find((p) => p.id === picked)?.name}. Payment checkout is next — email us to activate, or open Plans.`
+            : 'Pick a plan, then request activation. Card checkout ships with the payment provider.'}
+        </p>
 
         <div className="paywall-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>
-            Keep browsing
+            Not now
           </button>
-          <Link className="paywall-link" to="/app/studio/photos" onClick={onClose}>
-            Use free image try
+          <a className="btn btn-grad" href={BILLING_MAIL}>
+            Request upgrade
+          </a>
+          <Link className="btn btn-ghost" to="/app/plans" onClick={onClose}>
+            View plans
           </Link>
         </div>
       </div>

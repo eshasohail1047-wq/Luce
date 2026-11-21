@@ -26,7 +26,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>(() =>
-    typeof window === 'undefined' ? 'system' : getStoredThemePreference(),
+    typeof window === 'undefined' ? 'light' : getStoredThemePreference(),
   )
   const [resolved, setResolved] = useState<ResolvedTheme>(() =>
     typeof window === 'undefined' ? 'light' : resolveTheme(getStoredThemePreference()),

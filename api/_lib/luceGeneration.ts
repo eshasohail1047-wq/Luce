@@ -60,6 +60,8 @@ export type CreativeDirectionBits = {
   styleTheme?: string
   /** User-selected Size in Studio — hard override of format default when set. */
   aspectRatio?: AspectRatioId
+  /** Spoken language for video dialogue (e.g. "Urdu (اردو)") */
+  language?: string
   brandKit?: BrandKitBits
 }
 

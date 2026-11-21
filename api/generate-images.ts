@@ -6,6 +6,10 @@ import {
   type ImageAssetKind,
 } from './_lib/generateImages.js'
 import { parseCreativeDirectionBody } from './_lib/parseCreativeDirection.js'
+import {
+  assertCanGenerate,
+  markFreeImageUsedServer,
+} from './_lib/userAccess.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -21,14 +25,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .json({ error: authFailureMessage(req.headers.authorization, 'images') })
     }
 
+    const access = await assertCanGenerate(decoded.uid, 'images')
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error })
+    }
+
     const body =
       typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}
     const assetsRaw = Array.isArray(body.assets) ? body.assets : []
-    const assets = assetsRaw
+    let assets = assetsRaw
       .map((a: unknown) => String(a))
       .filter((a: string): a is ImageAssetKind =>
         (IMAGE_ASSET_KINDS as string[]).includes(a),
       )
+
+    // Free try: one image asset max
+    if (!access.access.paid && assets.length > 1) {
+      assets = assets.slice(0, 1)
+    }
 
     const creativeDirection = parseCreativeDirectionBody(body.creativeDirection)
 
@@ -45,6 +59,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       recreateNote:
         typeof body.recreateNote === 'string' ? body.recreateNote : undefined,
     })
+
+    if (
+      result.status >= 200 &&
+      result.status < 300 &&
+      !access.access.paid &&
+      !access.access.freeImageUsed
+    ) {
+      try {
+        await markFreeImageUsedServer(decoded.uid)
+      } catch (markErr) {
+        console.warn('[generate-images] markFreeImageUsed failed', markErr)
+      }
+    }
 
     return res.status(result.status).json(result.body)
   } catch (err) {

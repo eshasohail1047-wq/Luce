@@ -102,6 +102,12 @@ import {
   type RecreateSession,
 } from '../lib/recreateSession'
 import PaywallModal from '../components/PaywallModal'
+import {
+  DEFAULT_VIDEO_LANGUAGE,
+  VIDEO_LANGUAGES,
+  type VideoLanguageId,
+  videoLanguageLabel,
+} from '../lib/videoLanguages'
 
 const VALID_KINDS: StudioKind[] = ['photos', 'videos', 'ads']
 
@@ -126,12 +132,6 @@ export default function StudioPage({
   const [searchParams] = useSearchParams()
   const { user, plan, freeImageUsed, markFreeImageUsed, loading, workspace } =
     useAuth()
-
-  function studioDirection(
-    partial: CreativeDirection,
-  ): CreativeDirection | undefined {
-    return withBrandKit(partial, workspace)
-  }
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const notesRef = useRef<HTMLTextAreaElement>(null)
@@ -166,6 +166,9 @@ export default function StudioPage({
   const [videoDurations, setVideoDurations] = useState<FormatDurations>({})
   const [adStyles, setAdStyles] = useState<AdStyleId[]>([])
   const [prompt, setPrompt] = useState('')
+  const [videoLanguage, setVideoLanguage] = useState<VideoLanguageId>(
+    DEFAULT_VIDEO_LANGUAGE,
+  )
   const [lighting, setLighting] = useState<LightingId | ''>('')
   const [background, setBackground] = useState<BackgroundId | ''>('')
   const [mood, setMood] = useState<MoodId | ''>('')
@@ -186,6 +189,21 @@ export default function StudioPage({
   const [stageOutputs, setStageOutputs] = useState<MockOutput[]>([])
   const [stageCampaignId, setStageCampaignId] = useState<string | null>(null)
   const [activeOutputId, setActiveOutputId] = useState<string | null>(null)
+
+  function studioDirection(
+    partial: CreativeDirection,
+  ): CreativeDirection | undefined {
+    return withBrandKit(partial, workspace)
+  }
+
+  function videoSpokenLanguage(): string | undefined {
+    if (kind !== 'videos') return undefined
+    return (
+      VIDEO_LANGUAGES.find((l) => l.id === videoLanguage)?.promptName ||
+      videoLanguageLabel(videoLanguage)
+    )
+  }
+
   const isRecreate = Boolean(recreate) || searchParams.get('recreate') === '1'
   /** Image/Video Studio: show generation stage only while running or when results exist — not on mere upload. */
   const supportsSplitStudio = kind === 'photos' || kind === 'videos'
@@ -818,6 +836,7 @@ export default function StudioPage({
             mood: mood || undefined,
             styleTheme: styleTheme || undefined,
             aspectRatio,
+            language: videoSpokenLanguage(),
           }),
           assets: [current.assetType],
           recreateNote: directionNote || undefined,
@@ -1073,6 +1092,7 @@ export default function StudioPage({
               mood: mood || undefined,
               styleTheme: styleTheme || undefined,
               aspectRatio,
+              language: videoSpokenLanguage(),
             }),
             assets: [item.assetType as VideoAssetKind],
             durationSeconds,
@@ -1307,6 +1327,7 @@ export default function StudioPage({
             mood: mood || undefined,
             styleTheme: styleTheme || undefined,
             aspectRatio,
+            language: videoSpokenLanguage(),
           }),
         }),
         45_000,
@@ -1881,6 +1902,28 @@ export default function StudioPage({
   const promptAndSubmit = (
     <div className="studio-bench-footer">
       <section className="form-section studio-bench-step studio-bench-prompt">
+        {kind === 'videos' ? (
+          <div className="auth-field studio-video-language">
+            <label htmlFor="studio-video-language">Spoken language</label>
+            <select
+              id="studio-video-language"
+              value={videoLanguage}
+              onChange={(e) =>
+                setVideoLanguage(e.target.value as VideoLanguageId)
+              }
+              disabled={busy}
+            >
+              {VIDEO_LANGUAGES.map((lang) => (
+                <option key={lang.id} value={lang.id}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+            <p className="studio-video-language-hint">
+              Dialogue and talking in generated clips use this language.
+            </p>
+          </div>
+        ) : null}
         <div className="auth-field">
           <label htmlFor="studio-prompt">
             {isRecreate ? 'Prompt' : 'Prompt · optional'}

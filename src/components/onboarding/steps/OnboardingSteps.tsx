@@ -1631,8 +1631,8 @@ export function PlanStep({
     [data.firstName, data.lastName].filter(Boolean).join(' ').trim() ||
     ''
 
-  const weeklyCredits = 60
-  const monthlyCredits = 260
+  const weeklyCredits = 20
+  const monthlyCredits = 80
 
   return (
     <div className="ob-plan-launch ob-rise">
@@ -1640,8 +1640,8 @@ export function PlanStep({
         <span className="ob-chip-label">Step · Launch</span>
         <h1 className="ob-title">Choose a plan to launch them</h1>
         <p className="ob-sub">
-          Your campaigns are planned. Start with a free trial. Cancel anytime before it ends and
-          you won&apos;t be charged.
+          Plans include monthly credits. 1 credit = 1 image. Start free, upgrade when you need
+          more — cancel anytime before trial ends.
         </p>
 
         <div className="ob-plan-billing" role="group" aria-label="Billing period">
@@ -1657,7 +1657,7 @@ export function PlanStep({
             className={data.billingYearly ? 'is-active' : undefined}
             onClick={() => patch({ billingYearly: true })}
           >
-            Yearly — save 20%
+            Yearly — save ~20%
           </button>
         </div>
 
@@ -1666,8 +1666,9 @@ export function PlanStep({
             ⚡
           </span>
           <p>
-            Your first-week mix uses <strong>{weeklyCredits} credits a week</strong>, about{' '}
-            <strong>{monthlyCredits} a month</strong>. Growth covers it.
+            A light first week is about <strong>{weeklyCredits} credits</strong> — roughly{' '}
+            <strong>{monthlyCredits}/mo</strong>. Starter covers that; Growth gives room to ship
+            weekly.
           </p>
         </div>
 

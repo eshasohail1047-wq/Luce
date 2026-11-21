@@ -2,38 +2,32 @@ import { useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import AppLayout from '../components/AppLayout'
 import { useAuth } from '../auth/AuthProvider'
-import { CONTENT_MIX_TYPES, CREDIT_COSTS } from '../config/credits'
+import { CREDIT_ADDONS, CREDIT_COSTS, videoCreditsForDuration } from '../config/credits'
 import {
   PLAN_OPTIONS,
   isPaidPlan,
+  planCredits,
   planLabel as formatPlanLabel,
   type UserPlan,
 } from '../lib/plans'
 
-const PLAN_CREDITS: Record<UserPlan, number> = {
-  free: 20,
-  starter: 120,
-  growth: 300,
-  pro: 800,
-}
-
 export default function PlansCreditsPage() {
-  const { user, loading, plan, updatePlan } = useAuth()
+  const { user, loading, plan } = useAuth()
   const [yearly, setYearly] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
-  const allotment = PLAN_CREDITS[plan] || 20
+  const allotment = planCredits(plan)
   // Demo usage split until real metering ships
   const used = useMemo(() => {
-    if (plan === 'free') return Math.min(6, allotment)
-    if (plan === 'starter') return Math.min(48, allotment)
-    if (plan === 'growth') return Math.min(146, allotment)
-    return Math.min(220, allotment)
+    if (plan === 'free') return Math.min(4, allotment)
+    if (plan === 'starter') return Math.min(28, allotment)
+    if (plan === 'growth') return Math.min(96, allotment)
+    return Math.min(180, allotment)
   }, [plan, allotment])
   const left = Math.max(0, allotment - used)
-  const videos = Math.round(used * 0.45)
-  const images = Math.round(used * 0.37)
+  const videos = Math.round(used * 0.35)
+  const images = Math.round(used * 0.5)
   const copy = Math.max(0, used - videos - images)
   const pct = allotment ? Math.round((used / allotment) * 100) : 0
 
@@ -41,16 +35,18 @@ export default function PlansCreditsPage() {
     setBusy(true)
     setMsg(null)
     try {
-      await updatePlan(next)
-      setMsg(
-        next === plan
-          ? null
-          : next === 'free'
-            ? 'Moved to Free plan'
-            : `Switched to ${formatPlanLabel(next)}`,
-      )
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Could not update plan.')
+      if (next === plan) {
+        setMsg(null)
+        return
+      }
+      // Clients cannot self-upgrade — paid plan is activated after purchase / admin.
+      if (next !== 'free') {
+        setMsg(
+          `To switch to ${formatPlanLabel(next)}, complete checkout or email hello@luce.app — plans are activated after payment.`,
+        )
+        return
+      }
+      setMsg('Stay on Free, or email hello@luce.app if you need your paid plan adjusted.')
     } finally {
       setBusy(false)
     }
@@ -71,7 +67,7 @@ export default function PlansCreditsPage() {
         <header className="plans-top">
           <div>
             <h1>Plans and credits</h1>
-            <p>Credits this cycle and your subscription.</p>
+            <p>1 credit = 1 image. Videos cost more by length. Plans refill monthly.</p>
           </div>
           <div className="plans-top-actions">
             <Link to="/app/settings#plan" className="brand-kit-ghost">
@@ -101,7 +97,7 @@ export default function PlansCreditsPage() {
             </div>
             <p className="plans-credits-note">
               Current plan: <strong>{formatPlanLabel(plan)}</strong>
-              {isPaidPlan(plan) ? '' : ' · Upgrade to unlock video and campaign packs'}
+              {isPaidPlan(plan) ? '' : ' · Upgrade for more credits + video'}
             </p>
           </section>
 
@@ -109,12 +105,11 @@ export default function PlansCreditsPage() {
             <h2>Need more this month?</h2>
             <p>Add-on packs top up without changing your plan.</p>
             <div className="plans-addon-options">
-              <button type="button" className="plans-addon-chip" disabled>
-                100 credits
-              </button>
-              <button type="button" className="plans-addon-chip" disabled>
-                500 credits
-              </button>
+              {CREDIT_ADDONS.map((pack) => (
+                <button key={pack.credits} type="button" className="plans-addon-chip" disabled>
+                  {pack.label} · ${pack.price}
+                </button>
+              ))}
             </div>
             <button type="button" className="brand-kit-cta" disabled title="Coming soon">
               Add credits
@@ -139,7 +134,7 @@ export default function PlansCreditsPage() {
                 className={yearly ? 'is-active' : undefined}
                 onClick={() => setYearly(true)}
               >
-                Yearly — save 20%
+                Yearly — save ~20%
               </button>
             </div>
           </div>
@@ -148,7 +143,6 @@ export default function PlansCreditsPage() {
             {PLAN_OPTIONS.map((option) => {
               const active = plan === option.id
               const price = yearly ? option.yearly : option.monthly
-              const credits = PLAN_CREDITS[option.id]
               return (
                 <article
                   key={option.id}
@@ -168,7 +162,7 @@ export default function PlansCreditsPage() {
                       </>
                     )}
                   </p>
-                  <p className="plans-card-credits">{credits} credits / month</p>
+                  <p className="plans-card-credits">{option.credits} credits / month</p>
                   <ul>
                     {option.perks.map((perk) => (
                       <li key={perk}>{perk}</li>
@@ -201,31 +195,30 @@ export default function PlansCreditsPage() {
 
         <section className="plans-costs">
           <h2>What things cost</h2>
+          <p className="plans-costs-note">
+            Credits cover Image Studio, Video Studio, and Full Campaign (images + videos).
+          </p>
           <ul>
             <li>
               <span>Product image, per variation</span>
-              <strong>{CREDIT_COSTS.productImage} credits</strong>
+              <strong>{CREDIT_COSTS.productImage} credit</strong>
             </li>
             <li>
-              <span>Carousel, 5 slides with copy</span>
-              <strong>{CREDIT_COSTS.carousel} credits</strong>
+              <span>Video · 5s</span>
+              <strong>{videoCreditsForDuration(5)} credits</strong>
             </li>
             <li>
-              <span>ASMR or cinematic video (up to 15s)</span>
-              <strong>{CREDIT_COSTS.sprayAsmr} credits</strong>
+              <span>Video · 10s</span>
+              <strong>{videoCreditsForDuration(10)} credits</strong>
             </li>
             <li>
-              <span>UGC or GRWM video with AI creator (20s)</span>
+              <span>Video · 15s</span>
+              <strong>{videoCreditsForDuration(15)} credits</strong>
+            </li>
+            <li>
+              <span>UGC / GRWM creator video</span>
               <strong>{CREDIT_COSTS.ugcSelfie} credits</strong>
             </li>
-            {CONTENT_MIX_TYPES.filter((row) =>
-              ['aiTestimonial', 'hookCopy'].includes(row.id),
-            ).map((row) => (
-              <li key={row.id}>
-                <span>{row.name}</span>
-                <strong>{row.credits} credits</strong>
-              </li>
-            ))}
           </ul>
         </section>
       </main>

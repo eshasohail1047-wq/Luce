@@ -140,6 +140,8 @@ export type CreativeDirectionSummary = {
   mood?: string
   styleTheme?: string
   aspectRatio?: string
+  /** Spoken language name for dialogue (e.g. "Urdu (اردو)") */
+  language?: string
   brandKit?: {
     brandName?: string
     colors?: string[]
@@ -356,6 +358,11 @@ function buildMotionPrompt(
   if (type === 'video_asmr_spray') {
     motionExtras.push(
       'ASMR motion: slow close-up product detail — texture, cap, pour, mist, or tactile motion that fits THIS product. Soft satisfying pacing. Product stays the visual hero.',
+    )
+  }
+  if (cd?.language?.trim()) {
+    motionExtras.push(
+      `SPOKEN LANGUAGE (required): All dialogue, speech, and talking in this video must be in ${cd.language.trim()}. Natural delivery for that language. Do not mix languages unless the user prompt explicitly asks.`,
     )
   }
   if (cd?.prompt?.trim()) {

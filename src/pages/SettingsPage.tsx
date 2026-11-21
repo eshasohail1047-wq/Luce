@@ -104,7 +104,6 @@ export default function SettingsPage() {
     loading,
     signOut,
     updateDisplayName,
-    updatePlan,
     updateWorkspace,
     resetPassword,
   } = useAuth()
@@ -223,10 +222,13 @@ export default function SettingsPage() {
     setPlanMsg(null)
     setPlanBusy(true)
     try {
-      await updatePlan(next)
-      setPlanMsg(next === 'free' ? 'Switched to Free' : `Now on ${formatPlanLabel(next)}`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update plan.')
+      if (next === plan) {
+        setPlanMsg(null)
+        return
+      }
+      setPlanMsg(
+        `To move to ${formatPlanLabel(next)}, complete checkout or email hello@luce.app — paid plans are activated after payment.`,
+      )
     } finally {
       setPlanBusy(false)
     }
@@ -434,7 +436,7 @@ export default function SettingsPage() {
                   <p>
                     {paid
                       ? 'Images, video, ads, and full campaigns unlocked.'
-                      : 'Free includes one image try. Upgrade for video, campaigns, and more.'}
+                      : 'Free includes 12 credits. Upgrade for more credits, video, and campaigns.'}
                   </p>
                 </div>
                 {!paid ? (
@@ -472,6 +474,9 @@ export default function SettingsPage() {
                             <span>/mo</span>
                           </>
                         )}
+                      </p>
+                      <p className="settings-plan-option-credits">
+                        {option.credits} credits / month
                       </p>
                       <ul>
                         {option.perks.slice(0, 3).map((perk) => (

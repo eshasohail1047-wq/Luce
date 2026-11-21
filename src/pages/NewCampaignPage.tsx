@@ -31,8 +31,12 @@ import type {
 } from '../lib/creativeDirection'
 import { withBrandKit } from '../lib/creativeDirection'
 import {
-  DEFAULT_PHOTO_STYLES,
-  DEFAULT_VIDEO_STYLES,
+  DEFAULT_VIDEO_LANGUAGE,
+  VIDEO_LANGUAGES,
+  type VideoLanguageId,
+  videoLanguageLabel,
+} from '../lib/videoLanguages'
+import {
   PHOTO_STYLES,
   VIDEO_STYLES,
   resolveCampaignFromFormats,
@@ -57,17 +61,10 @@ import {
   DEFAULT_VIDEO_DURATION,
   clampVideoDuration,
   expandFormatQuantities,
-  syncDurationsToQuantities,
-  totalQuantity,
   type FormatDurations,
   type FormatQuantities,
 } from '../lib/formatQuantities'
 
-function quantitiesFromIds(ids: string[]): FormatQuantities {
-  const next: FormatQuantities = {}
-  for (const id of ids) next[id] = (next[id] || 0) + 1
-  return next
-}
 import {
   compressImageDataUrl,
   fileToDataUrl,
@@ -88,12 +85,6 @@ export default function NewCampaignPage() {
   const { user, plan, freeImageUsed, loading, workspace } = useAuth()
   const [searchParams] = useSearchParams()
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  function campaignDirection(
-    partial: CreativeDirection,
-  ): CreativeDirection | undefined {
-    return withBrandKit(partial, workspace)
-  }
 
   const [sourceType, setSourceType] = useState<ProductSourceType>('upload')
   const [productName, setProductName] = useState('')
@@ -127,16 +118,13 @@ export default function NewCampaignPage() {
   const [selectedUrlImage, setSelectedUrlImage] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showDetails, setShowDetails] = useState(true)
-  const [photoQuantities, setPhotoQuantities] = useState<FormatQuantities>(() =>
-    quantitiesFromIds(DEFAULT_PHOTO_STYLES),
-  )
-  const [videoQuantities, setVideoQuantities] = useState<FormatQuantities>(() =>
-    quantitiesFromIds(DEFAULT_VIDEO_STYLES),
-  )
-  const [videoDurations, setVideoDurations] = useState<FormatDurations>(() =>
-    syncDurationsToQuantities(quantitiesFromIds(DEFAULT_VIDEO_STYLES), {}),
-  )
+  const [photoQuantities, setPhotoQuantities] = useState<FormatQuantities>({})
+  const [videoQuantities, setVideoQuantities] = useState<FormatQuantities>({})
+  const [videoDurations, setVideoDurations] = useState<FormatDurations>({})
   const [prompt, setPrompt] = useState('')
+  const [videoLanguage, setVideoLanguage] = useState<VideoLanguageId>(
+    DEFAULT_VIDEO_LANGUAGE,
+  )
   const lighting = '' as LightingId | ''
   const background = '' as BackgroundId | ''
   const mood = '' as MoodId | ''
@@ -153,6 +141,19 @@ export default function NewCampaignPage() {
   const [stageCampaignId, setStageCampaignId] = useState<string | null>(null)
   const [activeOutputId, setActiveOutputId] = useState<string | null>(null)
   const limits = getPlanLimits(plan)
+
+  function campaignDirection(
+    partial: CreativeDirection,
+  ): CreativeDirection | undefined {
+    return withBrandKit(partial, workspace)
+  }
+
+  function campaignSpokenLanguage(): string {
+    return (
+      VIDEO_LANGUAGES.find((l) => l.id === videoLanguage)?.promptName ||
+      videoLanguageLabel(videoLanguage)
+    )
+  }
   const hasImageReference = Boolean(referenceFile || referencePreviewUrl)
   const hasVideoReference = Boolean(
     videoReferenceFile || videoReferencePreviewUrl,
@@ -275,9 +276,6 @@ export default function NewCampaignPage() {
     if (!file) {
       setReferenceFile(null)
       setReferencePreviewUrl(null)
-      if (totalQuantity(photoQuantities) === 0) {
-        setPhotoQuantities(quantitiesFromIds(DEFAULT_PHOTO_STYLES))
-      }
       return
     }
     if (!file.type.startsWith('image/')) {
@@ -343,11 +341,6 @@ export default function NewCampaignPage() {
     if (!file) {
       setVideoReferenceFile(null)
       setVideoReferencePreviewUrl(null)
-      if (totalQuantity(videoQuantities) === 0 && limits.maxVideos > 0) {
-        const qty = quantitiesFromIds(DEFAULT_VIDEO_STYLES)
-        setVideoQuantities(qty)
-        setVideoDurations(syncDurationsToQuantities(qty, {}))
-      }
       return
     }
     if (!file.type.startsWith('video/')) {
@@ -522,13 +515,6 @@ export default function NewCampaignPage() {
             limits.maxVideos,
           ) as VideoStyleId[])
     )
-    // Campaigns always ship images + videos together when the plan allows
-    if (!photos.length) {
-      photos = DEFAULT_PHOTO_STYLES.slice(0, Math.max(1, limits.maxImages))
-    }
-    if (limits.maxVideos > 0 && !videos.length) {
-      videos = DEFAULT_VIDEO_STYLES.slice(0, Math.max(1, limits.maxVideos))
-    }
     return { photoStyles: photos, videoStyles: videos }
   }
 
@@ -671,6 +657,7 @@ export default function NewCampaignPage() {
               background: background || undefined,
               mood: mood || undefined,
               styleTheme: styleTheme || undefined,
+              language: campaignSpokenLanguage(),
             }),
             assets: [item.assetType as VideoAssetKind],
             durationSeconds,
@@ -916,6 +903,7 @@ export default function NewCampaignPage() {
             background: background || undefined,
             mood: mood || undefined,
             styleTheme: styleTheme || undefined,
+            language: campaignSpokenLanguage(),
           }),
         }),
         45_000,
@@ -1262,7 +1250,7 @@ export default function NewCampaignPage() {
             items={PHOTO_STYLES}
             quantities={photoQuantities}
             onQuantitiesChange={setPhotoQuantities}
-            defaultIds={hasImageReference ? [] : DEFAULT_PHOTO_STYLES}
+            defaultIds={[]}
             max={limits.maxImages}
             disabled={busy}
             ariaLabel="Image formats"
@@ -1281,48 +1269,68 @@ export default function NewCampaignPage() {
             }
           />
         </div>
-        {limits.maxVideos > 0 ? (
-          <div className="campaign-format-block campaign-format-block-videos">
-            <header className="campaign-format-head">
-              <h2>Videos</h2>
-              <p>
-                {hasVideoReference
-                  ? 'Using your reference — pick a format to switch back'
-                  : 'Choose clip styles and length, or add your own reference'}
-              </p>
-            </header>
-            <FormatPickGrid
-              items={VIDEO_STYLES}
-              quantities={videoQuantities}
-              onQuantitiesChange={setVideoQuantities}
-              durations={videoDurations}
-              onDurationsChange={setVideoDurations}
-              showDuration
-              defaultIds={hasVideoReference ? [] : DEFAULT_VIDEO_STYLES}
-              max={limits.maxVideos}
-              disabled={busy}
-              videoAspect
-              ariaLabel="Video formats"
-              referenceSlot={{
-                kind: 'video',
-                previewUrl: videoReferencePreviewUrl,
-                error: videoReferenceError,
-                busy: videoReferenceUrlBusy,
-                onPickFile: pickVideoReferenceFile,
-                onPickUrl: applyVideoReferenceUrl,
-              }}
-              onLimitHit={() =>
-                setWarning(
-                  `Your plan allows up to ${limits.maxVideos} videos in a campaign.`,
-                )
-              }
-            />
-          </div>
-        ) : null}
+        <div className="campaign-format-block campaign-format-block-videos">
+          <header className="campaign-format-head">
+            <h2>Videos</h2>
+            <p>
+              {hasVideoReference
+                ? 'Using your reference — pick a format to switch back'
+                : 'Choose clip styles and length, or add your own reference'}
+            </p>
+          </header>
+          <FormatPickGrid
+            items={VIDEO_STYLES}
+            quantities={videoQuantities}
+            onQuantitiesChange={setVideoQuantities}
+            durations={videoDurations}
+            onDurationsChange={setVideoDurations}
+            showDuration
+            defaultIds={[]}
+            max={Math.max(1, limits.maxVideos || VIDEO_STYLES.length)}
+            disabled={busy}
+            videoAspect
+            ariaLabel="Video formats"
+            referenceSlot={{
+              kind: 'video',
+              previewUrl: videoReferencePreviewUrl,
+              error: videoReferenceError,
+              busy: videoReferenceUrlBusy,
+              onPickFile: pickVideoReferenceFile,
+              onPickUrl: applyVideoReferenceUrl,
+            }}
+            onLimitHit={() =>
+              setWarning(
+                limits.maxVideos > 0
+                  ? `Your plan allows up to ${limits.maxVideos} videos in a campaign.`
+                  : 'Upgrade to generate campaign videos.',
+              )
+            }
+          />
+        </div>
       </section>
 
       <div className="studio-bench-footer">
         <section className="form-section studio-bench-step studio-bench-prompt">
+          <div className="auth-field studio-video-language">
+            <label htmlFor="campaign-video-language">Spoken language</label>
+            <select
+              id="campaign-video-language"
+              value={videoLanguage}
+              onChange={(e) =>
+                setVideoLanguage(e.target.value as VideoLanguageId)
+              }
+              disabled={busy}
+            >
+              {VIDEO_LANGUAGES.map((lang) => (
+                <option key={lang.id} value={lang.id}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+            <p className="studio-video-language-hint">
+              Dialogue in campaign video clips uses this language.
+            </p>
+          </div>
           <div className="auth-field">
             <label htmlFor="campaign-prompt">Prompt · optional</label>
             <textarea

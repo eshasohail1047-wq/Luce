@@ -213,7 +213,7 @@ export async function verifyBearerToken(
 
 export function authFailureMessage(
   authHeader: string | undefined,
-  kind: 'images' | 'videos' = 'images',
+  kind: 'images' | 'videos' | 'copy' = 'images',
 ): string {
   if (!authHeader?.startsWith('Bearer ') || !authHeader.slice(7).trim()) {
     return `Sign in required to generate ${kind}.`

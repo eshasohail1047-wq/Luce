@@ -4,6 +4,7 @@ import ThemeToggle from './components/ThemeToggle'
 import UgcReel from './UgcReel'
 import { stashPendingProduct } from './lib/pendingProduct'
 import { setPostLoginPath, type PostLoginPath } from './lib/postLogin'
+import { PLAN_OPTIONS } from './lib/plans'
 function markTryFree() {
   try {
     sessionStorage.setItem('luce.tryFreeImages', '1')
@@ -39,7 +40,7 @@ const faqs = [
   {
     tag: 'Deliverables',
     q: 'What’s included in a campaign pack?',
-    a: 'Research-backed strategy, studio and lifestyle visuals, UGC-style clips, social captions, and ad creatives — exported as a downloadable ZIP ready to publish.',
+    a: 'Product images and videos from the formats you pick — studio, lifestyle, UGC-style clips, and more — exported as a downloadable ZIP. Hooks, captions, and ads are not in the create flow yet.',
   },
   {
     tag: 'Publishing',
@@ -48,8 +49,8 @@ const faqs = [
   },
   {
     tag: 'Pricing',
-    q: 'Is the first campaign really free?',
-    a: 'Yes. Start free with no card required. Upgrade when you need more campaigns, regenerations, or team seats.',
+    q: 'How do credits work?',
+    a: '1 credit = 1 product image. Short videos start at 3 credits; a 15s clip is 8. Free includes 12 credits. Paid plans refill credits every month — top-ups coming soon.',
   },
   {
     tag: 'Audience',
@@ -103,49 +104,37 @@ const PRODUCT_LIGHTS = [
 const workflow = [
   {
     step: '01',
-    title: 'Start from Home',
-    text: 'Upload a product photo or paste a URL, then choose Images, Videos, or Full Campaign — one clean start for every creative.',
-    image: '/images/hiw-real-home.png',
-    panel: {
-      label: 'Home',
-      title: 'Create your creatives',
-      lines: ['Upload product or paste URL', 'Images · Videos · Full Campaign'],
-    },
+    id: 'home',
+    title: 'Start on Home',
+    text: 'Upload a product, paste a URL, or pick from your site — then choose Images, Videos, or Full Campaign.',
+    chips: ['Upload', 'Paste URL', 'Images', 'Videos', 'Campaign'],
+    image: '/images/hiw/step-home.png',
   },
   {
     step: '02',
-    title: 'Add your product',
-    text: 'Drop a packshot or switch to Product URL, then add name and brand. That product stays the source of truth for every shot.',
-    image: '/images/hiw-real-studio.png',
-    panel: {
-      label: 'Image Studio',
-      title: 'Product source',
-      lines: ['Photo or Product URL', 'Name · Brand · Notes'],
-    },
+    id: 'studio',
+    title: 'Lock the product',
+    text: 'In Studio or Campaign, drop a packshot or switch to Product URL. Packaging stays the source of truth; name and brand are optional.',
+    chips: ['Photo', 'Product URL', 'Details optional'],
+    image: '/images/hiw/step-studio.png',
   },
   {
     step: '03',
-    title: 'Pick formats & generate',
-    text: 'Choose studio, daylight, editorial, in-hand, flatlay, and more. Preview stays ready on the right while you build the pack.',
-    image: '/images/hiw-real-formats.png',
-    panel: {
-      label: 'Formats',
-      title: 'Style pack',
-      lines: ['Studio · Daylight · Editorial', 'In hand · Flatlay · Custom'],
-    },
+    id: 'formats',
+    title: 'Formats or your reference',
+    text: 'Tap looks (studio, daylight, editorial, in-hand, flatlay) or upload your own reference. Set quantities, add a prompt, generate. Campaign does images + videos in one create.',
+    chips: ['Presets', 'Reference', 'Quantities', 'Generate'],
+    image: '/images/hiw/step-formats.png',
   },
   {
     step: '04',
-    title: 'Review in Projects & Saved',
-    text: 'Open Projects to manage generations, export keepers, and pin favorites to Saved so your best creatives stay one click away.',
-    image: '/images/hiw-app-results.jpg',
-    panel: {
-      label: 'Projects',
-      title: 'Keep the best',
-      lines: ['Review generations', 'Export · Pin to Saved'],
-    },
+    id: 'library',
+    title: 'Review & keep in Library',
+    text: 'Results appear on the stage and in your campaign. Export keepers and save favorites to Library.',
+    chips: ['Stage preview', 'Campaign', 'Export', 'Library'],
+    image: '/images/hiw/step-library.png',
   },
-]
+] as const
 
 const trustMarks = [
   'Shopify brands',
@@ -173,23 +162,23 @@ const outputs = [
     featured: false,
   },
   {
-    title: 'Social content',
-    tag: 'Copy',
-    text: 'Hooks, captions, CTAs, and hashtags in one brand voice.',
+    title: 'Formats & reference',
+    tag: 'Studio',
+    text: 'Pick looks or upload your own reference — quantities included.',
     image: '/images/outputs/miss-rose-social.jpg',
     featured: false,
   },
   {
-    title: 'Ads & strategy',
-    tag: 'Paid',
-    text: 'Ad creatives plus audience, angle, message, and CTA.',
+    title: 'Full Campaign',
+    tag: 'Create',
+    text: 'Images and videos from one product in a single create.',
     image: '/images/outputs/miss-rose-ads.jpg',
     featured: false,
   },
   {
     title: 'Campaign export',
     tag: 'ZIP',
-    text: 'One downloadable pack — ready to publish across channels.',
+    text: 'Download your creatives as a ZIP — ready to publish.',
     image: '/images/outputs/miss-rose-export.jpg',
     featured: false,
   },
@@ -255,71 +244,15 @@ const features = [
   },
 ]
 
-const pricingPlans = [
-  {
-    name: 'Free',
-    tagline: 'Explore the workflow',
-    monthly: 0,
-    yearly: 0,
-    cta: 'Try free images',
-    featured: false,
-    perks: [
-      'Free product image studio',
-      '3 studio product photos',
-      'Packaging-true stills',
-      'Basic creative direction',
-      'Watermarked exports',
-    ],
-  },
-  {
-    name: 'Starter',
-    tagline: 'Launch your first campaigns',
-    monthly: 29,
-    yearly: 23,
-    cta: 'Choose Starter',
-    featured: false,
-    perks: [
-      '5 campaigns / month',
-      'Studio + lifestyle photos',
-      '3 UGC videos / campaign',
-      'Social captions & hooks',
-      'ZIP export, no watermark',
-      '1 workspace',
-    ],
-  },
-  {
-    name: 'Growth',
-    tagline: 'Ship campaigns every week',
-    monthly: 79,
-    yearly: 63,
-    cta: 'Choose Growth',
-    featured: true,
-    perks: [
-      '20 campaigns / month',
-      'Full photo + UGC suite',
-      'Ad creatives included',
-      'Priority generation',
-      '3 workspaces',
-      'Brand tone presets',
-    ],
-  },
-  {
-    name: 'Pro',
-    tagline: 'Scale creative production',
-    monthly: 149,
-    yearly: 119,
-    cta: 'Choose Pro',
-    featured: false,
-    perks: [
-      'Unlimited campaigns',
-      'Unlimited regenerations',
-      'Multi-product packs',
-      'Team seats (5)',
-      'Early feature access',
-      'Priority support',
-    ],
-  },
-]
+const pricingPlans = PLAN_OPTIONS.map((plan) => ({
+  name: plan.name,
+  tagline: plan.tagline,
+  monthly: plan.monthly,
+  yearly: plan.yearly,
+  cta: plan.cta,
+  featured: Boolean(plan.featured),
+  perks: plan.perks,
+}))
 
 function FaqList() {
   const [open, setOpen] = useState<number | null>(0)
@@ -508,115 +441,49 @@ function ScrollPhrase() {
 }
 
 function HowItWorks() {
-  const sectionRef = useRef<HTMLElement | null>(null)
-  const stepsRef = useRef<(HTMLElement | null)[]>([])
-  const [active, setActive] = useState(0)
-  const [railFill, setRailFill] = useState(0)
-
-  useEffect(() => {
-    const onScroll = () => {
-      const steps = stepsRef.current.filter(Boolean) as HTMLElement[]
-      if (!steps.length) return
-
-      const focusY = window.innerHeight * 0.42
-      let best = 0
-      let bestDist = Infinity
-      steps.forEach((el, i) => {
-        const mid = el.getBoundingClientRect().top + el.offsetHeight / 2
-        const dist = Math.abs(mid - focusY)
-        if (dist < bestDist) {
-          bestDist = dist
-          best = i
-        }
-      })
-      setActive(best)
-
-      const first = steps[0].getBoundingClientRect()
-      const last = steps[steps.length - 1].getBoundingClientRect()
-      const start = first.top + window.scrollY
-      const end = last.top + window.scrollY + last.height * 0.35
-      const current = window.scrollY + focusY
-      setRailFill(clamp((current - start) / Math.max(1, end - start), 0, 1))
-    }
-
-    onScroll()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onScroll)
-    return () => {
-      window.removeEventListener('scroll', onScroll)
-      window.removeEventListener('resize', onScroll)
-    }
-  }, [])
-
   return (
-    <section
-      className="hiw"
-      id="how-it-works"
-      ref={sectionRef as never}
-      aria-labelledby="workflow-title"
-    >
+    <section className="hiw hiw-scroll" id="how-it-works" aria-labelledby="workflow-title">
       <div className="hiw-inner">
         <Reveal className="section-head hiw-head">
-          <p className="eyebrow">Workflow</p>
+          <p className="eyebrow">Inside the product</p>
           <h2 id="workflow-title">How it works</h2>
-          <p>Home → Image Studio → formats → Projects</p>
+          <p>Scroll through the real LUCE flow — Home, Studio, formats, then Library.</p>
         </Reveal>
 
-        <div className="hiw-grid">
-          <div className="hiw-sticky" aria-hidden="true">
-            <div className="hiw-viz-frame">
-              {workflow.map((item, i) => (
-                <div
-                  key={item.step}
-                  className={`hiw-viz-slot${i === active ? ' is-active' : ''}`}
-                >
-                  <img className="hiw-viz-media" src={item.image} alt="" />
-                  <div className="hiw-viz-veil" />
-                  <div className="hiw-panel">
-                    <p className="hiw-panel-label">{item.panel.label}</p>
-                    <strong>{item.panel.title}</strong>
-                    {item.panel.lines.map((line) => (
-                      <span key={line}>{line}</span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="hiw-steps">
-            <span className="hiw-rail" aria-hidden="true">
-              <span className="hiw-rail-fill" style={{ height: `${railFill * 100}%` }} />
-            </span>
-            {workflow.map((item, i) => (
-              <div
-                key={item.step}
-                className={`hiw-step${i === active ? ' is-active' : ''}`}
-                ref={(el) => {
-                  stepsRef.current[i] = el
-                }}
+        <div className="hiw-cards">
+          {workflow.map((item, i) => {
+            const side = i % 2 === 0 ? 'left' : 'right'
+            return (
+              <Reveal
+                key={item.id}
+                className={`hiw-card-row is-${side}`}
+                delay={i * 60}
               >
-                <span className="hiw-step-n">{item.step}</span>
-                <h3 className="hiw-step-title">{item.title}</h3>
-                <p className="hiw-step-body">{item.text}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="hiw-cta">
-          <a
-            className="btn btn-dark btn-pill"
-            href="/login"
-            onClick={(e) => {
-              e.preventDefault()
-              markTryFree()
-              goToApp('/app')
-            }}
-          >
-            Open Home and try it
-            <span aria-hidden="true">→</span>
-          </a>
+                <article className="hiw-card">
+                  <figure className="hiw-card-media">
+                    <img
+                      src={item.image}
+                      alt={`LUCE ${item.title}`}
+                      loading={i === 0 ? 'eager' : 'lazy'}
+                    />
+                    <span className="hiw-card-step" aria-hidden="true">
+                      {item.step}
+                    </span>
+                  </figure>
+                  <div className="hiw-card-copy">
+                    <p className="hiw-card-kicker">Step {item.step}</p>
+                    <h3>{item.title}</h3>
+                    <p>{item.text}</p>
+                    <div className="hiw-step-chips">
+                      {item.chips.map((chip) => (
+                        <span key={chip}>{chip}</span>
+                      ))}
+                    </div>
+                  </div>
+                </article>
+              </Reveal>
+            )
+          })}
         </div>
       </div>
     </section>
@@ -962,9 +829,9 @@ export default function App() {
           <Reveal delay={120} className="outputs-meta">
             <span>Studio & lifestyle photos</span>
             <span>UGC Reels & Shorts</span>
-            <span>Captions & CTAs</span>
-            <span>Ad creatives</span>
-            <span>Strategy brief</span>
+            <span>Formats & reference</span>
+            <span>Full Campaign</span>
+            <span>Library</span>
             <span>ZIP export</span>
           </Reveal>
         </section>
@@ -1052,9 +919,9 @@ export default function App() {
           <Reveal className="section-head">
             <p className="eyebrow">Pricing</p>
             <h2 id="pricing-title">
-              Plans built for <span className="title-grad">serious brands</span>
+              Simple credits. <span className="title-grad">Low prices.</span>
             </h2>
-            <p>Clear tiers. Studio-quality campaigns. Upgrade when you are ready to scale.</p>
+            <p>1 credit = 1 image. Videos cost a few more. Start free, refill every month.</p>
           </Reveal>
 
           <Reveal className="billing-toggle" delay={60}>

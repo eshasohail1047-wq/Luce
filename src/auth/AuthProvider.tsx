@@ -32,12 +32,11 @@ import {
   loadUserSettings,
   markFreeImageUsed as saveFreeImageUsed,
   saveDisplayName,
-  saveUserPlan,
   saveWorkspaceSettings,
   type UserPlan,
   type WorkspaceSettings,
 } from '../lib/userSettings'
-import { isPaidPlan, normalizeUserPlan, planLabel } from '../lib/plans'
+import { normalizeUserPlan } from '../lib/plans'
 import { resetPostLoginCache } from '../lib/postLogin'
 import { sendTransactionalEmail } from '../lib/transactionalEmail'
 import { loadOnboarding } from '../lib/onboarding'
@@ -371,15 +370,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async updatePlan(nextPlan) {
         if (!user) throw new Error('Not signed in.')
-        const previous = plan
-        await saveUserPlan(user.uid, nextPlan)
-        setPlan(nextPlan)
-        if (isPaidPlan(nextPlan) && nextPlan !== previous) {
-          void sendTransactionalEmail({
-            type: 'plan_upgraded',
-            name: user.displayName || '',
-            planName: planLabel(nextPlan),
-          })
+        // Paid plans are activated after payment / admin — clients cannot self-upgrade.
+        if (nextPlan !== plan) {
+          throw new Error(
+            'Plan changes require checkout. Email hello@luce.app or open Plans & credits.',
+          )
         }
       },
       async markFreeImageUsed() {

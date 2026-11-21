@@ -5,14 +5,17 @@ export const THEME_STORAGE_KEY = 'luce.theme'
 
 export function normalizeThemePreference(value: unknown): ThemePreference {
   if (value === 'light' || value === 'dark' || value === 'system') return value
-  return 'system'
+  // First visit / missing preference → light (not system / OS dark)
+  return 'light'
 }
 
 export function getStoredThemePreference(): ThemePreference {
   try {
-    return normalizeThemePreference(localStorage.getItem(THEME_STORAGE_KEY))
+    const raw = localStorage.getItem(THEME_STORAGE_KEY)
+    if (raw == null || raw === '') return 'light'
+    return normalizeThemePreference(raw)
   } catch {
-    return 'system'
+    return 'light'
   }
 }
 

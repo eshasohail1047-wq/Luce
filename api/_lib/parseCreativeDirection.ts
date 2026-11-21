@@ -75,6 +75,10 @@ export function parseCreativeDirectionBody(raw: unknown): CreativeDirectionBits 
   const cd = raw as Record<string, unknown>
   const brandKit = parseBrandKit(cd.brandKit)
   const aspectRatio = isAspectRatioId(cd.aspectRatio) ? cd.aspectRatio : undefined
+  const language =
+    typeof cd.language === 'string' && cd.language.trim()
+      ? cd.language.trim().slice(0, 80)
+      : undefined
   const out: CreativeDirectionBits = {
     prompt: typeof cd.prompt === 'string' ? cd.prompt : undefined,
     lighting: typeof cd.lighting === 'string' ? cd.lighting : undefined,
@@ -83,6 +87,7 @@ export function parseCreativeDirectionBody(raw: unknown): CreativeDirectionBits 
     styleTheme: typeof cd.styleTheme === 'string' ? cd.styleTheme : undefined,
   }
   if (aspectRatio) out.aspectRatio = aspectRatio
+  if (language) out.language = language
   if (brandKit) out.brandKit = brandKit
   if (
     !out.prompt &&
@@ -91,6 +96,7 @@ export function parseCreativeDirectionBody(raw: unknown): CreativeDirectionBits 
     !out.mood &&
     !out.styleTheme &&
     !out.aspectRatio &&
+    !out.language &&
     !out.brandKit
   ) {
     return undefined

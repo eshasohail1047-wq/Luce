@@ -73,6 +73,8 @@ export type CreativeDirection = {
   styleTheme?: StyleThemeId
   /** Hard frame size for generation — overrides format default when set. */
   aspectRatio?: AspectRatioId
+  /** Spoken language for video dialogue (Video Studio / Campaign). */
+  language?: string
   brandKit?: BrandKitDirection
 }
 
@@ -215,6 +217,7 @@ export function sanitizeCreativeDirection(input: {
   mood?: string
   styleTheme?: string
   aspectRatio?: string
+  language?: string
   brandKit?: unknown
 }): CreativeDirection | undefined {
   const prompt = input.prompt?.trim() || undefined
@@ -233,6 +236,10 @@ export function sanitizeCreativeDirection(input: {
   const aspectRatio = ASPECT_RATIO_OPTIONS.some((o) => o.id === input.aspectRatio)
     ? (input.aspectRatio as AspectRatioId)
     : undefined
+  const language =
+    typeof input.language === 'string' && input.language.trim()
+      ? input.language.trim().slice(0, 80)
+      : undefined
   const brandKit = sanitizeBrandKit(input.brandKit)
 
   if (
@@ -242,6 +249,7 @@ export function sanitizeCreativeDirection(input: {
     !mood &&
     !styleTheme &&
     !aspectRatio &&
+    !language &&
     !brandKit
   )
     return undefined
@@ -253,6 +261,7 @@ export function sanitizeCreativeDirection(input: {
   if (mood) out.mood = mood
   if (styleTheme) out.styleTheme = styleTheme
   if (aspectRatio) out.aspectRatio = aspectRatio
+  if (language) out.language = language
   if (brandKit) out.brandKit = brandKit
   return out
 }

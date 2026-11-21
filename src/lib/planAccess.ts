@@ -40,7 +40,7 @@ export function canGenerate(input: {
       allowed: false,
       needsPaywall: true,
       reason:
-        'Your free image pack is used. Upgrade to keep generating images, video, ads, and campaigns.',
+        'Your free credits for images are used. Upgrade for more credits plus video and campaigns.',
     }
   }
 
@@ -57,7 +57,7 @@ export function canGenerate(input: {
   return {
     allowed: false,
     needsPaywall: true,
-    reason: `Free includes one image try. Upgrade to generate ${labels[input.action]}.`,
+    reason: `Free includes 12 credits (1 = 1 image). Upgrade to generate ${labels[input.action]}.`,
   }
 }
 
@@ -79,4 +79,4 @@ export function isProFeature(path: string): boolean {
 }
 
 export const PRO_UPGRADE_COPY =
-  'Free includes one product image try. Upgrade to unlock video, ads, full campaigns, and unlimited images.'
+  'Free includes 12 credits (1 credit = 1 image). Upgrade for more credits plus video and full campaigns.'

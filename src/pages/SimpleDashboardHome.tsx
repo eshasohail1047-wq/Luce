@@ -33,7 +33,7 @@ const RECOMMENDED = [
   {
     to: '/app/campaigns/new',
     title: 'Launch a full campaign',
-    description: 'One product → images, videos, captions, and ads together.',
+    description: 'One product → images and videos in one create.',
     image: '/images/campaign-beauty-flatlay.jpg',
     cta: 'Try it',
     accent: false,
