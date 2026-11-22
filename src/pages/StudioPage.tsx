@@ -6,7 +6,7 @@ import StudioStagePanel, {
   type StudioStagePhase,
 } from '../components/StudioStagePanel'
 import { useAuth } from '../auth/AuthProvider'
-import { getPlanLimits } from '../lib/planLimits'
+import { clampPhotoSelection, getPlanLimits } from '../lib/planLimits'
 import {
   DEFAULT_VIDEO_DURATION,
   clampVideoDuration,
@@ -18,6 +18,7 @@ import {
 } from '../lib/formatQuantities'
 import {
   createStudioProject,
+  ensureUserProduct,
   friendlyFirestoreError,
   getProductById,
   type ProductSourceType,
@@ -59,7 +60,7 @@ import {
   stashProductImageSafe,
   resolveProductImage,
   loadStashedCampaignImage,
-  stashCampaignOutputs,
+  stashCampaignOutputsSafe,
   stashCampaignRefImageSafe,
   stashCampaignVideoDurations,
   compressImageDataUrl,
@@ -88,7 +89,11 @@ import {
   type MockOutput,
 } from '../lib/mockCampaign'
 import { consumePendingProduct } from '../lib/pendingProduct'
-import { canGenerate, type GenerateAction } from '../lib/planAccess'
+import {
+  canGenerate,
+  isCreditsExhaustedMessage,
+  type GenerateAction,
+} from '../lib/planAccess'
 import {
   remoteMediaToFile,
   requestFetchProductPage,
@@ -842,10 +847,22 @@ export default function StudioPage({
         })
         const clipUrl = playableVideoUrl(ai.assets[0])
         if (clipUrl) {
+          const { materializePlayableUrl, videoCacheKey } = await import(
+            '../lib/mediaBlobStore'
+          )
+          let playable = clipUrl
+          try {
+            playable = await materializePlayableUrl(
+              clipUrl,
+              videoCacheKey(session.campaignId, current.id),
+            )
+          } catch (matErr) {
+            console.warn('[Studio] recreate materialize failed', matErr)
+          }
           next = {
             ...next,
             kind: 'video',
-            videoUrl: clipUrl,
+            videoUrl: playable,
             imageUrl: productPhoto || next.imageUrl,
             durationSeconds,
             note: directionNote
@@ -913,7 +930,7 @@ export default function StudioPage({
     const nextStatus =
       session.campaignStatus === 'exported' ? 'ready' : session.campaignStatus || 'ready'
 
-    stashCampaignOutputs(session.campaignId, nextOutputs)
+    await stashCampaignOutputsSafe(session.campaignId, nextOutputs)
 
     if (isLocalCampaignId(session.campaignId)) {
       updateLocalCampaign(session.campaignId, {
@@ -954,26 +971,27 @@ export default function StudioPage({
     if (!kind || (kind !== 'photos' && kind !== 'videos')) return
     setStageCampaignId(opts.campaignId)
     setStagePhase('preparing')
-    setStageProgress(8)
-    setStageMessage('Preparing your project…')
+    setStageProgress(12)
+    setStageMessage('Locking your product…')
     setStageOutputs([])
     setActiveOutputId(null)
     let aiSuccessCount = 0
+    let abortedForCredits = false
 
-    await new Promise((r) => setTimeout(r, 350))
     setStagePhase('analyzing')
-    setStageProgress(22)
+    setStageProgress(24)
     setStageMessage(
       opts.referenceDataUrl
-        ? 'Analyzing product + reference look…'
-        : 'Analyzing product packaging…',
+        ? 'Reading packaging + reference…'
+        : 'Reading packaging…',
     )
-    await new Promise((r) => setTimeout(r, 450))
 
     setStagePhase('generating')
-    setStageProgress(40)
+    setStageProgress(38)
     setStageMessage(
-      kind === 'videos' ? 'Generating videos…' : 'Generating images…',
+      kind === 'videos'
+        ? 'Generating all video formats…'
+        : 'Generating all image formats…',
     )
 
     let nextOutputs = buildMockOutputs({
@@ -984,50 +1002,57 @@ export default function StudioPage({
       mode: 'studio',
       videoDurations: opts.videoDurations,
     })
+    // Show pending thumbs immediately so the wait feels alive.
+    setStageOutputs([...nextOutputs])
 
     const imageOutputs = nextOutputs.filter((o) => isImageAssetKind(o.assetType))
     const videoOutputs = nextOutputs.filter((o) => isVideoAssetKind(o.assetType))
     let warn: string | null = null
+    let finishedUnits = 0
+    const totalUnits = imageOutputs.length + videoOutputs.length || 1
+
+    const bumpProgress = (label: string) => {
+      finishedUnits += 1
+      setStageProgress(38 + Math.round((finishedUnits / totalUnits) * 52))
+      setStageMessage(label)
+    }
 
     if (imageOutputs.length > 0) {
       let failCount = 0
-      for (let i = 0; i < imageOutputs.length; i++) {
-        const item = imageOutputs[i]!
-        setStageProgress(42 + Math.round(((i + 1) / imageOutputs.length) * 35))
-        setStageMessage(
-          `Generating image ${i + 1} of ${imageOutputs.length}: ${item.label}…`,
-        )
-        try {
-          const ai = await requestGenerateImages({
-            productName: opts.productName,
-            productImage: opts.productImage,
-            referenceImage:
-              opts.referenceDataUrl?.startsWith('data:image/')
-                ? opts.referenceDataUrl
-                : undefined,
-            creativeDirection: studioDirection({
-              prompt: prompt || undefined,
-              lighting: lighting || undefined,
-              background: background || undefined,
-              mood: mood || undefined,
-              styleTheme: styleTheme || undefined,
-              aspectRatio,
-            }),
-            assets: [item.assetType as ImageAssetKind],
-            recreateNote: [
-              opts.referenceDataUrl
-                ? 'Use IMAGE 2 as style/composition reference only — never paste IMAGE 1 or IMAGE 2 unchanged.'
-                : '',
-              prompt.trim()
-                ? `USER PROMPT (required): ${prompt.trim()}`
-                : '',
-              'Output must be a NEW photograph for this format (Instagram/TikTok ready), not a copy of the upload.',
-            ]
-              .filter(Boolean)
-              .join(' '),
-          })
-          const generated = ai.assets[0]
-          if (generated?.imageDataUrl) {
+      const direction = studioDirection({
+        prompt: prompt || undefined,
+        lighting: lighting || undefined,
+        background: background || undefined,
+        mood: mood || undefined,
+        styleTheme: styleTheme || undefined,
+        aspectRatio,
+      })
+      const recreateNote = [
+        opts.referenceDataUrl
+          ? 'Use IMAGE 2 as style/composition reference only — never paste IMAGE 1 or IMAGE 2 unchanged.'
+          : '',
+        prompt.trim() ? `USER PROMPT (required): ${prompt.trim()}` : '',
+        'Output must be a NEW photograph for this format (Instagram/TikTok ready), not a copy of the upload.',
+      ]
+        .filter(Boolean)
+        .join(' ')
+
+      await Promise.all(
+        imageOutputs.map(async (item) => {
+          try {
+            const ai = await requestGenerateImages({
+              productName: opts.productName,
+              productImage: opts.productImage,
+              referenceImage:
+                opts.referenceDataUrl?.startsWith('data:image/')
+                  ? opts.referenceDataUrl
+                  : undefined,
+              creativeDirection: direction,
+              assets: [item.assetType as ImageAssetKind],
+              recreateNote,
+            })
+            const generated = ai.assets[0]
+            if (!generated?.imageDataUrl) throw new Error('No image returned')
             aiSuccessCount += 1
             nextOutputs = nextOutputs.map((o) =>
               o.id === item.id
@@ -1040,32 +1065,53 @@ export default function StudioPage({
             )
             setStageOutputs([...nextOutputs])
             setActiveOutputId(item.id)
-          } else {
-            throw new Error('No image returned')
-          }
-        } catch (err) {
-          failCount += 1
-          const failReason =
-            err instanceof Error ? err.message : 'Image generation failed'
-          console.warn('[Studio] image failed', item.id, err)
-          // Never show the upload as a fake “result” — that looked like the model
-          // returned the same photo.
-          nextOutputs = nextOutputs.map((o) =>
-            o.id === item.id
-              ? {
-                  ...o,
-                  imageUrl: undefined,
-                  note: `AI failed for this format — ${failReason}`,
+            bumpProgress(`Ready: ${item.label}`)
+          } catch (err) {
+            failCount += 1
+            const failReason =
+              err instanceof Error ? err.message : 'Image generation failed'
+            console.warn('[Studio] image failed', item.id, err)
+
+            if (isCreditsExhaustedMessage(failReason)) {
+              abortedForCredits = true
+              if (plan === 'free' && !freeImageUsed) {
+                try {
+                  await markFreeImageUsed()
+                } catch {
+                  /* sync best-effort */
                 }
-              : o,
-          )
-          setStageOutputs([...nextOutputs])
-        }
-      }
+              }
+              setStageOutputs([])
+              setActiveOutputId(null)
+              setStagePhase('error')
+              setStageProgress(0)
+              setStageMessage('Free image trial finished')
+              setError(failReason)
+              setPaywallReason(failReason)
+              setPaywallOpen(true)
+              setBusy(false)
+              return
+            }
+
+            nextOutputs = nextOutputs.map((o) =>
+              o.id === item.id
+                ? {
+                    ...o,
+                    imageUrl: undefined,
+                    note: `AI failed for this format — ${failReason}`,
+                  }
+                : o,
+            )
+            setStageOutputs([...nextOutputs])
+            bumpProgress(`Skipped: ${item.label}`)
+          }
+        }),
+      )
+      if (abortedForCredits) return
       if (failCount) {
         warn =
           failCount === imageOutputs.length
-            ? `AI did not return new images (${failCount}). Check credits / keys, then retry.`
+            ? `AI did not return new images (${failCount}). No fake results were shown — retry or check your plan.`
             : `Some AI images failed (${failCount}). Failed formats were not replaced with your upload.`
       }
     }
@@ -1083,43 +1129,53 @@ export default function StudioPage({
       }
 
       let failCount = 0
-      for (let i = 0; i < videoOutputs.length; i++) {
-        const item = videoOutputs[i]!
-        setStageProgress(48 + Math.round(((i + 1) / videoOutputs.length) * 40))
-        setStageMessage(
-          `Generating video ${i + 1} of ${videoOutputs.length}: ${item.label}…`,
-        )
-        try {
-          const durationSeconds = clampVideoDuration(
-            item.durationSeconds ??
-              opts.videoDurations?.[item.assetType] ??
-              DEFAULT_VIDEO_DURATION,
-          )
-          const ai = await requestGenerateVideos({
-            productName: opts.productName,
-            productImage: opts.productImage,
-            referenceFrameImage,
-            creativeDirection: studioDirection({
-              prompt: prompt || undefined,
-              lighting: lighting || undefined,
-              background: background || undefined,
-              mood: mood || undefined,
-              styleTheme: styleTheme || undefined,
-              aspectRatio,
-              language: videoSpokenLanguage(),
-            }),
-            assets: [item.assetType as VideoAssetKind],
-            durationSeconds,
-          })
-          const clipUrl = playableVideoUrl(ai.assets[0])
-          if (clipUrl) {
+      const direction = studioDirection({
+        prompt: prompt || undefined,
+        lighting: lighting || undefined,
+        background: background || undefined,
+        mood: mood || undefined,
+        styleTheme: styleTheme || undefined,
+        aspectRatio,
+        language: videoSpokenLanguage(),
+      })
+
+      await Promise.all(
+        videoOutputs.map(async (item) => {
+          try {
+            const durationSeconds = clampVideoDuration(
+              item.durationSeconds ??
+                opts.videoDurations?.[item.assetType] ??
+                DEFAULT_VIDEO_DURATION,
+            )
+            const ai = await requestGenerateVideos({
+              productName: opts.productName,
+              productImage: opts.productImage,
+              referenceFrameImage,
+              creativeDirection: direction,
+              assets: [item.assetType as VideoAssetKind],
+              durationSeconds,
+            })
+            const clipUrl = playableVideoUrl(ai.assets[0])
+            if (!clipUrl) throw new Error('No clip returned')
+            const { materializePlayableUrl, videoCacheKey } = await import(
+              '../lib/mediaBlobStore'
+            )
+            let playable = clipUrl
+            try {
+              playable = await materializePlayableUrl(
+                clipUrl,
+                videoCacheKey(opts.campaignId, item.id),
+              )
+            } catch (matErr) {
+              console.warn('[Studio] materialize video failed', matErr)
+            }
             aiSuccessCount += 1
             nextOutputs = nextOutputs.map((o) =>
               o.id === item.id
                 ? {
                     ...o,
                     kind: 'video' as const,
-                    videoUrl: clipUrl,
+                    videoUrl: playable,
                     imageUrl: opts.productImage,
                     durationSeconds,
                     note: `AI video · ${durationSeconds}s`,
@@ -1128,38 +1184,74 @@ export default function StudioPage({
             )
             setStageOutputs([...nextOutputs])
             setActiveOutputId(item.id)
-          } else {
-            throw new Error('No clip returned')
+            bumpProgress(`Ready: ${item.label}`)
+          } catch (err) {
+            failCount += 1
+            const failReason =
+              err instanceof Error ? err.message : 'Video generation failed'
+            console.warn('[Studio] video failed', item.id, err)
+
+            if (
+              isCreditsExhaustedMessage(failReason) ||
+              /paid plan/i.test(failReason)
+            ) {
+              abortedForCredits = true
+              setStageOutputs([])
+              setActiveOutputId(null)
+              setStagePhase('error')
+              setStageProgress(0)
+              setStageMessage('Paid plan required')
+              setError(failReason)
+              setPaywallReason(failReason)
+              setPaywallOpen(true)
+              setBusy(false)
+              return
+            }
+
+            nextOutputs = nextOutputs.map((o) =>
+              o.id === item.id
+                ? {
+                    ...o,
+                    kind: 'video' as const,
+                    videoUrl: undefined,
+                    imageUrl: undefined,
+                    note: `AI video failed — ${failReason}`,
+                  }
+                : o,
+            )
+            setStageOutputs([...nextOutputs])
+            bumpProgress(`Skipped: ${item.label}`)
           }
-        } catch (err) {
-          failCount += 1
-          console.warn('[Studio] video failed', item.id, err)
-          nextOutputs = nextOutputs.map((o) =>
-            o.id === item.id
-              ? {
-                  ...o,
-                  kind: 'video' as const,
-                  videoUrl: videoUrlForAsset(item.assetType) || o.videoUrl,
-                  imageUrl: opts.productImage,
-                  note: 'AI video failed — demo format clip with your product as poster',
-                }
-              : o,
-          )
-        }
-      }
+        }),
+      )
+      if (abortedForCredits) return
       if (failCount) {
         warn = warn
           ? `${warn} Some videos also failed (${failCount}).`
-          : `Some AI videos failed (${failCount}); demo format clips play with your product as poster.`
+          : `Some AI videos failed (${failCount}). No demo clips were substituted.`
       }
     }
 
-    setStagePhase('checking')
-    setStageProgress(94)
-    setStageMessage('Checking quality & packaging fidelity…')
-    await new Promise((r) => setTimeout(r, 500))
+    // Never present empty / failed outputs as a successful pack.
+    if (aiSuccessCount === 0) {
+      setStageOutputs([])
+      setActiveOutputId(null)
+      setStagePhase('error')
+      setStageProgress(0)
+      setStageMessage('Generation did not finish')
+      setError(
+        warn ||
+          'No new creatives were generated. Nothing was saved as a result.',
+      )
+      setBusy(false)
+      return
+    }
 
-    stashCampaignOutputs(opts.campaignId, nextOutputs)
+    setStagePhase('checking')
+    setStageProgress(96)
+    setStageMessage('Final polish…')
+
+    await stashCampaignOutputsSafe(opts.campaignId, nextOutputs)
     if (isLocalCampaignId(opts.campaignId)) {
       updateLocalCampaign(opts.campaignId, {
         status: 'ready',
@@ -1217,11 +1309,15 @@ export default function StudioPage({
       setError(null)
       setWarning(null)
       try {
-        await new Promise((r) => setTimeout(r, 700))
-        if (generateActionForKind() === 'recreate-photos' && plan === 'free' && !freeImageUsed) {
+        await applyRecreateAndReturn(session)
+        // Spend free trial only after a successful recreate for photos.
+        if (
+          generateActionForKind() === 'recreate-photos' &&
+          plan === 'free' &&
+          !freeImageUsed
+        ) {
           await markFreeImageUsed()
         }
-        await applyRecreateAndReturn(session)
       } catch (err) {
         console.error(err)
         setError(
@@ -1291,10 +1387,12 @@ export default function StudioPage({
     const pickedPhotos = resolvePhotoStyles(
       expandFormatQuantities(photoQuantities, photoTotalMax) as PhotoStyleId[],
     )
-    const clampedPhotos =
+    const clampedPhotos = clampPhotoSelection(
       pickedPhotos.length > 0
         ? pickedPhotos
-        : (['photo_studio_packshot'] as PhotoStyleId[])
+        : (['photo_studio_packshot'] as PhotoStyleId[]),
+      plan,
+    )
     const pickedVideos = resolveVideoStudioStyles(
       expandFormatQuantities(videoQuantities, videoTotalMax) as VideoStyleId[],
       videoTotalMax,
@@ -1316,6 +1414,7 @@ export default function StudioPage({
       (imageFile ? imageFile.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '') ||
       'Untitled product'
 
+    // Free pack: exactly one image trial (server also enforces).
     const isFreeTry = kind === 'photos' && plan === 'free' && !freeImageUsed
 
     let fileForCreate = imageFile
@@ -1470,13 +1569,40 @@ export default function StudioPage({
         } else if (kind === 'photos' || kind === 'videos' || kind === 'ads') {
           throw new Error('Add a product photo before creating this project.')
         }
+        // Always try to land the product in Products, even when campaign create went local.
+        let productId = `local-product-${id}`
+        if (user?.uid) {
+          try {
+            const ensured = await ensureUserProduct({
+              userId: user.uid,
+              sourceType:
+                sourceType === 'url' && productUrl.trim() ? 'url' : 'upload',
+              productUrl: productUrl.trim() || undefined,
+              displayName,
+              description: description.trim() || undefined,
+              brand: brand.trim() || undefined,
+              imageFile: fileForCreate || imageFile || undefined,
+            })
+            productId = ensured.productId
+            if (imageUrl) await stashProductImageSafe(productId, imageUrl)
+            else if (ensured.imageUrls[0]) {
+              await stashProductImageSafe(productId, ensured.imageUrls[0])
+            }
+          } catch (productErr) {
+            console.warn('[Studio] product save failed — keeping local id', productErr)
+            if (imageUrl) await stashProductImageSafe(productId, imageUrl)
+          }
+        } else if (imageUrl) {
+          await stashProductImageSafe(productId, imageUrl)
+        }
+
         const saved = saveLocalCampaign({
           id,
           userId: user?.uid,
           title: `${displayName} — ${titleSuffix}`,
           status: 'product_confirmed',
           productName: displayName,
-          productId: `local-product-${id}`,
+          productId,
           productUrl: sourceType === 'url' ? productUrl.trim() : undefined,
           mode: 'studio',
           studioKind: kind,
@@ -1564,10 +1690,16 @@ export default function StudioPage({
     kind === 'photos'
       ? {
           kicker: 'Image Studio',
-          title: tryFree ? 'Your free product images' : 'Craft product images',
+          title: tryFree
+            ? 'Your free image trial'
+            : plan === 'free' && freeImageUsed
+              ? 'Free image trial finished'
+              : 'Craft product images',
           lead: tryFree
-            ? 'Add your product, optional prompt, then pick formats — or upload your own reference on the first card.'
-            : 'Product photo or URL → optional prompt → pick formats, or upload your own reference as the first card.',
+            ? 'Add your product, optional prompt, then generate 1 free AI image — or upload your own reference on the first card.'
+            : plan === 'free' && freeImageUsed
+              ? 'Your free image trial is finished. Upgrade for more credits, video, and campaigns.'
+              : 'Product photo or URL → optional prompt → pick formats, or upload your own reference as the first card.',
           image: '/images/audience-beauty.jpg',
           accent: 'photos' as const,
           cta: hasReference
@@ -1575,10 +1707,13 @@ export default function StudioPage({
             : photoOutputCount > 0
               ? `Generate ${photoOutputCount} image${photoOutputCount === 1 ? '' : 's'}`
               : tryFree
-                ? 'Generate free images'
+                ? 'Generate free image'
                 : 'Generate images',
           stylesTitle: 'Formats or your reference',
-          stylesHint: `First card = your reference. Or tap formats and set variants · max ${photoTotalMax}.`,
+          stylesHint:
+            plan === 'free'
+              ? 'Free trial = 1 image. First card = your reference, or pick one format.'
+              : `First card = your reference. Or tap formats and set variants · max ${photoTotalMax}.`,
         }
       : kind === 'videos' && isUgcFocus
         ? {
@@ -2107,7 +2242,10 @@ export default function StudioPage({
             ? 'Unlock Video Studio generation'
             : kind === 'ads'
               ? 'Unlock Ads & Social generation'
-              : 'Upgrade for more images'
+              : freeImageUsed ||
+                  (paywallReason && isCreditsExhaustedMessage(paywallReason))
+                ? 'Free image trial finished'
+                : 'Upgrade for more images'
         }
         reason={paywallReason}
         onClose={() => setPaywallOpen(false)}

@@ -9,6 +9,13 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    // Platform owner email — may hold Pro without checkout.
+    function isPlatformOwner() {
+      return signedIn()
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'eshasohail1047@gmail.com';
+    }
+
     function currentPlan() {
       return resource.data.keys().hasAny(['plan'])
         ? resource.data.plan
@@ -36,11 +43,21 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isOwner(userId);
       // New accounts must start on free — clients cannot create a paid plan doc.
-      allow create: if isOwner(userId) && nextPlan() == 'free';
+      // Owner may create with Pro.
+      allow create: if isOwner(userId) && (
+        nextPlan() == 'free'
+        || (isPlatformOwner() && nextPlan() == 'pro')
+      );
       // Clients cannot change plan. freeImageUsed may only stay false or become true.
+      // Owner may set / keep Pro.
       allow update: if isOwner(userId)
-        && nextPlan() == currentPlan()
-        && (nextFreeUsed() == currentFreeUsed() || nextFreeUsed() == true);
+        && (
+          (
+            nextPlan() == currentPlan()
+            && (nextFreeUsed() == currentFreeUsed() || nextFreeUsed() == true)
+          )
+          || (isPlatformOwner() && nextPlan() == 'pro')
+        );
     }
 
     match /products/{productId} {

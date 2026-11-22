@@ -30,10 +30,10 @@ export const PLAN_OPTIONS: PlanOption[] = [
     tagline: 'Try Image Studio',
     monthly: 0,
     yearly: 0,
-    credits: 12,
+    credits: 1,
     cta: 'Start free',
     perks: [
-      '12 credits to start',
+      '1 free image trial',
       'Image Studio · photo or product URL',
       'Format presets + optional reference',
       'Browse Videos & Campaign',

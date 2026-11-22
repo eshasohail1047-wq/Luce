@@ -50,7 +50,7 @@ const faqs = [
   {
     tag: 'Pricing',
     q: 'How do credits work?',
-    a: '1 credit = 1 product image. Short videos start at 3 credits; a 15s clip is 8. Free includes 12 credits. Paid plans refill credits every month — top-ups coming soon.',
+    a: '1 credit = 1 product image. Short videos start at 3 credits; a 15s clip is 8. Free includes 1 image trial. Paid plans refill credits every month — top-ups coming soon.',
   },
   {
     tag: 'Audience',
@@ -589,7 +589,7 @@ export default function App() {
               goToApp('/app/studio/photos')
             }}
           >
-            Try free images
+            Try free image
           </a>
         </div>
       </header>
@@ -1012,7 +1012,7 @@ export default function App() {
                   goToApp('/app/studio/photos')
                 }}
               >
-                Try free images
+                Try free image
                 <span aria-hidden="true">→</span>
               </a>
             </Reveal>
@@ -1041,7 +1041,7 @@ export default function App() {
                     goToApp('/app/studio/photos')
                   }}
                 >
-                  Try free images
+                  Try free image
                   <span aria-hidden="true">→</span>
                 </a>
                 <a
@@ -1078,7 +1078,7 @@ export default function App() {
                   goToApp('/app/studio/photos')
                 }}
               >
-                Try free images
+                Try free image
                 <span aria-hidden="true">→</span>
               </a>
             </div>

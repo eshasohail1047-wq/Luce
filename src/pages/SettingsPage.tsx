@@ -100,6 +100,7 @@ export default function SettingsPage() {
   const {
     user,
     plan,
+    freeImageUsed,
     workspace,
     loading,
     signOut,
@@ -436,7 +437,9 @@ export default function SettingsPage() {
                   <p>
                     {paid
                       ? 'Images, video, ads, and full campaigns unlocked.'
-                      : 'Free includes 12 credits. Upgrade for more credits, video, and campaigns.'}
+                      : freeImageUsed
+                        ? 'Your free image trial is finished. Upgrade for more credits, video, and campaigns.'
+                        : 'Free includes 1 image trial. Upgrade for more credits, video, and campaigns.'}
                   </p>
                 </div>
                 {!paid ? (

@@ -81,6 +81,12 @@ export async function requestGenerateImages(
   }
 
   if (!res.ok || !data.ok || !Array.isArray(data.assets)) {
+    if (res.status === 402) {
+      throw new Error(
+        data.error ||
+          'Your free image trial is finished. Upgrade for more credits.',
+      )
+    }
     if (res.status === 503) {
       throw new Error(
         data.error ||

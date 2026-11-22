@@ -17,6 +17,9 @@ export type HeyGenGenerateInput = {
 }
 
 export type HeyGenGenerateResult = {
+  /** Direct HTTPS MP4 URL from HeyGen (preferred for playback / download) */
+  videoUrl: string
+  /** Alias of videoUrl — kept for older callers */
   videoDataUrl: string
   model: string
   provider: 'heygen'
@@ -189,15 +192,11 @@ export async function generateHeyGenVideo(
     throw new Error('HeyGen video generation timed out while waiting')
   }
 
-  const videoRes = await fetch(videoUrl)
-  if (!videoRes.ok) {
-    throw new Error(`Could not download HeyGen video (${videoRes.status})`)
-  }
-
-  const buf = Buffer.from(await videoRes.arrayBuffer())
-  const mime = videoRes.headers.get('content-type') || 'video/mp4'
+  // Return the CDN URL directly — base64-ing the whole MP4 blows API payload
+  // limits and hangs <video> / sessionStorage on the client.
   return {
-    videoDataUrl: `data:${mime};base64,${buf.toString('base64')}`,
+    videoUrl,
+    videoDataUrl: videoUrl,
     model,
     provider: 'heygen',
     jobId: videoId,

@@ -19,7 +19,7 @@ import {
   requestFetchProductPage,
   requestFetchRemoteMedia,
 } from '../lib/fetchProduct'
-import { canGenerate } from '../lib/planAccess'
+import { canGenerate, isCreditsExhaustedMessage } from '../lib/planAccess'
 import { getPlanLimits } from '../lib/planLimits'
 import PaywallModal from '../components/PaywallModal'
 import type {
@@ -40,7 +40,6 @@ import {
   PHOTO_STYLES,
   VIDEO_STYLES,
   resolveCampaignFromFormats,
-  videoUrlForAsset,
   type PhotoStyleId,
   type VideoStyleId,
 } from '../lib/deliverables'
@@ -533,19 +532,17 @@ export default function NewCampaignPage() {
     setStageOutputs([])
     setActiveOutputId(null)
 
-    await new Promise((r) => setTimeout(r, 350))
     setStagePhase('analyzing')
     setStageProgress(22)
     setStageMessage(
       opts.referenceDataUrl || opts.videoReferenceDataUrl
-        ? 'Analyzing product + reference look…'
-        : 'Analyzing product packaging…',
+        ? 'Reading packaging + reference…'
+        : 'Reading packaging…',
     )
-    await new Promise((r) => setTimeout(r, 450))
 
     setStagePhase('generating')
-    setStageProgress(40)
-    setStageMessage('Generating campaign creatives…')
+    setStageProgress(38)
+    setStageMessage('Generating all campaign creatives…')
 
     let nextOutputs = buildMockOutputs({
       productName: opts.productName,
@@ -604,13 +601,27 @@ export default function NewCampaignPage() {
           }
         } catch (err) {
           failCount += 1
+          const failReason =
+            err instanceof Error ? err.message : 'generation failed'
           console.warn('[Campaign] image failed', item.id, err)
+          if (isCreditsExhaustedMessage(failReason)) {
+            setStageOutputs([])
+            setActiveOutputId(null)
+            setStagePhase('error')
+            setStageProgress(0)
+            setStageMessage('Free image trial finished')
+            setError(failReason)
+            setPaywallReason(failReason)
+            setPaywallOpen(true)
+            setBusy(false)
+            return
+          }
           nextOutputs = nextOutputs.map((o) =>
             o.id === item.id
               ? {
                   ...o,
                   imageUrl: undefined,
-                  note: `AI failed — ${err instanceof Error ? err.message : 'generation failed'}`,
+                  note: `AI failed — ${failReason}`,
                 }
               : o,
           )
@@ -619,7 +630,7 @@ export default function NewCampaignPage() {
       if (failCount) {
         warn =
           failCount === imageOutputs.length
-            ? `AI did not return new images (${failCount}).`
+            ? `AI did not return new images (${failCount}). No fake results were shown.`
             : `Some AI images failed (${failCount}). Failed formats were not replaced with your upload.`
       }
     }
@@ -686,15 +697,29 @@ export default function NewCampaignPage() {
           }
         } catch (err) {
           failCount += 1
+          const failReason =
+            err instanceof Error ? err.message : 'Video generation failed'
           console.warn('[Campaign] video failed', item.id, err)
+          if (isCreditsExhaustedMessage(failReason) || /paid plan/i.test(failReason)) {
+            setStageOutputs([])
+            setActiveOutputId(null)
+            setStagePhase('error')
+            setStageProgress(0)
+            setStageMessage('Paid plan required')
+            setError(failReason)
+            setPaywallReason(failReason)
+            setPaywallOpen(true)
+            setBusy(false)
+            return
+          }
           nextOutputs = nextOutputs.map((o) =>
             o.id === item.id
               ? {
                   ...o,
                   kind: 'video' as const,
-                  videoUrl: videoUrlForAsset(item.assetType) || o.videoUrl,
-                  imageUrl: opts.productImage,
-                  note: 'AI video failed — demo format clip with your product as poster',
+                  videoUrl: undefined,
+                  imageUrl: undefined,
+                  note: `AI video failed — ${failReason}`,
                 }
               : o,
           )
@@ -703,14 +728,32 @@ export default function NewCampaignPage() {
       if (failCount) {
         warn = warn
           ? `${warn} Some videos also failed (${failCount}).`
-          : `Some AI videos failed (${failCount}); demo format clips play with your product as poster.`
+          : `Some AI videos failed (${failCount}). No demo clips were substituted.`
       }
     }
 
+    const aiOk = nextOutputs.some(
+      (o) =>
+        (o.imageUrl && o.imageUrl !== opts.productImage) ||
+        (o.videoUrl && !String(o.note || '').includes('failed')),
+    )
+    if (!aiOk) {
+      setStageOutputs([])
+      setActiveOutputId(null)
+      setStagePhase('error')
+      setStageProgress(0)
+      setStageMessage('Generation did not finish')
+      setError(
+        warn ||
+          'No new creatives were generated. Nothing was saved as a result.',
+      )
+      setBusy(false)
+      return
+    }
+
     setStagePhase('checking')
-    setStageProgress(94)
-    setStageMessage('Checking quality & packaging fidelity…')
-    await new Promise((r) => setTimeout(r, 400))
+    setStageProgress(96)
+    setStageMessage('Final polish…')
 
     stashCampaignOutputs(opts.campaignId, nextOutputs)
     if (isLocalCampaignId(opts.campaignId)) {

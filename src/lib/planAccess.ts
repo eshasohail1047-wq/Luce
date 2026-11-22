@@ -40,7 +40,7 @@ export function canGenerate(input: {
       allowed: false,
       needsPaywall: true,
       reason:
-        'Your free credits for images are used. Upgrade for more credits plus video and campaigns.',
+        'Your free image trial is finished. Upgrade for more credits plus video and campaigns.',
     }
   }
 
@@ -57,7 +57,7 @@ export function canGenerate(input: {
   return {
     allowed: false,
     needsPaywall: true,
-    reason: `Free includes 12 credits (1 = 1 image). Upgrade to generate ${labels[input.action]}.`,
+    reason: `Free includes 1 image trial only. Upgrade to generate ${labels[input.action]}.`,
   }
 }
 
@@ -79,4 +79,11 @@ export function isProFeature(path: string): boolean {
 }
 
 export const PRO_UPGRADE_COPY =
-  'Free includes 12 credits (1 credit = 1 image). Upgrade for more credits plus video and full campaigns.'
+  'Free includes 1 image trial. Upgrade for more credits plus video and full campaigns.'
+
+/** True when an API/UI error means free credits / trial are exhausted. */
+export function isCreditsExhaustedMessage(message: string): boolean {
+  return /free image|credits? (are |is )?used|credits? finished|trial (is )?finished|upgrade to a paid plan for more/i.test(
+    message,
+  )
+}

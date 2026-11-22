@@ -37,7 +37,7 @@ const PAGES: Record<
       },
       {
         heading: 'Plans',
-        body: 'Free includes Image Studio access. Video, ads, and full campaigns require a paid plan. Plan features may change as we ship new capabilities.',
+        body: 'Free includes 1 Image Studio trial. Video, ads, and full campaigns require a paid plan. Plan features may change as we ship new capabilities.',
       },
       {
         heading: 'Content ownership',

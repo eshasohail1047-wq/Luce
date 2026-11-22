@@ -1,5 +1,6 @@
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { getAdminApp } from './firebaseAdmin.js'
+import { isOwnerEmail, OWNER_PLAN } from './ownerAccess.js'
 
 export type UserPlan = 'free' | 'starter' | 'growth' | 'pro'
 export type GenerateKind = 'images' | 'videos' | 'copy'
@@ -15,10 +16,30 @@ function normalizePlan(value: unknown): UserPlan {
   return 'free'
 }
 
-export async function loadUserAccess(uid: string): Promise<UserAccess> {
+export async function loadUserAccess(
+  uid: string,
+  email?: string | null,
+): Promise<UserAccess> {
+  if (isOwnerEmail(email)) {
+    return {
+      plan: OWNER_PLAN,
+      freeImageUsed: false,
+      paid: true,
+    }
+  }
+
   const db = getFirestore(getAdminApp())
   const snap = await db.collection('users').doc(uid).get()
   const data = (snap.data() || {}) as Record<string, unknown>
+  const docEmail =
+    typeof data.email === 'string' ? data.email : undefined
+  if (isOwnerEmail(docEmail) || isOwnerEmail(email)) {
+    return {
+      plan: OWNER_PLAN,
+      freeImageUsed: false,
+      paid: true,
+    }
+  }
   const plan = normalizePlan(data.plan)
   return {
     plan,
@@ -30,15 +51,17 @@ export async function loadUserAccess(uid: string): Promise<UserAccess> {
 /**
  * Server-side plan gate.
  * Free: one Image Studio generate only.
+ * Owner email: full Pro.
  * Paid: images, videos, copy.
  */
 export async function assertCanGenerate(
   uid: string,
   kind: GenerateKind,
+  email?: string | null,
 ): Promise<{ ok: true; access: UserAccess } | { ok: false; status: number; error: string }> {
   let access: UserAccess
   try {
-    access = await loadUserAccess(uid)
+    access = await loadUserAccess(uid, email)
   } catch (err) {
     console.error('[userAccess] load failed', err)
     return {
@@ -61,7 +84,7 @@ export async function assertCanGenerate(
       ok: false,
       status: 402,
       error:
-        'Your free image credits are used. Upgrade to a paid plan for more images, video, and campaigns.',
+        'Your free image trial is finished. Upgrade to a paid plan for more images, video, and campaigns.',
     }
   }
 

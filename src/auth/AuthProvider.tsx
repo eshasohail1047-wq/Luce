@@ -37,6 +37,7 @@ import {
   type WorkspaceSettings,
 } from '../lib/userSettings'
 import { normalizeUserPlan } from '../lib/plans'
+import { isOwnerEmail, OWNER_PLAN } from '../lib/ownerAccess'
 import { resetPostLoginCache } from '../lib/postLogin'
 import { sendTransactionalEmail } from '../lib/transactionalEmail'
 import { loadOnboarding } from '../lib/onboarding'
@@ -161,6 +162,7 @@ function detectProvider(user: User): 'google' | 'password' {
 async function ensureUserDocument(
   user: User,
 ): Promise<{ plan: UserPlan; isNew: boolean; welcomeEmailSent: boolean }> {
+  const owner = isOwnerEmail(user.email)
   const ref = doc(requireDb(), 'users', user.uid)
   const snap = await getDoc(ref)
   if (snap.exists()) {
@@ -172,11 +174,14 @@ async function ensureUserDocument(
         displayName: user.displayName ?? '',
         photoURL: user.photoURL ?? '',
         updatedAt: serverTimestamp(),
+        ...(owner
+          ? { plan: OWNER_PLAN, freeImageUsed: false, isOwner: true }
+          : {}),
       },
       { merge: true },
     )
     return {
-      plan: normalizeUserPlan(data.plan),
+      plan: owner ? OWNER_PLAN : normalizeUserPlan(data.plan),
       isNew: false,
       welcomeEmailSent: Boolean(data.welcomeEmailSent),
     }
@@ -186,8 +191,9 @@ async function ensureUserDocument(
     email: user.email ?? '',
     displayName: user.displayName ?? '',
     photoURL: user.photoURL ?? '',
-    plan: 'free',
+    plan: owner ? OWNER_PLAN : 'free',
     freeImageUsed: false,
+    ...(owner ? { isOwner: true } : {}),
     welcomeEmailSent: false,
     authProvider: detectProvider(user),
     onboarding: {
@@ -198,7 +204,7 @@ async function ensureUserDocument(
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
-  return { plan: 'free', isNew: true, welcomeEmailSent: false }
+  return { plan: owner ? OWNER_PLAN : 'free', isNew: true, welcomeEmailSent: false }
 }
 
 async function maybeSendWelcomeEmail(user: User, alreadySent: boolean) {
@@ -314,10 +320,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (next) {
         try {
           const created = await ensureUserDocument(next)
-          const settings = await loadUserSettings(next.uid)
+          const settings = await loadUserSettings(next.uid, next.email)
           if (active) {
-            setPlan(settings.plan || created.plan)
-            setFreeImageUsed(settings.freeImageUsed)
+            setPlan(
+              isOwnerEmail(next.email)
+                ? OWNER_PLAN
+                : settings.plan || created.plan,
+            )
+            setFreeImageUsed(
+              isOwnerEmail(next.email) ? false : settings.freeImageUsed,
+            )
             setWorkspace(settings.workspace)
           }
           if (active) await syncOnboardingStatus(next.uid)
@@ -398,9 +410,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false)
           await syncProfile(result.user)
           try {
-            const settings = await loadUserSettings(result.user.uid)
-            setPlan(settings.plan)
-            setFreeImageUsed(settings.freeImageUsed)
+            const settings = await loadUserSettings(
+              result.user.uid,
+              result.user.email,
+            )
+            setPlan(
+              isOwnerEmail(result.user.email) ? OWNER_PLAN : settings.plan,
+            )
+            setFreeImageUsed(
+              isOwnerEmail(result.user.email) ? false : settings.freeImageUsed,
+            )
             setWorkspace(settings.workspace)
           } catch (settingsErr) {
             console.warn('[auth] settings load after Google sign-in failed', settingsErr)

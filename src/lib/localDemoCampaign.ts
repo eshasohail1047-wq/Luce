@@ -584,13 +584,88 @@ export async function resolveCampaignCover(
   return undefined
 }
 
+/**
+ * Persist pack outputs. Large video data URLs are moved to IndexedDB so
+ * sessionStorage (≈5MB) does not silently drop the whole pack.
+ */
 export function stashCampaignOutputs(campaignId: string, outputs: unknown) {
+  void stashCampaignOutputsSafe(campaignId, outputs)
+}
+
+export async function stashCampaignOutputsSafe(
+  campaignId: string,
+  outputs: unknown,
+): Promise<void> {
+  let toStore = outputs
   try {
-    sessionStorage.setItem(OUTPUTS_KEY + campaignId, JSON.stringify(outputs))
+    const { materializePlayableUrl, stashableVideoUrl, videoCacheKey } =
+      await import('./mediaBlobStore')
+    if (Array.isArray(outputs)) {
+      const next = []
+      for (const row of outputs) {
+        if (!row || typeof row !== 'object') {
+          next.push(row)
+          continue
+        }
+        const item = row as MockOutput
+        if (item.kind === 'video' && item.videoUrl?.trim()) {
+          const key = videoCacheKey(campaignId, item.id)
+          const original = item.videoUrl.trim()
+          try {
+            // Warm IDB so reload / Export can revive the clip
+            if (
+              original.startsWith('data:') ||
+              original.startsWith('blob:') ||
+              original.startsWith('/api/')
+            ) {
+              await materializePlayableUrl(original, key)
+            }
+            next.push({
+              ...item,
+              videoUrl: stashableVideoUrl(key, original),
+            })
+          } catch (err) {
+            console.warn('[localDemo] video materialize failed', item.id, err)
+            next.push({
+              ...item,
+              // Keep HTTPS / relative; drop mega data URLs that blow quota
+              videoUrl: original.startsWith('data:')
+                ? stashableVideoUrl(key, original)
+                : original,
+            })
+          }
+        } else {
+          next.push(item)
+        }
+      }
+      toStore = next
+    }
+  } catch (err) {
+    console.warn('[localDemo] outputs prepare failed', err)
+  }
+
+  try {
+    sessionStorage.setItem(OUTPUTS_KEY + campaignId, JSON.stringify(toStore))
   } catch (err) {
     console.error('[localDemo] outputs stash failed', err)
+    // Last resort: strip all video bodies and keep metadata + image posters
+    try {
+      if (Array.isArray(toStore)) {
+        const slim = (toStore as MockOutput[]).map((item) => {
+          if (item?.kind !== 'video') return item
+          const url = item.videoUrl || ''
+          if (url.startsWith('data:') || url.startsWith('blob:')) {
+            return { ...item, videoUrl: undefined, note: `${item.note || ''} · video saved in browser storage`.trim() }
+          }
+          return item
+        })
+        sessionStorage.setItem(OUTPUTS_KEY + campaignId, JSON.stringify(slim))
+      }
+    } catch (err2) {
+      console.error('[localDemo] slim outputs stash failed', err2)
+    }
   }
-  const cover = firstOutputImageUrl(outputs)
+  const cover = firstOutputImageUrl(toStore)
   if (cover) {
     void stashCampaignCoverSafe(campaignId, cover)
   }
@@ -604,6 +679,44 @@ export function loadStashedCampaignOutputs<T>(campaignId: string): T | undefined
   } catch {
     return undefined
   }
+}
+
+/** Revive blob-ref / proxy videos into playable object URLs for the current page. */
+export async function hydrateCampaignVideoOutputs(
+  campaignId: string,
+  outputs: MockOutput[],
+): Promise<MockOutput[]> {
+  const { materializePlayableUrl, isMediaBlobRef, videoCacheKey } = await import(
+    './mediaBlobStore'
+  )
+  const next: MockOutput[] = []
+  for (const item of outputs) {
+    if (item.kind !== 'video' || !item.videoUrl?.trim()) {
+      next.push(item)
+      continue
+    }
+    const key = videoCacheKey(campaignId, item.id)
+    const url = item.videoUrl.trim()
+    try {
+      if (
+        isMediaBlobRef(url) ||
+        url.startsWith('data:') ||
+        url.startsWith('/api/')
+      ) {
+        const playable = await materializePlayableUrl(url, key)
+        next.push({ ...item, videoUrl: playable })
+      } else {
+        next.push(item)
+      }
+    } catch (err) {
+      console.warn('[localDemo] hydrate video failed', item.id, err)
+      next.push({
+        ...item,
+        note: `${item.note || 'Video'} · playback failed — tap Recreate or Export may still work`.trim(),
+      })
+    }
+  }
+  return next
 }
 
 export function clearCampaignStash(campaignId: string) {

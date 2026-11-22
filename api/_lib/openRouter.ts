@@ -457,8 +457,32 @@ export async function generateVideo(
     throw new Error('Video generation timed out while waiting for OpenRouter')
   }
 
-  // OpenRouter content URLs require Authorization — browsers can't send that on
-  // <video src>, so return a same-origin proxy path instead of unsigned_urls.
+  // Prefer a durable HTTPS URL (Firebase Storage). The old same-origin proxy
+  // hits Vercel’s ~4.5MB response limit and leaves <video> spinning forever.
+  try {
+    const { body, contentType } = await fetchOpenRouterVideoContent(jobId)
+    const { uploadGeneratedVideo } = await import('./firebaseAdmin.js')
+    const stored = await uploadGeneratedVideo({
+      jobId,
+      body: Buffer.from(body),
+      contentType,
+    })
+    console.info(
+      `[openrouter-video] job ${jobId} ready → storage ${stored.slice(0, 80)}…`,
+    )
+    return {
+      videoUrl: stored,
+      videoDataUrl: stored,
+      model,
+      jobId,
+    }
+  } catch (storeErr) {
+    console.warn(
+      '[openrouter-video] storage upload failed, falling back to proxy',
+      storeErr instanceof Error ? storeErr.message : storeErr,
+    )
+  }
+
   const playable = `/api/openrouter-video/${encodeURIComponent(jobId)}`
   console.info(
     `[openrouter-video] job ${jobId} ready → proxy ${playable}` +

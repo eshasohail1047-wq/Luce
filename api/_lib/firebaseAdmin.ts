@@ -1,5 +1,6 @@
 import { cert, getApps, initializeApp, type App } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
+import { getStorage } from 'firebase-admin/storage'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -166,15 +167,55 @@ export function getAdminApp(): App {
     )
   }
 
+  const storageBucket =
+    process.env.FIREBASE_STORAGE_BUCKET?.trim() ||
+    process.env.VITE_FIREBASE_STORAGE_BUCKET?.trim() ||
+    `${parsed.project_id}.appspot.com`
+
   cachedApp = initializeApp({
     credential: cert({
       projectId: parsed.project_id,
       clientEmail: parsed.client_email,
       privateKey: normalizePrivateKey(parsed.private_key),
     }),
+    storageBucket,
   })
   console.info(`[firebaseAdmin] initialized for project ${parsed.project_id}`)
   return cachedApp
+}
+
+/**
+ * Upload a generated MP4 to Firebase Storage and return a long-lived HTTPS URL.
+ * Avoids Vercel’s ~4.5MB serverless response limit on /api/openrouter-video/*.
+ */
+export async function uploadGeneratedVideo(input: {
+  jobId: string
+  body: Buffer
+  contentType?: string
+}): Promise<string> {
+  const app = getAdminApp()
+  const bucket = getStorage(app).bucket()
+  const safeId = input.jobId.replace(/[^\w.-]+/g, '_').slice(0, 80)
+  const objectPath = `generated-videos/${safeId}-${Date.now()}.mp4`
+  const file = bucket.file(objectPath)
+  const contentType = input.contentType || 'video/mp4'
+  await file.save(input.body, {
+    resumable: false,
+    metadata: {
+      contentType,
+      cacheControl: 'public, max-age=31536000, immutable',
+    },
+  })
+  try {
+    await file.makePublic()
+    return `https://storage.googleapis.com/${bucket.name}/${objectPath}`
+  } catch {
+    const [signed] = await file.getSignedUrl({
+      action: 'read',
+      expires: Date.now() + 1000 * 60 * 60 * 24 * 7, // 7 days
+    })
+    return signed
+  }
 }
 
 export async function verifyBearerToken(

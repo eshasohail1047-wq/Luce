@@ -37,9 +37,10 @@ async function generateVideoWithProviders(input: {
         resolution: input.resolution ?? '768p',
       })
       console.info('[generate-videos] ok via heygen')
+      const playable = result.videoUrl || result.videoDataUrl
       return {
-        videoUrl: result.videoDataUrl,
-        videoDataUrl: result.videoDataUrl,
+        videoUrl: playable,
+        videoDataUrl: playable,
         provider: 'heygen',
       }
     } catch (err) {

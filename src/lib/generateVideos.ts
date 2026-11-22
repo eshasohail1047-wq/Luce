@@ -91,6 +91,12 @@ export async function requestGenerateVideos(
   }
 
   if (!res.ok || !data.ok || !Array.isArray(data.assets)) {
+    if (res.status === 402) {
+      throw new Error(
+        data.error ||
+          'Video generation requires a paid plan. Upgrade to unlock Video Studio.',
+      )
+    }
     if (res.status === 503) {
       throw new Error(
         data.error ||

@@ -354,6 +354,28 @@ export function friendlyFirestoreError(err: unknown, fallback: string): string {
   return raw.trim() || fallback
 }
 
+/** Public: save a product from studio / campaign generate into Products. */
+export async function ensureUserProduct(input: {
+  userId: string
+  sourceType?: ProductSourceType
+  productUrl?: string
+  displayName: string
+  description?: string
+  brand?: string
+  imageFile?: File | null
+}): Promise<{ productId: string; imageUrls: string[] }> {
+  const { productRef, imageUrls } = await createProductRecord({
+    userId: input.userId,
+    sourceType: input.sourceType || (input.productUrl?.trim() ? 'url' : 'upload'),
+    productUrl: input.productUrl?.trim() || '',
+    displayName: input.displayName,
+    description: input.description,
+    brand: input.brand,
+    imageFile: input.imageFile ?? null,
+  })
+  return { productId: productRef.id, imageUrls }
+}
+
 async function createProductRecord(input: {
   userId: string
   sourceType: ProductSourceType

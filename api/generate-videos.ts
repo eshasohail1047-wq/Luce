@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .json({ error: authFailureMessage(req.headers.authorization, 'videos') })
     }
 
-    const access = await assertCanGenerate(decoded.uid, 'videos')
+    const access = await assertCanGenerate(decoded.uid, 'videos', decoded.email)
     if (!access.ok) {
       return res.status(access.status).json({ error: access.error })
     }

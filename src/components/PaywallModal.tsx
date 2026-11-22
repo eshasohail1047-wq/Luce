@@ -40,8 +40,8 @@ export default function PaywallModal({
           <h2 id="paywall-title">{title}</h2>
           <p className="paywall-copy">{reason || PRO_UPGRADE_COPY}</p>
           <p className="paywall-note">
-            Free includes 12 credits (1 = 1 image). Paid plans refill credits monthly — Starter
-            from $9. Checkout activates your plan after payment (no self-upgrade).
+            Free includes 1 image trial. Paid plans refill credits monthly — Starter from $9.
+            Checkout activates your plan after payment (no self-upgrade).
           </p>
         </div>
 

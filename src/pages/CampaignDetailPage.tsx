@@ -16,6 +16,7 @@ import { canGenerate, type GenerateAction } from '../lib/planAccess'
 import { sendTransactionalEmail } from '../lib/transactionalEmail'
 import PaywallModal from '../components/PaywallModal'
 import CreativeFormatPreview from '../components/CreativeFormatPreview'
+import SafeVideo from '../components/SafeVideo'
 import {
   CAMPAIGN_DELIVERABLES,
   formatLabel,
@@ -28,16 +29,17 @@ import {
   isLocalCampaignId,
   loadLocalCampaign,
   loadStashedCampaignImage,
+  hydrateCampaignVideoOutputs,
   loadStashedCampaignOutputs,
   loadStashedCampaignRefImage,
   loadStashedCampaignVideoDurations,
+  stashCampaignOutputsSafe,
   resolveCampaignImage,
   resolveCampaignRefImage,
   stashCampaignImage,
   stashCampaignImageSafe,
   stashCampaignRefImageSafe,
   stashCampaignCoverSafe,
-  stashCampaignOutputs,
   stashProductImageSafe,
   updateLocalCampaign,
 } from '../lib/localDemoCampaign'
@@ -299,6 +301,20 @@ export default function CampaignDetailPage() {
           if (!cancelled) {
             setLoadError(null)
             const resolvedImage = local.imageUrl || stashed
+            const rawOutputs =
+              loadStashedCampaignOutputs<MockOutput[]>(campaignId) ||
+              local.outputs
+            let outputs = rawOutputs
+            if (rawOutputs?.length) {
+              try {
+                outputs = await hydrateCampaignVideoOutputs(
+                  campaignId,
+                  rawOutputs,
+                )
+              } catch (err) {
+                console.warn('[campaign] hydrate videos failed', err)
+              }
+            }
             setCampaign({
               title: local.title,
               status: local.status,
@@ -315,9 +331,7 @@ export default function CampaignDetailPage() {
               videoDurations:
                 local.videoDurations ||
                 loadStashedCampaignVideoDurations(campaignId),
-              outputs:
-                loadStashedCampaignOutputs<MockOutput[]>(campaignId) ||
-                local.outputs,
+              outputs,
               creativeDirection: undefined,
             })
           }
@@ -359,6 +373,17 @@ export default function CampaignDetailPage() {
         // Never trust legacy Firestore `outputs` arrays — they caused nested-entity
         // write failures and may still be corrupt on old docs. Prefer session stash.
         const stashedOutputs = loadStashedCampaignOutputs<MockOutput[]>(campaignId)
+        let hydratedOutputs = stashedOutputs
+        if (stashedOutputs?.length) {
+          try {
+            hydratedOutputs = await hydrateCampaignVideoOutputs(
+              campaignId,
+              stashedOutputs,
+            )
+          } catch (err) {
+            console.warn('[campaign] hydrate videos failed', err)
+          }
+        }
 
         if (!cancelled) {
           setLoadError(null)
@@ -378,7 +403,7 @@ export default function CampaignDetailPage() {
             videoDurations:
               parseVideoDurations(data.videoDurations) ||
               loadStashedCampaignVideoDurations(campaignId),
-            outputs: stashedOutputs?.length ? stashedOutputs : undefined,
+            outputs: hydratedOutputs?.length ? hydratedOutputs : undefined,
             creativeDirection: data.creativeDirection
               ? sanitizeCreativeDirection(
                   data.creativeDirection as CreativeDirection,
@@ -387,7 +412,7 @@ export default function CampaignDetailPage() {
           })
           // Seed list/grid covers from this pack or product still
           if (stashedOutputs?.length) {
-            stashCampaignOutputs(campaignId, stashedOutputs)
+            void stashCampaignOutputsSafe(campaignId, stashedOutputs)
           } else if (imageUrl) {
             void stashCampaignCoverSafe(campaignId, imageUrl)
           }
@@ -479,7 +504,7 @@ export default function CampaignDetailPage() {
   ) {
     if (!campaignId) return
     if (extra.outputs) {
-      stashCampaignOutputs(campaignId, extra.outputs)
+      void stashCampaignOutputsSafe(campaignId, extra.outputs)
     }
     if (isLocalCampaignId(campaignId)) {
       updateLocalCampaign(campaignId, { status, ...extra })
@@ -729,11 +754,23 @@ export default function CampaignDetailPage() {
               })
               const clipUrl = playableVideoUrl(ai.assets[0])
               if (clipUrl) {
+                const { materializePlayableUrl, videoCacheKey } = await import(
+                  '../lib/mediaBlobStore'
+                )
+                let playable = clipUrl
+                try {
+                  playable = await materializePlayableUrl(
+                    clipUrl,
+                    videoCacheKey(campaignId, item.id),
+                  )
+                } catch (matErr) {
+                  console.warn('[generate] materialize video failed', matErr)
+                }
                 nextOutputs = nextOutputs.map((o) =>
                   o.id === item.id
                     ? applyAiVideoToOutput(
                         { ...o, durationSeconds },
-                        clipUrl,
+                        playable,
                       )
                     : o,
                 )
@@ -839,7 +876,7 @@ export default function CampaignDetailPage() {
       }
 
       // Apply results locally first so a Firestore sync error cannot wipe the pack.
-      stashCampaignOutputs(campaignId, nextOutputs)
+      await stashCampaignOutputsSafe(campaignId, nextOutputs)
       setProgress(100)
       setCampaign((prev) =>
         prev ? { ...prev, status: 'ready', outputs: nextOutputs } : prev,
@@ -939,7 +976,7 @@ export default function CampaignDetailPage() {
             mode: campaign.mode,
             videoDurations: campaign.videoDurations,
           })
-          stashCampaignOutputs(campaignId, fallback)
+          void stashCampaignOutputsSafe(campaignId, fallback)
           setCampaign((prev) =>
             prev
               ? {
@@ -1049,6 +1086,10 @@ export default function CampaignDetailPage() {
       setActionMsg(`Exported ${item.label}.`)
     } catch (err) {
       console.error(err)
+      if (err instanceof Error && err.name === 'OpenTabFallback') {
+        setActionMsg(err.message.replace(/^OPENED_TAB:\s*/, ''))
+        return
+      }
       setError(friendlyFirestoreError(err, 'Could not export asset.'))
     }
   }
@@ -1574,7 +1615,7 @@ export default function CampaignDetailPage() {
                             className="results-preview-media results-preview-video results-preview-expand"
                             onClick={() => setFormatOpen(true)}
                           >
-                            <video
+                            <SafeVideo
                               key={preview.videoUrl}
                               src={preview.videoUrl}
                               poster={preview.imageUrl}
@@ -1583,7 +1624,9 @@ export default function CampaignDetailPage() {
                               loop
                               playsInline
                               preload="auto"
+                              loadTimeoutSec={40}
                               onClick={(e) => e.stopPropagation()}
+                              onFatalError={(msg) => setError(msg)}
                             />
                             <span className="results-preview-expand-label">View full screen</span>
                           </button>
@@ -1674,7 +1717,7 @@ export default function CampaignDetailPage() {
                         >
                           <span className="results-card-media">
                             {item.kind === 'video' && item.videoUrl ? (
-                              <video
+                              <SafeVideo
                                 src={item.videoUrl}
                                 poster={item.imageUrl}
                                 muted
@@ -1682,6 +1725,7 @@ export default function CampaignDetailPage() {
                                 playsInline
                                 autoPlay={previewId === item.id}
                                 preload={previewId === item.id ? 'auto' : 'metadata'}
+                                loadTimeoutSec={50}
                               />
                             ) : item.imageUrl ? (
                               <img src={item.imageUrl} alt="" />

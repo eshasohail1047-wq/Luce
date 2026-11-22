@@ -1,6 +1,7 @@
 import { updateProfile, type User } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { requireDb } from './firebase'
+import { isOwnerEmail, OWNER_PLAN } from './ownerAccess'
 import { normalizeUserPlan, type UserPlan } from './plans'
 
 export type { UserPlan } from './plans'
@@ -227,13 +228,24 @@ export function workspaceFromUserDoc(data: Record<string, unknown>): WorkspaceSe
   }
 }
 
-export async function loadUserSettings(userId: string): Promise<{
+export async function loadUserSettings(
+  userId: string,
+  email?: string | null,
+): Promise<{
   plan: UserPlan
   freeImageUsed: boolean
   workspace: WorkspaceSettings
 }> {
   const snap = await getDoc(doc(requireDb(), 'users', userId))
   const data = (snap.data() || {}) as Record<string, unknown>
+  const docEmail = typeof data.email === 'string' ? data.email : email
+  if (isOwnerEmail(email) || isOwnerEmail(docEmail)) {
+    return {
+      plan: OWNER_PLAN,
+      freeImageUsed: false,
+      workspace: workspaceFromUserDoc(data),
+    }
+  }
   return {
     plan: normalizeUserPlan(data.plan),
     freeImageUsed: Boolean(data.freeImageUsed),

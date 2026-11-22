@@ -336,10 +336,8 @@ export default function OnboardingPage() {
     setSaving(true)
     setError(null)
     try {
-      const synced = syncNameFields({
-        ...data,
-        plan: data.plan === 'free' ? 'growth' : data.plan,
-      })
+      // Everyone starts on free (1 image trial). Paid plans require checkout.
+      const synced = syncNameFields({ ...data, plan: 'free' })
       setData(synced)
       await finish(synced, false)
     } catch (err) {
@@ -557,7 +555,7 @@ export default function OnboardingPage() {
             disabled={saving || skipping}
             onClick={() => void launchWithFree()}
           >
-            Skip for now, launch with free credits
+            Skip for now, launch with free image trial
           </button>
         ) : (
           <div className="ob-footer-cta-row">

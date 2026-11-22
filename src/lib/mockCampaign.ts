@@ -237,6 +237,76 @@ export function recreateMockOutput(
   return buildOne(item.assetType, index, productName, productImageUrl, nextVersion)
 }
 
+async function mediaUrlToBlob(mediaUrl: string): Promise<Blob> {
+  if (mediaUrl.startsWith('blob:')) {
+    const res = await fetch(mediaUrl)
+    if (!res.ok) throw new Error('Could not read video from memory')
+    return res.blob()
+  }
+  if (mediaUrl.startsWith('data:')) {
+    const res = await fetch(mediaUrl)
+    if (!res.ok) throw new Error('Could not decode media data')
+    return res.blob()
+  }
+  // Revive IndexedDB-backed refs
+  if (mediaUrl.startsWith('luce-blob:')) {
+    const { getStoredMediaBlob, mediaBlobKeyFromRef } = await import(
+      './mediaBlobStore'
+    )
+    const key = mediaBlobKeyFromRef(mediaUrl)
+    if (!key) throw new Error('Invalid saved media reference')
+    const blob = await getStoredMediaBlob(key)
+    if (!blob) throw new Error('Saved video not found in this browser — recreate it')
+    return blob
+  }
+  const ctrl = new AbortController()
+  const timer = window.setTimeout(() => ctrl.abort(), 90_000)
+  try {
+    const res = await fetch(mediaUrl, {
+      signal: ctrl.signal,
+      credentials: 'same-origin',
+    })
+    if (!res.ok) {
+      throw new Error(`Download failed (${res.status})`)
+    }
+    const blob = await res.blob()
+    if (blob.size < 500) {
+      const peek = await blob.text().catch(() => '')
+      if (/^\s*[<{]/.test(peek)) {
+        throw new Error('Download returned a web page instead of the video file')
+      }
+    }
+    return blob
+  } catch (err) {
+    // Cross-origin CDN without CORS — open in a new tab as last resort
+    if (/^https?:\/\//i.test(mediaUrl)) {
+      const a = document.createElement('a')
+      a.href = mediaUrl
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      a.download = ''
+      a.click()
+      // Signal soft success via a typed sentinel the UI can show as a tip
+      const soft = new Error(
+        'OPENED_TAB: Video opened in a new tab — right-click → Save video as… if needed.',
+      )
+      soft.name = 'OpenTabFallback'
+      throw soft
+    }
+    throw err
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
+function extForBlob(blob: Blob, kind: MockOutput['kind']): string {
+  if (blob.type.includes('mp4') || kind === 'video') return 'mp4'
+  if (blob.type.includes('webm')) return 'webm'
+  if (blob.type.includes('png')) return 'png'
+  if (blob.type.includes('webp')) return 'webp'
+  return 'jpg'
+}
+
 export async function downloadMockOutput(item: MockOutput, productName: string) {
   const safe = (productName || 'luce').replace(/[^\w.-]+/g, '_').slice(0, 40)
   if (item.kind === 'copy' && item.text) {
@@ -251,19 +321,35 @@ export async function downloadMockOutput(item: MockOutput, productName: string) 
   }
   const mediaUrl = item.kind === 'video' && item.videoUrl ? item.videoUrl : item.imageUrl
   if (!mediaUrl) throw new Error('Nothing to download')
-  const res = await fetch(mediaUrl)
-  const blob = await res.blob()
+
+  // Prefer IndexedDB cache for generated clips (same key shape as stash)
+  if (item.kind === 'video' && item.id) {
+    try {
+      const { getStoredMediaBlob, videoCacheKey } = await import('./mediaBlobStore')
+      // campaign id unknown here — try common patterns via mediaUrl materialize only
+      void videoCacheKey
+      const cached = mediaUrl.startsWith('luce-blob:')
+        ? await getStoredMediaBlob(mediaUrl.slice('luce-blob:'.length))
+        : undefined
+      if (cached) {
+        const url = URL.createObjectURL(cached)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${safe}-${item.assetType}.${extForBlob(cached, item.kind)}`
+        a.click()
+        URL.revokeObjectURL(url)
+        return
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const blob = await mediaUrlToBlob(mediaUrl)
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  const ext = blob.type.includes('mp4')
-    ? 'mp4'
-    : blob.type.includes('webm')
-      ? 'webm'
-      : blob.type.includes('png')
-        ? 'png'
-        : 'jpg'
-  a.download = `${safe}-${item.assetType}.${ext}`
+  a.download = `${safe}-${item.assetType}.${extForBlob(blob, item.kind)}`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -288,16 +374,8 @@ export async function downloadMockPack(
         item.kind === 'video' && item.videoUrl ? item.videoUrl : item.imageUrl
       if (!mediaUrl) return
       try {
-        const res = await fetch(mediaUrl)
-        const blob = await res.blob()
-        const ext = blob.type.includes('mp4')
-          ? 'mp4'
-          : blob.type.includes('webm')
-            ? 'webm'
-            : blob.type.includes('png')
-              ? 'png'
-              : 'jpg'
-        folder.file(`${base}.${ext}`, blob)
+        const blob = await mediaUrlToBlob(mediaUrl)
+        folder.file(`${base}.${extForBlob(blob, item.kind)}`, blob)
       } catch {
         /* skip failed fetch */
       }

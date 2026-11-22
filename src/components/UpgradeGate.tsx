@@ -20,7 +20,7 @@ export default function UpgradeGate({ title, feature }: UpgradeGateProps) {
             Upgrade to Pro
           </Link>
           <Link className="dash-create-btn dash-create-btn-ghost" to="/app/studio/photos">
-            Continue with free images
+            Continue with free image trial
           </Link>
         </div>
       </div>

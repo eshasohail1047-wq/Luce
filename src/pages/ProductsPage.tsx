@@ -264,12 +264,21 @@ export default function ProductsPage() {
               <span aria-hidden="true">+</span> Add
             </Link>
           </div>
-          {brandCatalog.length ? (
+          {brandCatalog.length || products.length ? (
             <p className="workspace-page-sub">
-              {brandCatalog.length} from your site
-              {products.length ? ` · ${products.length} created in Luce` : ''}
+              {brandCatalog.length
+                ? `${brandCatalog.length} from your site`
+                : null}
+              {brandCatalog.length && products.length ? ' · ' : null}
+              {products.length
+                ? `${products.length} saved from studio / campaigns`
+                : null}
             </p>
-          ) : null}
+          ) : (
+            <p className="workspace-page-sub">
+              Products you generate with are saved here automatically.
+            </p>
+          )}
         </header>
 
         {brandCatalog.length ? (
@@ -330,7 +339,7 @@ export default function ProductsPage() {
             {products.length ? (
               <section className="products-catalog-section" aria-labelledby="products-luce-title">
                 <h2 id="products-luce-title" className="products-catalog-heading">
-                  Created in Luce
+                  Your products
                 </h2>
                 <ul className="ws-card-grid">
                   {products.map((product) => (
